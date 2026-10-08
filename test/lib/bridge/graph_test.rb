@@ -168,4 +168,60 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_includes d["remove_nodes"], "session:#{ROS}"
     assert_equal [ "router:#{ROUTER}" ], d["change_nodes"].map { _1["id"] }
   end
+
+  # Two routers joined by mutual TLS, as zenohd 1.10.1 tells it from each
+  # side (the home router connects out to the cloud one).
+  HOME = "cc08bfcde72b91280a1274d1cd78dc7e"
+  CLOUD = "d5e0deae1c2513eb274afb6f7b4d1de1"
+
+  def relay_admin
+    home_link = { "dst" => "tls/192.0.2.20:7448", "src" => "tls/192.0.2.30:60652" }
+    {
+      HOME => {
+        "router" => { "locators" => [ "tcp/192.0.2.30:7447" ], "metadata" => { "name" => "zenohd-home" },
+                      "sessions" => [ { "links" => [ home_link ], "peer" => CLOUD, "region" => "north", "whatami" => "router" },
+                                      session(BOARD, "client", 1) ],
+                      "version" => "v1.10.1-1211779c", "zid" => HOME },
+        "linkstate" => { "north" => "graph {\n    0 [ label = \"#{HOME}\" ]\n    1 [ label = \"#{CLOUD}\" ]\n    1 -- 0 [ label = \"100\" ]\n}\n" },
+        "tokens" => {}
+      },
+      CLOUD => {
+        "router" => { "locators" => [ "tls/192.0.2.20:7448" ], "metadata" => { "name" => "zenohd-cloud" },
+                      "sessions" => [ { "links" => [ { "dst" => home_link["src"], "src" => home_link["dst"] } ],
+                                        "peer" => HOME, "region" => "north", "whatami" => "router" },
+                                      { "links" => [ { "dst" => "tls/192.0.2.1:39968", "src" => "tls/192.0.2.20:7448" } ],
+                                        "peer" => READER, "region" => "south:0:client", "whatami" => "client" } ],
+                      "version" => "v1.10.1-1211779c", "zid" => CLOUD },
+        "linkstate" => { "north" => "graph {\n    0 [ label = \"#{CLOUD}\" ]\n    1 [ label = \"#{HOME}\" ]\n    0 -- 1 [ label = \"100\" ]\n}\n" },
+        "tokens" => {}
+      }
+    }
+  end
+
+  test "two routers: one router_link with its protocol, names, links and certificate names" do
+    g = Bridge::Graph.build(admin: relay_admin, self_zids: [ READER ],
+                            own_links: { CLOUD => { "protocol" => "tls", "cert_name" => "zenohd-cloud" } },
+                            self_cert: "console").to_h
+    links = g["edges"].select { _1["kind"] == "router_link" }
+    assert_equal 1, links.size
+    assert_equal [ "router:#{HOME}", "router:#{CLOUD}" ].sort, [ links[0]["source"], links[0]["target"] ].sort
+    assert_equal "tls", links[0]["label"]
+
+    home = node(g, "router:#{HOME}")
+    cloud = node(g, "router:#{CLOUD}")
+    assert_equal "router zenohd-home", home["label"]
+    assert_equal "router zenohd-cloud", cloud["label"]
+    assert_equal [ CLOUD ], home["data"]["router_links"].map { _1["peer"] }
+    assert_equal "tls", home["data"]["router_links"][0]["protocol"]
+    assert_equal "zenohd-cloud", cloud["data"]["cert_name"]
+    assert_nil home["data"]["cert_name"]
+
+    reader = node(g, "session:#{READER.sub(/\A0+/, '')}")
+    assert_equal "tls", reader["data"]["protocol"]
+    assert_equal "console", reader["data"]["cert_name"]
+    board = node(g, "session:#{BOARD}")
+    assert_equal "tcp", board["data"]["protocol"]
+    assert_nil board["data"]["cert_name"]
+    assert edge?(g, "session", "router:#{HOME}", "session:#{BOARD}")
+  end
 end

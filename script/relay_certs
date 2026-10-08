@@ -1,0 +1,64 @@
+#!/usr/bin/env ruby
+# Makes the CA and the certificates of a Zenoh relay (two routers with
+# mTLS between them, and TLS clients with certificates):
+#
+#   script/relay_certs [--out DIR] [--force] [--rogue] [NAME[:dns,dns][@ip,ip] ...]
+#
+# Without names it issues the set the family-mruby relay overlay
+# (docker-compose.relay.yml) uses: zenohd-cloud (also valid as localhost and
+# 127.0.0.1, for clients on the host), zenohd-home, console, cruby and
+# ros2-cloud. The CA in DIR is kept when it is there; a name already issued
+# is kept unless --force. --rogue also makes DIR/rogue/: another CA and a
+# zenohd-home certificate it signed (for checking that the cloud refuses it).
+#
+# DIR defaults to storage/relay/certs (ignored by git). Never commit it.
+require "optparse"
+require_relative "../lib/relay/cert_authority"
+
+DEFAULT = [
+  "zenohd-cloud:zenohd-cloud,localhost@127.0.0.1",
+  "zenohd-home",
+  "console",
+  "cruby",
+  "ros2-cloud"
+].freeze
+
+opt = { out: File.expand_path("../storage/relay/certs", __dir__), force: false, rogue: false }
+OptionParser.new do |o|
+  o.banner = "usage: script/relay_certs [--out DIR] [--force] [--rogue] [NAME[:dns,...][@ip,...] ...]"
+  o.on("--out DIR") { |v| opt[:out] = File.expand_path(v) }
+  o.on("--force", "issue again names that are already there") { opt[:force] = true }
+  o.on("--rogue", "also a second CA and a zenohd-home certificate it signed, in DIR/rogue") { opt[:rogue] = true }
+end.parse!
+
+def parse_spec(spec)
+  rest, ips = spec.split("@", 2)
+  name, dns = rest.split(":", 2)
+  [ name, dns.to_s.split(","), ips.to_s.split(",") ]
+end
+
+def issue_all(ca, specs, force)
+  specs.each do |spec|
+    name, dns, ips = parse_spec(spec)
+    if ca.issued?(name) && !force
+      puts "kept    #{ca.path(name, 'pem')}"
+      next
+    end
+    c = ca.issue(name, dns: dns, ips: ips)
+    san = c.extensions.find { _1.oid == "subjectAltName" }&.value
+    puts "issued  #{ca.path(name, 'pem')}  CN=#{name}  #{san}  until #{c.not_after.strftime('%Y-%m-%d')}"
+  end
+end
+
+fresh = !File.exist?(File.join(opt[:out], "ca.pem"))
+ca = Relay::CertAuthority.load_or_create(opt[:out])
+puts "#{fresh ? 'made' : 'kept'}    #{File.join(opt[:out], 'ca.pem')}  #{ca.cert.subject}"
+issue_all(ca, ARGV.empty? ? DEFAULT : ARGV, opt[:force])
+
+if opt[:rogue]
+  rdir = File.join(opt[:out], "rogue")
+  rfresh = !File.exist?(File.join(rdir, "ca.pem"))
+  rogue = Relay::CertAuthority.load_or_create(rdir, common_name: "Some Other CA")
+  puts "#{rfresh ? 'made' : 'kept'}    #{File.join(rdir, 'ca.pem')}  #{rogue.cert.subject}"
+  issue_all(rogue, [ "zenohd-home" ], opt[:force])
+end

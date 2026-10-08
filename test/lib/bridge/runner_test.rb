@@ -78,4 +78,21 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
     assert_equal "expired", old.reload.status
     assert_equal "pending", fresh.reload.status
   end
+
+  test "the zenoh configuration from the environment: none, TLS, mutual TLS, a file" do
+    assert_nil Bridge::Runner.zenoh_config({})
+    assert_equal({ "transport/link/tls/root_ca_certificate" => "/c/ca.pem" },
+                 Bridge::Runner.zenoh_config("ASTERISM_TLS_CA" => "/c/ca.pem"))
+    cfg = Bridge::Runner.zenoh_config("ASTERISM_TLS_CA" => "/c/ca.pem", "ASTERISM_TLS_CERT" => "/c/console.pem",
+                                      "ASTERISM_TLS_KEY" => "/c/console.key")
+    assert_equal "/c/console.pem", cfg["transport/link/tls/connect_certificate"]
+    assert_equal "/c/console.key", cfg["transport/link/tls/connect_private_key"]
+    assert_equal true, cfg["transport/link/tls/enable_mtls"]
+    assert_raises(KeyError) { Bridge::Runner.zenoh_config("ASTERISM_TLS_CERT" => "/c/console.pem") }
+    Tempfile.create([ "zenoh", ".json5" ]) do |f|
+      f.write("{ mode: 'client' }")
+      f.flush
+      assert_equal "{ mode: 'client' }", Bridge::Runner.zenoh_config("ASTERISM_ZENOH_CONFIG" => f.path)
+    end
+  end
 end

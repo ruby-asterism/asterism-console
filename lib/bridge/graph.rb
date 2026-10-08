@@ -12,6 +12,10 @@
 #   ros:      token keys alive under @ros2_lv/**
 #   self_node: the bridge's own Asterism node ID (marked, not hidden)
 #   self_zids: the bridge's own Zenoh session IDs (marked)
+#   own_links: the bridge's own links ({ router zid => { "protocol" =>,
+#              "cert_name" => } }): the certificate name of the router the
+#              bridge is connected to (the admin space does not tell it)
+#   self_cert: the common name of the bridge's own certificate (its sessions)
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -32,12 +36,14 @@ module Bridge
 
     attr_reader :nodes, :edges
 
-    def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [])
+    def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil)
       g = new
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
+      g.add_own_links(own_links)
       g.add_asterism(asterism, self_node)
       g.add_ros(ros)
       g.link_tokens(admin)
+      g.add_self_cert(self_cert)
       g
     end
 
@@ -49,6 +55,11 @@ module Bridge
 
     def self.short(zid)
       zid.to_s[0, 8]
+    end
+
+    # "tls/192.0.2.2:7448" -> "tls"
+    def self.protocol(locator)
+      locator.to_s[%r{\A([a-z0-9-]+)/}, 1]
     end
 
     # "%" stands for "/" inside rmw_zenoh's tokens.
@@ -133,11 +144,27 @@ module Bridge
         end
         (info["linkstate"] || {}).each_value do |dot|
           self.class.parse_linkstate(dot).each do |a, b|
-            ida = router_node(a)["id"]
-            idb = router_node(b)["id"]
-            edge(ida, idb, "router_link") unless ida == idb
+            router_edge(router_node(a)["id"], router_node(b)["id"])
           end
         end
+      end
+    end
+
+    # One edge per pair of routers, whichever side told it (both do).
+    def router_edge(ida, idb, protocol = nil)
+      return if ida == idb
+      a, b = [ ida, idb ].sort
+      e = edge(a, b, "router_link")
+      e["label"] ||= protocol if e && protocol
+      e
+    end
+
+    def add_own_links(own)
+      own.each do |rzid, link|
+        n = @nodes["router:#{self.class.norm_zid(rzid)}"]
+        next unless n
+        n["data"]["bridge_link"] = link.slice("protocol", "cert_name").compact
+        n["data"]["cert_name"] ||= link["cert_name"] if link["cert_name"]
       end
     end
 
@@ -146,6 +173,8 @@ module Bridge
       id = "router:#{nz}"
       data = { "zid" => zid.to_s }
       if json && !json.empty?
+        name = json["metadata"].is_a?(Hash) ? json["metadata"]["name"] : nil
+        data["name"] = name.to_s if name
         data["version"] = json["version"].to_s.split(" ").first
         data["locators"] = Array(json["locators"])
         data["plugins"] = (json["plugins"] || {}).keys.sort
@@ -153,24 +182,29 @@ module Bridge
         data["seen"] = true
       end
       @session_of[nz] = id
-      node(id, "router", "router #{self.class.short(zid)}", data)
+      n = node(id, "router", "router #{self.class.short(zid)}", data)
+      n["label"] = "router #{data['name']}" if data["name"] && !data["name"].empty?
+      n
     end
 
     def add_session(rid, s, self_zids)
       zid = s["peer"].to_s
       nz = self.class.norm_zid(zid)
       links = Array(s["links"]).map { |l| { "src" => l["src"], "dst" => l["dst"] } }
+      protocols = links.filter_map { self.class.protocol(_1["dst"]) }.uniq
       if s["whatami"] == "router"
         other = router_node(zid)
-        edge(rid, other["id"], "router_link") if other["id"] != rid
-        other["data"]["links"] = links
+        router_edge(rid, other["id"], protocols.join(","))
+        # This router's own view of the link (each side of a pair lists it).
+        rl = (@nodes[rid]["data"]["router_links"] ||= [])
+        rl << { "peer" => zid, "protocol" => protocols.join(","), "links" => links } unless rl.any? { _1["peer"] == zid }
         return
       end
       id = "session:#{nz}"
       addr = links.first && links.first["dst"]
       node(id, "session", "#{s['whatami']} #{self.class.short(zid)}",
            "zid" => zid, "whatami" => s["whatami"], "links" => links, "address" => addr,
-           "region" => s["region"], "self" => self_zids.include?(nz))
+           "protocol" => protocols.join(","), "region" => s["region"], "self" => self_zids.include?(nz))
       @session_of[nz] = id
       edge(rid, id, "session")
     end
@@ -264,6 +298,13 @@ module Bridge
         next unless n["kind"] == "r_node"
         sid = @session_of[self.class.norm_zid(n["data"]["zid"])]
         edge(sid, n["id"], "carries") if sid
+      end
+    end
+
+    def add_self_cert(name)
+      return unless name
+      @nodes.each_value do |n|
+        n["data"]["cert_name"] = name if n["kind"] == "session" && n["data"]["self"]
       end
     end
 

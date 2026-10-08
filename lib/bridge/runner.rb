@@ -12,6 +12,13 @@
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
 # and calls. Puma never loads Asterism.
+#
+# Both sessions take the same zenoh configuration (Runner.zenoh_config):
+# ASTERISM_ZENOH_CONFIG, a JSON5 file, or for TLS ASTERISM_TLS_CA (the CA
+# of the router's certificate) with ASTERISM_TLS_CERT / ASTERISM_TLS_KEY
+# (this bridge's certificate, for a router that asks for one: mutual TLS).
+require "openssl"
+
 module Bridge
   class Runner
     ADMIN_EVERY = 2.0
@@ -22,12 +29,30 @@ module Bridge
     # At most this many values per watched key and second reach the page.
     WATCH_RATE = 10
 
-    attr_reader :locator, :node_id
+    attr_reader :locator, :node_id, :config
+
+    # The zenoh configuration from the environment (nil: zenoh's defaults).
+    def self.zenoh_config(env = ENV)
+      file = env["ASTERISM_ZENOH_CONFIG"].to_s
+      return File.read(file) unless file.empty?
+      ca = env["ASTERISM_TLS_CA"].to_s
+      cert = env["ASTERISM_TLS_CERT"].to_s
+      return nil if ca.empty? && cert.empty?
+      cfg = {}
+      cfg["transport/link/tls/root_ca_certificate"] = ca unless ca.empty?
+      unless cert.empty?
+        cfg["transport/link/tls/connect_certificate"] = cert
+        cfg["transport/link/tls/connect_private_key"] = env.fetch("ASTERISM_TLS_KEY")
+        cfg["transport/link/tls/enable_mtls"] = true
+      end
+      cfg
+    end
 
     def initialize(locator: ENV.fetch("ASTERISM_ROUTER", "tcp/127.0.0.1:7447"),
                    node_id: ENV.fetch("ASTERISM_CONSOLE_NODE", "console"),
-                   app: "console", logger: Rails.logger, objects: nil)
+                   app: "console", logger: Rails.logger, objects: nil, config: self.class.zenoh_config)
       @locator = locator
+      @config = config
       @node_id = node_id
       @app = app
       @log = logger
@@ -36,6 +61,7 @@ module Bridge
       @asterism_keys = {}
       @ros_keys = {}
       @admin = {}
+      @own_links = {}
       @dirty = true
       @subs = {} # watch id => [key, Subscription]
       @rate = {} # watch id => [second, count, dropped]
@@ -71,8 +97,9 @@ module Bridge
     def serve
       say "bridge: connecting to #{@locator} as #{@node_id}/#{@app}"
       reset
-      @z = Asterism::Zenoh.open(@locator)
-      Asterism.connect(@locator, node: @node_id, app: @app)
+      opts = @config ? { config: @config } : {}
+      @z = Asterism::Zenoh.open(@locator, **opts)
+      Asterism.connect(@locator, node: @node_id, app: @app, **opts)
       @net = Asterism.net
       @net.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
       @net.start
@@ -90,6 +117,7 @@ module Bridge
         @asterism_keys.clear
         @ros_keys.clear
         @admin = {}
+        @own_links = {}
         @dirty = true
       end
       @subs = {}
@@ -169,14 +197,37 @@ module Bridge
         rz = key.split("/")[1]
         (admin[rz] ||= { "tokens" => {}, "linkstate" => {} })["tokens"][key.split("/token/", 2)[1]] = v
       end
+      own = own_links
       @lock.synchronize do
-        if admin != @admin
+        if admin != @admin || own != @own_links
           @admin = admin
+          @own_links = own
           @dirty = true
         end
       end
     rescue Asterism::Zenoh::Error => e
       say "bridge: admin space: #{e.message}"
+    end
+
+    # This bridge's links (to the router it is connected to): the link's
+    # protocol and the certificate name the router showed (TLS). zenohd
+    # keeps the certificate names of its other links in the session part of
+    # its admin space (@/<zid>/session/**), which answers local queries only.
+    def own_links
+      @z.links.to_h do |l|
+        [ l.zid, { "protocol" => Graph.protocol(l.dst), "cert_name" => l.auth_identifier }.compact ]
+      end
+    rescue Asterism::Zenoh::Error, NoMethodError
+      {}
+    end
+
+    # The common name of this bridge's certificate (mutual TLS), or nil.
+    def self_cert
+      return @self_cert if defined?(@self_cert)
+      file = @config.is_a?(Hash) ? @config["transport/link/tls/connect_certificate"] : nil
+      @self_cert = file && OpenSSL::X509::Certificate.new(File.read(file)).subject.to_a.find { _1[0] == "CN" }&.dig(1)
+    rescue OpenSSL::X509::CertificateError, SystemCallError
+      @self_cert = nil
     end
 
     def get_raw(key)
@@ -197,7 +248,8 @@ module Bridge
       graph = @lock.synchronize do
         @dirty = false
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
-                    self_node: @node_id, self_zids: @self_zids).to_h
+                    self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
+                    self_cert: self_cert).to_h
       end
       state = GraphState.current
       diff = Graph.diff(state.graph, graph)
@@ -211,7 +263,7 @@ module Bridge
 
     def bridge_info
       { "router" => @locator, "node" => @node_id, "zid" => @z.zid, "routers" => @z.router_zids,
-        "pid" => Process.pid }
+        "tls" => @locator.start_with?("tls/"), "pid" => Process.pid }
     end
 
     def heartbeat

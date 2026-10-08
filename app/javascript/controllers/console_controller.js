@@ -89,6 +89,10 @@ export default class extends Controller {
           "line-color": "#bbb", "target-arrow-color": "#bbb" } },
       { selector: "edge[kind = 'carries']", style: { "line-style": "dashed", width: 1 } },
       { selector: "edge[kind = 'session'], edge[kind = 'router_link']", style: { "target-arrow-shape": "none" } },
+      { selector: "edge[kind = 'router_link']", style: { width: 3 } },
+      { selector: "edge[kind = 'router_link'][label]", style: {
+          label: "data(label)", "font-size": 9, color: "#1f4e99", "text-background-color": "#fff",
+          "text-background-opacity": 1, "text-background-padding": 2 } },
       { selector: ".flash", style: { "overlay-color": "#ffb300", "overlay-opacity": 0.35, "overlay-padding": 6 } },
     ]
     for (const [kind, k] of Object.entries(KINDS)) {
@@ -114,7 +118,9 @@ export default class extends Controller {
   }
 
   edgeElement(e) {
-    return { group: "edges", data: { id: e.id, kind: e.kind, layer: e.layer, source: e.source, target: e.target } }
+    const data = { id: e.id, kind: e.kind, layer: e.layer, source: e.source, target: e.target }
+    if (e.label) data.label = e.label
+    return { group: "edges", data }
   }
 
   applyDiff(diff) {
@@ -284,11 +290,21 @@ export default class extends Controller {
     const names = (sel) => el.connectedEdges(sel).map((e) => e.source().id() === id ? e.target() : e.source())
     switch (kind) {
       case "router":
-        rows.push(["ID", info.zid], ["Version", info.version], ["Locators", (info.locators || []).join(", ")],
-                  ["Plugins", (info.plugins || []).join(", ")], ["Sessions", info.sessions])
+        rows.push(["ID", info.zid], ["Name", info.name], ["Version", info.version],
+                  ["Locators", (info.locators || []).join(", ")],
+                  ["Plugins", (info.plugins || []).join(", ")], ["Sessions", info.sessions],
+                  ["Certificate", info.cert_name ? `${info.cert_name} (seen by the bridge)` : null],
+                  ["Router links", (info.router_links || []).map((l) => {
+                    const peer = this.cy.getElementById(`router:${String(l.peer).replace(/^0+/, "")}`)
+                    const who = peer.empty() ? String(l.peer).slice(0, 8) : peer.data("label")
+                    const ends = (l.links || []).map((k) => `${k.src} -> ${k.dst}`).join("<br>")
+                    return `${esc(l.protocol || "?")} to ${esc(who)}<br><span class="hint">${esc(ends)}</span>`
+                  }).join("<br>") || null, true])
         break
       case "session":
-        rows.push(["ID", info.zid], ["Kind", info.whatami], ["Address", info.address],
+        rows.push(["ID", info.zid], ["Kind", info.whatami], ["Link", info.protocol],
+                  ["Certificate", info.protocol === "tls" ? (info.cert_name || "(the router does not show it)") : null],
+                  ["Address", info.address],
                   ["Links", (info.links || []).map((l) => `${l.dst} -> ${l.src}`).join("<br>"), true],
                   ["Carries", names("[kind = 'carries']").map((n) => esc(n.data("label"))).join(", "), true])
         break
@@ -320,7 +336,7 @@ export default class extends Controller {
         break
       }
     }
-    html += `<dl>${rows.map(([a, b, raw]) => `<dt>${esc(a)}</dt><dd>${raw ? (b || "") : esc(b ?? "")}</dd>`).join("")}</dl>`
+    html += `<dl>${rows.filter(([, b]) => b !== null).map(([a, b, raw]) => `<dt>${esc(a)}</dt><dd>${raw ? (b || "") : esc(b ?? "")}</dd>`).join("")}</dl>`
     if (kind === "a_object") html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
     if (kind === "r_topic") html += `<button type="button" data-role="watch-topic">Watch its values</button>`
     this.detailsTarget.innerHTML = html
