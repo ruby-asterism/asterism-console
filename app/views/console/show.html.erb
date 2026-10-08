@@ -1,0 +1,43 @@
+<% content_for(:title, "Asterism Console") %>
+<div class="console" data-controller="console"
+     data-console-state-value="<%= @state.as_payload.to_json %>"
+     data-console-watches-value="<%= @watches.map(&:as_payload).to_json %>">
+  <header class="bar">
+    <h1>Asterism Console</h1>
+    <p class="warning" role="note">
+      No authentication: for a local network you trust only. Anyone who can open this page can call the exposed methods.
+    </p>
+    <div class="bridge" data-console-target="bridge">bridge: waiting</div>
+  </header>
+
+  <nav class="layers" aria-label="Layers">
+    <label><input type="checkbox" data-layer="infra" data-action="console#toggleLayer" checked> Routers and sessions</label>
+    <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
+    <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
+    <button type="button" data-action="console#relayout">Lay out again</button>
+    <span class="counts" data-console-target="counts"></span>
+  </nav>
+
+  <main class="body">
+    <section class="graph" data-console-target="graph" aria-label="Network graph"></section>
+
+    <aside class="side">
+      <section class="panel details" data-console-target="details">
+        <h2>Details</h2>
+        <p class="hint">Click a node in the graph.</p>
+      </section>
+
+      <section class="panel watches">
+        <h2>Watch a key</h2>
+        <form data-action="console#addWatch" class="watch-form">
+          <input type="text" name="key" placeholder="fmrb/test/out" aria-label="Key expression" required>
+          <button type="submit">Watch</button>
+        </form>
+        <p class="error" data-console-target="watchError"></p>
+        <div data-console-target="watchList"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="legend" data-console-target="legend"></footer>
+</div>

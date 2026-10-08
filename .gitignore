@@ -1,0 +1,15 @@
+/.bundle
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/.keep
+/storage/*
+!/storage/.keep
+/public/assets
+/config/master.key
+/config/credentials.yml.enc
+/script/headless/node_modules
+/script/headless/package*.json
+/script/headless/*.png

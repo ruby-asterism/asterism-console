@@ -1,0 +1,21 @@
+# The bridge (bin/bridge) is a separate process, so development uses
+# solid_cable too: broadcasts go through the cable database and reach the
+# browsers connected to Puma, whichever process sent them.
+development:
+  adapter: solid_cable
+  connects_to:
+    database:
+      writing: cable
+  polling_interval: 0.1.seconds
+  message_retention: 1.hour
+
+test:
+  adapter: test
+
+production:
+  adapter: solid_cable
+  connects_to:
+    database:
+      writing: cable
+  polling_interval: 0.1.seconds
+  message_retention: 1.day

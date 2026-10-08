@@ -1,0 +1,19 @@
+#!/bin/bash
+# Screenshot the console with a headless Chromium in a container (nothing
+# installed on the host). The server must answer to host.docker.internal:
+#
+#   CONSOLE_EXTRA_HOST=host.docker.internal bin/rails server
+#   script/headless/run out.png ['[{"tapNode":"r_topic:0/chatter"},{"wait":1000}]']
+#
+# Steps (JSON): tapNode, tapKind, fill, click, check, uncheck, press, wait,
+# shot, text (prints the element's text), graph (prints the nodes by kind).
+# The PNG is written next to this script.
+set -e
+dir=$(cd "$(dirname "$0")" && pwd)
+image=mcr.microsoft.com/playwright:v1.56.0-noble
+if [ ! -d "$dir/node_modules/playwright" ]; then
+  docker run --rm -v "$dir:/work" -w /work "$image" \
+    bash -c "npm init -y >/dev/null && npm i playwright@1.56.0 >/dev/null"
+fi
+docker run --rm -v "$dir:/work" -w /work -e CONSOLE_URL "$image" \
+  node shot.js "/work/$(basename "${1:-console.png}")" "${2:-[]}"

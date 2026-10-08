@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+# The bridge between the Zenoh network and the console (lib/bridge/runner.rb).
+# Run exactly one, next to the Rails server:
+#
+#   bin/bridge                                   # router tcp/127.0.0.1:7447
+#   ASTERISM_ROUTER=tcp/192.0.2.2:7447 bin/bridge
+#
+# ASTERISM_CONSOLE_NODE sets its Asterism node ID (default "console").
+ENV["RAILS_MAX_THREADS"] ||= "12" # main, two receiving threads, the request workers
+require_relative "../config/environment"
+$stdout.sync = true
+Bridge::Runner.new.run

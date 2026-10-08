@@ -1,0 +1,107 @@
+# Asterism Console
+
+A Rails app that shows a Zenoh network as a live graph in the browser and
+calls the methods that Asterism nodes expose.
+
+- **Routers and sessions** from the router's admin space (`@/<zid>/router`,
+  its linkstate and token table).
+- **Asterism** nodes, apps and exposed objects from their liveliness tokens
+  (`asterism/**`).
+- **ROS 2** nodes, topics (publishers / subscribers, with their types) and
+  services from rmw_zenoh's liveliness tokens (`@ros2_lv/**`).
+
+Nodes appear and disappear without reloading. Click an Asterism object to
+see its exposed methods and call them with JSON arguments (the return
+value, `RemoteError` or `Timeout`, and the time it took). Click a ROS 2
+topic for its type, publishers and subscribers. The watch panel shows the
+values arriving on any key.
+
+> **No authentication.** The console is for a local network you trust.
+> Anyone who can open the page can call every exposed method on the
+> network. The bridge connects to a router on 127.0.0.1 and the server
+> listens on 127.0.0.1 by default. Do not open either to other machines
+> before authentication is added.
+
+## Running it
+
+Needs Ruby 3.2+, a zenohd router (1.x; the admin space is readable with
+the default configuration) and the two Asterism gems.
+
+```
+bundle install
+bin/rails db:prepare
+bin/rails server            # http://127.0.0.1:3000 (development)
+bin/bridge                  # in another terminal: the one process on the network
+```
+
+`bin/dev` starts both.
+
+| Variable | Default | |
+|---|---|---|
+| `ASTERISM_ROUTER` | `tcp/127.0.0.1:7447` | the router the bridge connects to |
+| `ASTERISM_CONSOLE_NODE` | `console` | the bridge's Asterism node ID (app `console`) |
+| `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
+| `ASTERISM_DIR`, `ASTERISM_ZENOH_DIR` | `../asterism`, `../asterism-zenoh` | the gem checkouts |
+
+The bridge reconnects by itself when the router goes away; stop it with
+Ctrl-C (or TERM). Run exactly one: a second bridge cannot join as the same
+node.
+
+### The Asterism gems
+
+Until 0.3.0 is on rubygems.org, the Gemfile takes them from the checkouts
+next to this repository (`path:`; build asterism-zenoh's C extension there
+with `rake compile`, or let Bundler build it). Once they are published,
+replace the two `path:` lines with
+
+```ruby
+gem "asterism", "~> 0.3.0", require: false   # asterism-zenoh comes with it
+```
+
+and run `bundle install`.
+
+## How it is built
+
+```
+ browser  <-- Action Cable (solid_cable) --  bin/bridge  <-- Zenoh -->  zenohd
+    |                                          |   ^
+    +-- HTTP: page, requests, watches --> Puma  |   |  (SQLite: graph, requests,
+                                          +-----+---+   watches, cable messages)
+```
+
+- **Puma never talks to Zenoh.** Only `bin/bridge` (lib/bridge/runner.rb)
+  loads Asterism, so however many Puma workers or threads run, the network
+  sees one node. The bridge loads the Rails environment for the database
+  and Action Cable.
+- **Delivery across processes**: Action Cable uses solid_cable in
+  development too (config/cable.yml), so a broadcast from the bridge
+  reaches the browsers connected to Puma. Everything goes on one stream
+  (`ConsoleChannel`): `graph_diff` (versioned; the page asks for the whole
+  graph, `GET /graph`, when it missed one), `bridge` (a heartbeat),
+  `request` (an answer), `sample` (a watched value), `watch` / `unwatch`.
+- **The graph**: `Bridge::Graph` (lib/bridge/graph.rb, pure Ruby) builds
+  typed nodes and edges from the admin space and the two sets of tokens;
+  the bridge keeps the latest in `GraphState` and broadcasts the diff.
+  The admin space is read every 2 s, tokens follow liveliness at once.
+- **Calls from the page** go through the database: the page creates a
+  `BridgeRequest` (meta or call, with a timeout up to 30 s), the bridge
+  picks it up, runs it with `Asterism.meta` / `Asterism.call` and writes
+  the answer back. Methods that are not exposed are refused by the node
+  that owns the object (`RemoteError NoMethodError ... (not exposed)`).
+- **Watches** are rows too; the bridge subscribes to each key and sends at
+  most 10 values per key and second (text, MessagePack, ROS 2 CDR strings
+  or hex).
+
+## Tests
+
+```
+bin/rails test
+```
+
+`test/lib/bridge/` covers the graph (from inputs shaped like zenohd 1.10.1
+and rmw_zenoh 0.2.11 give them), the diff, payloads and how the bridge
+writes answers back; `test/controllers/` the page, the graph JSON,
+requests and watches.
+
+`script/headless/run out.png` takes a screenshot with a headless Chromium
+in a container (Playwright's image; nothing installed on the host).

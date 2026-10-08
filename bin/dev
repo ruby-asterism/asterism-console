@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+# The server and the bridge together (two processes; Ctrl-C stops both).
+# bin/rails server and bin/bridge can also be run on their own.
+bridge = Process.spawn(File.expand_path("bridge", __dir__))
+begin
+  system(File.expand_path("rails", __dir__), "server", *ARGV)
+ensure
+  Process.kill("INT", bridge) rescue nil
+  Process.wait(bridge) rescue nil
+end
