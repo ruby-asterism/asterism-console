@@ -105,3 +105,8 @@ requests and watches.
 
 `script/headless/run out.png` takes a screenshot with a headless Chromium
 in a container (Playwright's image; nothing installed on the host).
+
+## License
+
+MIT (LICENSE). Third-party code included in this repository is listed in NOTICE
+(Cytoscape.js, MIT).

@@ -1,0 +1,12 @@
+asterism-console
+Copyright (c) 2026 Katsuhiko Kageyama. MIT License (LICENSE).
+
+This repository includes third-party code:
+
+- vendor/javascript/cytoscape.js: Cytoscape.js 3.34.3
+  (https://github.com/cytoscape/cytoscape.js), MIT License,
+  Copyright (c) 2016-2025, The Cytoscape Consortium.
+
+Not included here (installed by Bundler / importmap from their own
+packages): Ruby on Rails, Hotwire (Turbo, Stimulus), Action Cable, and the
+Asterism gems (asterism, asterism-zenoh; MIT, with parts under Apache-2.0).
