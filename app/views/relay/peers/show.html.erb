@@ -1,0 +1,57 @@
+<% content_for(:title, "#{@peer.name} - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2><%= @peer.name %> <span class="hint"><%= @peer.kind %></span> <%= acl_badge(@peer) %> <%= presence_badge(@peer, @seen) %></h2>
+  <dl class="facts">
+    <dt>Description</dt><dd><%= @peer.description.presence || "-" %></dd>
+    <dt>Read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
+    <dt>Read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
+    <dt>Admin space</dt><dd><%= @peer.admin_space? ? "yes" : "no" %></dd>
+    <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
+    <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
+    <dt>Certificate days</dt><dd><%= @peer.cert_days %></dd>
+  </dl>
+  <% if current_user.admin? %>
+    <p><%= link_to "Edit", edit_relay_peer_path(@peer) %></p>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Certificates</h2>
+  <% if current_user.admin? %>
+    <%= form_with url: relay_peer_certificates_path(@peer), data: { turbo: false }, class: "row" do |f| %>
+      <%= f.submit "Issue a certificate (downloads the key once)", disabled: !@peer.enabled? %>
+    <% end %>
+    <p class="hint">The signer signs it; the key is made here, put in the download and not kept.
+      Issuing again does not stop an older certificate: the router's ACL matches the name, and zenohd 1.10.1
+      has no revocation list. To shut a peer out, disable it and apply; it stays out until its certificates expire.</p>
+  <% end %>
+  <% if @peer.certificates.empty? %>
+    <p class="hint">None in the ledger.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Serial</th><th>From</th><th>Until</th><th>Status</th><th>Issued</th><th>Fingerprint (SHA-256)</th><th></th></tr></thead>
+      <tbody>
+        <% @peer.certificates.each do |c| %>
+          <tr>
+            <td><code><%= c.serial %></code></td>
+            <td class="nowrap"><%= when_text(c.not_before) %></td>
+            <td class="nowrap"><%= when_text(c.not_after) %></td>
+            <td><span class="badge <%= c.status == 'valid' ? 'ok' : 'bad' %>"><%= c.status %></span>
+              <% if c.revoked_at %><br><span class="hint"><%= when_text(c.revoked_at) %> by <%= c.revoked_by&.email_address %></span><% end %></td>
+            <td><%= c.source == "imported" ? "imported" : c.issued_by&.email_address %></td>
+            <td><code class="wrap"><%= c.fingerprint %></code></td>
+            <td><%= button_to "Revoke", revoke_relay_peer_certificate_path(@peer, c), method: :patch, class: "small" if current_user.admin? && c.revoked_at.nil? %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
+
+<% if current_user.admin? %>
+  <section class="card">
+    <%= button_to "Remove #{@peer.name} from the registry", relay_peer_path(@peer), method: :delete, class: "small",
+                  form: { data: { turbo_confirm: "Remove #{@peer.name}?" } } %>
+  </section>
+<% end %>

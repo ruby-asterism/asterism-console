@@ -1,0 +1,22 @@
+<% if peer.errors.any? %><p class="error"><%= peer.errors.full_messages.to_sentence %></p><% end %>
+<%= form_with model: peer, url: peer.persisted? ? relay_peer_path(peer) : relay_peers_path, class: "grid-form" do |f| %>
+  <label>Name (certificate CN = node ID)
+    <%= f.text_field :name, required: true, disabled: peer.persisted?, pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]{0,62}" %></label>
+  <label>Kind <%= f.select :kind, RelayPeer::KINDS %></label>
+  <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
+  <label class="check"><%= f.check_box :enabled %> Enabled</label>
+  <label class="check"><%= f.check_box :admin_space %> Admin space (a client reads it; a router's is read through)</label>
+  <label class="wide">Description <%= f.text_field :description %></label>
+  <label>Keys it may read and write (one per line)
+    <%= f.text_area :rw_keys, rows: 5, placeholder: "asterism/**" %></label>
+  <label>Keys it may only read (one per line)
+    <%= f.text_area :ro_keys, rows: 5, placeholder: "demo/**" %></label>
+  <label>DNS names in its certificate (a router that listens; one per line)
+    <%= f.text_area :dns_names, rows: 3 %></label>
+  <label>IP addresses in its certificate (one per line)
+    <%= f.text_area :ip_addresses, rows: 3 %></label>
+  <p class="hint wide">Reading a key also lets it query that key, and an Asterism method call is a query:
+    read-only on <code>asterism/**</code> still lets it call methods. A wider subscription than the keys
+    allowed is refused whole. Keys starting with <code>@</code> are not in <code>**</code>.</p>
+  <%= f.submit peer.persisted? ? "Save" : "Register" %>
+<% end %>

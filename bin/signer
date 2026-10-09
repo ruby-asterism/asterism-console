@@ -1,0 +1,166 @@
+#!/usr/bin/env ruby
+# The signer: the one process that holds the relay CA's private key. The
+# console (Rails) never reads the key; it asks the signer to sign a
+# certificate request and keeps only the ledger (name, serial, dates).
+# Plain Ruby (the standard library and lib/relay/cert_authority.rb), so it
+# runs on the host or in a bare ruby container (script/signer_docker).
+#
+#   bin/signer init   --ca-dir DIR              # a new CA in DIR (ca.pem, ca.key 0600)
+#   bin/signer import --ca-dir DIR < ca.pem+ca.key   # take an existing CA (PEM on stdin)
+#   bin/signer serve  --ca-dir DIR [--listen 127.0.0.1:7450] [--token-file FILE]
+#
+# serve answers HTTP on the address given (loopback by default), to callers
+# that send "Authorization: Bearer <token>" (the token: --token-file or
+# SIGNER_TOKEN; the console reads the same one):
+#
+#   GET  /ca     the CA certificate (PEM)
+#   POST /sign   {"name": "cruby", "csr": "<PEM>", "dns": [], "ips": [], "days": 90}
+#                -> {"certificate": "<PEM>", "serial": "<hex>", "not_before", "not_after", "fingerprint"}
+#
+# The common name is "name" (the CSR's subject is ignored, only its public
+# key is taken, after its signature is checked). Every signature is
+# appended to DIR/issued.log (JSON lines), the signer's own record next to
+# the console's ledger.
+#
+# Keep DIR readable by the signer only (0700, its own user or a container
+# volume). The console must not be able to read it.
+require "optparse"
+require "socket"
+require "json"
+require "time"
+require "openssl"
+require_relative "../lib/relay/cert_authority"
+
+module Signer
+  MAX_BODY = 64 * 1024
+  MAX_DAYS = Relay::CertAuthority::LEAF_DAYS
+
+  module_function
+
+  def log(text)
+    $stdout.puts("#{Time.now.utc.iso8601} signer: #{text}")
+    $stdout.flush
+  end
+
+  def secure_equal?(a, b)
+    a.bytesize == b.bytesize && OpenSSL.fixed_length_secure_compare(a, b)
+  end
+
+  def init(dir)
+    abort "#{dir} already has a CA" if File.exist?(File.join(dir, "ca.key"))
+    ca = Relay::CertAuthority.create(dir)
+    File.chmod(0o700, dir)
+    log("made a CA in #{dir}: #{ca.cert.subject} until #{ca.cert.not_after.utc.iso8601}")
+  end
+
+  def import(dir, pem)
+    abort "#{dir} already has a CA" if File.exist?(File.join(dir, "ca.key"))
+    cert = OpenSSL::X509::Certificate.new(pem[/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/m].to_s)
+    key = OpenSSL::PKey.read(pem[/-----BEGIN (?:EC |)PRIVATE KEY-----.*?-----END (?:EC |)PRIVATE KEY-----/m].to_s)
+    abort "the key does not match the certificate" unless cert.check_private_key(key)
+    FileUtils.mkdir_p(dir, mode: 0o700)
+    File.chmod(0o700, dir)
+    Relay::CertAuthority.write(File.join(dir, "ca.key"), key.private_to_pem, 0o600)
+    Relay::CertAuthority.write(File.join(dir, "ca.pem"), cert.to_pem, 0o644)
+    log("took the CA #{cert.subject} into #{dir}")
+  end
+
+  def serve(dir, listen, token)
+    abort "no token (--token-file or SIGNER_TOKEN)" if token.to_s.size < 16
+    ca = Relay::CertAuthority.load(dir)
+    host, port = listen.rpartition(":").values_at(0, 2)
+    server = TCPServer.new(host.delete_prefix("[").delete_suffix("]"), Integer(port))
+    log("serving #{ca.cert.subject} on #{listen}")
+    %w[INT TERM].each { |s| Signal.trap(s) { server.close rescue nil; exit } }
+    loop do
+      client = server.accept
+      Thread.new(client) do |c|
+        handle(c, ca, dir, token)
+      rescue StandardError => e
+        log("#{e.class}: #{e.message}")
+      ensure
+        c.close rescue nil
+      end
+    end
+  rescue IOError
+    nil
+  end
+
+  def read_request(c)
+    line = c.gets("\r\n", 8192) or return nil
+    verb, path, = line.split(" ", 3)
+    headers = {}
+    while (h = c.gets("\r\n", 8192)) && h != "\r\n"
+      k, v = h.split(":", 2)
+      headers[k.to_s.strip.downcase] = v.to_s.strip
+    end
+    len = headers["content-length"].to_i
+    raise ArgumentError, "body too large" if len > MAX_BODY
+    body = len.positive? ? c.read(len) : ""
+    [ verb, path, headers, body ]
+  end
+
+  def reply(c, status, body, type = "application/json")
+    text = type == "application/json" ? JSON.generate(body) : body
+    c.write("HTTP/1.1 #{status}\r\nContent-Type: #{type}\r\nContent-Length: #{text.bytesize}\r\n" \
+            "Cache-Control: no-store\r\nConnection: close\r\n\r\n#{text}")
+  end
+
+  def handle(c, ca, dir, token)
+    verb, path, headers, body = read_request(c)
+    return unless verb
+    given = headers["authorization"].to_s.delete_prefix("Bearer ")
+    unless secure_equal?(given, token)
+      log("refused #{verb} #{path}: bad token")
+      return reply(c, "401 Unauthorized", { "error" => "bad token" })
+    end
+    case [ verb, path ]
+    when [ "GET", "/ca" ]
+      reply(c, "200 OK", ca.cert.to_pem, "application/x-pem-file")
+    when [ "POST", "/sign" ]
+      sign(c, ca, dir, JSON.parse(body))
+    else
+      reply(c, "404 Not Found", { "error" => "no such thing" })
+    end
+  rescue JSON::ParserError, ArgumentError, OpenSSL::X509::RequestError => e
+    log("refused: #{e.message}")
+    reply(c, "400 Bad Request", { "error" => e.message })
+  end
+
+  def sign(c, ca, dir, req)
+    days = Integer(req.fetch("days", 90))
+    raise ArgumentError, "days must be 1..#{MAX_DAYS}" unless days.between?(1, MAX_DAYS)
+    csr = OpenSSL::X509::Request.new(req.fetch("csr"))
+    cert = ca.sign(req.fetch("name"), csr, dns: req["dns"] || [], ips: req["ips"] || [], days: days)
+    out = { "certificate" => cert.to_pem, "serial" => cert.serial.to_s(16).downcase,
+            "not_before" => cert.not_before.utc.iso8601, "not_after" => cert.not_after.utc.iso8601,
+            "fingerprint" => Relay::CertAuthority.fingerprint(cert) }
+    File.open(File.join(dir, "issued.log"), "a", 0o600) do |f|
+      f.puts(JSON.generate(out.except("certificate").merge("name" => req["name"], "at" => Time.now.utc.iso8601)))
+    end
+    log("signed #{req['name']} serial #{out['serial']} until #{out['not_after']}")
+    reply(c, "200 OK", out)
+  rescue KeyError => e
+    raise ArgumentError, e.message
+  end
+end
+
+cmd = ARGV.shift
+opt = { ca_dir: nil, listen: "127.0.0.1:7450", token_file: nil }
+OptionParser.new do |o|
+  o.banner = "usage: bin/signer init|import|serve --ca-dir DIR [--listen HOST:PORT] [--token-file FILE]"
+  o.on("--ca-dir DIR") { |v| opt[:ca_dir] = v }
+  o.on("--listen HOST:PORT") { |v| opt[:listen] = v }
+  o.on("--token-file FILE") { |v| opt[:token_file] = v }
+end.parse!
+abort "--ca-dir is needed" unless opt[:ca_dir]
+$stdout.sync = true
+case cmd
+when "init" then Signer.init(opt[:ca_dir])
+when "import" then Signer.import(opt[:ca_dir], $stdin.read)
+when "serve"
+  token = opt[:token_file] ? File.read(opt[:token_file]).strip : ENV["SIGNER_TOKEN"].to_s.strip
+  Signer.serve(opt[:ca_dir], opt[:listen], token)
+else
+  abort "usage: bin/signer init|import|serve --ca-dir DIR ..."
+end

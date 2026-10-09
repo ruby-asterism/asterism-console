@@ -63,4 +63,3 @@ end
 # elsewhere.
 gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
 gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
-

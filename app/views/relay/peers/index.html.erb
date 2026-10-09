@@ -1,0 +1,45 @@
+<% content_for(:title, "Relay - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2>Relay registry</h2>
+  <p>The routers and clients that may connect to the cloud router <code><%= @cloud %></code>.
+     A name is the certificate's common name, the subject in the router's ACL and the Asterism node ID
+     (or the router's name), so the graph can tell who is who.
+     Changes reach the cloud router when they are applied.</p>
+  <% if @peers.empty? %>
+    <p class="hint">Nobody is registered yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Kind</th><th>Keys (read and write / read only)</th><th>Admin space</th>
+                 <th>Certificate until</th><th>ACL (next apply)</th><th>Now</th></tr></thead>
+      <tbody>
+        <% @peers.each do |p| %>
+          <tr>
+            <td><%= link_to p.name, relay_peer_path(p) %><br><span class="hint"><%= p.description %></span></td>
+            <td><%= p.kind %><%= tag.span(" (this router)", class: "hint") if p.name == @cloud %></td>
+            <td><%= keys_list(p.rw_keys) %><% if p.ro_list.any? %><br><span class="hint">read only:</span><br><%= keys_list(p.ro_keys) %><% end %></td>
+            <td><%= p.admin_space? ? (p.kind == "router" ? "read through" : "reads") : "-" %></td>
+            <td><%= when_text(p.cert_expires_at) %></td>
+            <td><%= p.name == @cloud ? tag.span("-", class: "hint") : acl_badge(p) %></td>
+            <td><%= presence_badge(p, @seen) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+  <% if current_user.admin? %>
+    <p><%= link_to "Register a client", new_relay_peer_path(kind: "client") %> &middot;
+       <%= link_to "Register a router", new_relay_peer_path(kind: "router") %></p>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Next apply</h2>
+  <% if @plan["same_config"] %>
+    <p>The cloud router's file already holds this registry.</p>
+  <% else %>
+    <p>The registry differs from the file the cloud router runs with
+      (<%= @plan["written_before"] ? "written by the console" : "not written by the console yet" %>).
+      <%= link_to "Look at the plan and apply", new_relay_apply_path %>.</p>
+  <% end %>
+</section>

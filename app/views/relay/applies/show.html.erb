@@ -1,0 +1,34 @@
+<% content_for(:title, "Apply #{@apply.id} - Asterism Console") %>
+<% if @apply.running? %><% content_for(:head) { tag.meta("http-equiv": "refresh", content: "2") } %><% end %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2>Apply <%= @apply.id %> <span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad' }[@apply.status] || 'warn' %>"><%= @apply.status %></span></h2>
+  <p class="hint"><%= @apply.user&.email_address %>, <%= when_text(@apply.created_at) %><%= " to #{l(@apply.finished_at, format: '%H:%M:%S')}" if @apply.finished_at %>,
+     digest <%= @apply.config_digest %></p>
+  <% if @apply.running? %><p>Writing the configuration and restarting the cloud router... (this page follows it)</p><% end %>
+  <% if @apply.plan.any? %>
+    <h3>Before</h3>
+    <%= render "plan", plan: @apply.plan %>
+  <% end %>
+  <% if @apply.after.any? %>
+    <h3>After (what the bridge saw on the cloud router within <%= @apply.after["waited_s"] %> s)</h3>
+    <% back, gone = @apply.comparison %>
+    <% if !@apply.after["cloud_seen"] %>
+      <p class="error">The cloud router did not come back in the graph.</p>
+    <% else %>
+      <ul>
+        <% @apply.after["router_links"].each do |r| %><li>router link to <%= r %></li><% end %>
+        <% @apply.after["sessions"].each do |s| %>
+          <li><%= s["label"] %> <span class="hint"><%= s["protocol"] %></span>
+            <%= s["carries"].any? ? "carrying #{s['carries'].join(', ')}" : "" %>
+            <%= tag.span("back", class: "badge ok") if back.include?(RelayApply.session_key(s)) %></li>
+        <% end %>
+      </ul>
+      <% if gone.any? %><p>Not back: <%= gone.join("; ") %></p><% end %>
+    <% end %>
+  <% end %>
+  <% if @apply.output.present? %>
+    <h3>Output</h3>
+    <pre class="config"><%= @apply.output %></pre>
+  <% end %>
+</section>

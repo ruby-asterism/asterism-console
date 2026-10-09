@@ -1,0 +1,23 @@
+<dl class="facts">
+  <dt>File</dt><dd><code><%= plan["config_path"] %></code><%= " (not written by the console yet)" unless plan["written_before"] %></dd>
+  <dt>In the ACL</dt><dd><%= plan["subjects"].presence&.join(", ") || "nobody (everything denied)" %></dd>
+  <dt>Joining</dt><dd><%= plan["joining"].presence&.join(", ") || "-" %></dd>
+  <dt>Leaving</dt><dd><%= plan["leaving"].presence&.join(", ") || "-" %></dd>
+  <dt>Restart</dt><dd><code><%= plan["command"] %></code></dd>
+</dl>
+<h3>Cut by the restart (on the cloud router now)</h3>
+<% if !plan["cloud_seen"] %>
+  <p class="hint">The bridge does not see the cloud router now, so this is not known.</p>
+<% else %>
+  <ul>
+    <% plan["router_links"].each do |r| %><li>router link to <%= r %> (connects again by itself)</li><% end %>
+    <% plan["cut"].each do |s| %>
+      <li><%= s["label"] %> <span class="hint"><%= s["protocol"] %><%= ", this console" if s["self"] %></span>
+        <%= s["carries"].any? ? "carrying #{s['carries'].join(', ')}" : "" %></li>
+    <% end %>
+    <% if plan["cut"].empty? && plan["router_links"].empty? %><li class="hint">nothing</li><% end %>
+  </ul>
+<% end %>
+<ul class="hint">
+  <% plan["notes"].each do |n| %><li><%= n %></li><% end %>
+</ul>

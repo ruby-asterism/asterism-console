@@ -1,7 +1,8 @@
 # A small certificate authority for the routers and clients of a Zenoh
 # relay (mTLS between zenohd routers, TLS clients with a certificate).
-# Plain Ruby with the standard OpenSSL library; no Rails, so script/relay_certs
-# and (later) the console itself can use it.
+# Plain Ruby with the standard OpenSSL library; no Rails: script/relay_certs
+# and the signer (bin/signer, the one process that holds the CA's key) use
+# it. The console never loads a CA key; it asks the signer (Relay::SignerClient).
 #
 #   ca = Relay::CertAuthority.load_or_create("storage/relay/certs")
 #   ca.issue("zenohd-cloud", dns: %w[zenohd-cloud localhost], ips: %w[127.0.0.1])
@@ -18,6 +19,7 @@
 require "openssl"
 require "fileutils"
 require "securerandom"
+require "ipaddr"
 
 module Relay
   class CertAuthority
@@ -36,6 +38,12 @@ module Relay
       else
         create(dir, common_name: common_name)
       end
+    end
+
+    # Loads the CA in dir; fails when there is none.
+    def self.load(dir)
+      new(dir, OpenSSL::X509::Certificate.new(File.read(File.join(dir, "ca.pem"))),
+          OpenSSL::PKey.read(File.read(File.join(dir, "ca.key"))))
     end
 
     def self.create(dir, common_name: "Asterism Relay CA")
@@ -87,14 +95,34 @@ module Relay
     # Good for both server and client authentication (a router listens and
     # connects with the same certificate). Returns the certificate.
     def issue(name, dns: [], ips: [], days: LEAF_DAYS)
-      raise ArgumentError, "bad name: #{name.inspect}" unless NAME_RE.match?(name) && name != "ca"
       key = OpenSSL::PKey::EC.generate("prime256v1")
+      cert = sign(name, key, dns: dns, ips: ips, days: days)
+      self.class.write(path(name, "key"), key.private_to_pem, 0o600)
+      self.class.write(path(name, "pem"), cert.to_pem, 0o644)
+      cert
+    end
+
+    # Signs a certificate for name over public_key (a key, or a CSR whose
+    # signature is checked; only its public key is taken, the subject comes
+    # from name). Nothing is written. Used by issue and by bin/signer.
+    def sign(name, public_key, dns: [], ips: [], days: LEAF_DAYS)
+      raise ArgumentError, "bad name: #{name.inspect}" unless NAME_RE.match?(name.to_s) && name != "ca"
+      raise ArgumentError, "bad days: #{days.inspect}" unless days.is_a?(Integer) && days.between?(1, LEAF_DAYS)
+      dns = Array(dns).map(&:to_s)
+      ips = Array(ips).map(&:to_s)
+      bad = dns.reject { NAME_RE.match?(_1) }
+      raise ArgumentError, "bad DNS names: #{bad.join(' ')}" unless bad.empty?
+      ips.each { IPAddr.new(_1) }
+      if public_key.is_a?(OpenSSL::X509::Request)
+        raise ArgumentError, "the request's signature does not match its key" unless public_key.verify(public_key.public_key)
+        public_key = public_key.public_key
+      end
       cert = OpenSSL::X509::Certificate.new
       cert.version = 2
       cert.serial = self.class.serial
       cert.subject = OpenSSL::X509::Name.new([ [ "CN", name ] ])
       cert.issuer = @cert.subject
-      cert.public_key = key
+      cert.public_key = public_key
       cert.not_before = Time.now - 60
       cert.not_after = Time.now + days * 86_400
       ef = OpenSSL::X509::ExtensionFactory.new(@cert, cert)
@@ -106,9 +134,25 @@ module Relay
       cert.add_extension(ef.create_extension("subjectKeyIdentifier", "hash", false))
       cert.add_extension(ef.create_extension("authorityKeyIdentifier", "keyid:always", false))
       cert.sign(@key, OpenSSL::Digest.new("SHA256"))
-      self.class.write(path(name, "key"), key.private_to_pem, 0o600)
-      self.class.write(path(name, "pem"), cert.to_pem, 0o644)
       cert
+    rescue IPAddr::InvalidAddressError => e
+      raise ArgumentError, "bad IP address: #{e.message}"
+    end
+
+    # A key and a certificate request for name (the side that asks a signer:
+    # the key stays with the caller).
+    def self.request(name)
+      key = OpenSSL::PKey::EC.generate("prime256v1")
+      csr = OpenSSL::X509::Request.new
+      csr.version = 0
+      csr.subject = OpenSSL::X509::Name.new([ [ "CN", name.to_s ] ])
+      csr.public_key = key
+      csr.sign(key, OpenSSL::Digest.new("SHA256"))
+      [ key, csr ]
+    end
+
+    def self.fingerprint(cert)
+      OpenSSL::Digest::SHA256.hexdigest(cert.to_der).scan(/../).join(":")
     end
 
     # The certificates issued in this directory (name => certificate).

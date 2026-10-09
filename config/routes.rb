@@ -17,5 +17,16 @@ Rails.application.routes.draw do
   resources :call_permissions, only: %i[index create destroy]
   resources :calls, only: :index
 
+  # The relay: registry, certificates (through the signer), apply.
+  namespace :relay do
+    resources :peers do
+      resources :certificates, only: :create do
+        patch :revoke, on: :member
+      end
+    end
+    resources :applies, only: %i[index new create show]
+    get "/", to: redirect("/relay/peers")
+  end
+
   get "up" => "rails/health#show", as: :rails_health_check
 end

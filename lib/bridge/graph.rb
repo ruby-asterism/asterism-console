@@ -16,6 +16,14 @@
 #              "cert_name" => } }): the certificate name of the router the
 #              bridge is connected to (the admin space does not tell it)
 #   self_cert: the common name of the bridge's own certificate (its sessions)
+#   registry: the relay registry (RelayPeer.registry: "name", "kind",
+#             "enabled", "in_acl", ...), or nil for none. Asterism nodes
+#             (by ID) and routers (by metadata/name) are matched to it by
+#             name, the certificate name = node ID convention, and marked
+#             (data "registry"): "registered" (in the registry, here),
+#             "disabled" (here, but disabled in the registry), "unregistered"
+#             (here, not in the registry); a registered name not seen gets a
+#             node of its own ("absent", kind "registered").
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -24,7 +32,7 @@
 module Bridge
   class Graph
     LAYERS = {
-      "router" => "infra", "session" => "infra",
+      "router" => "infra", "session" => "infra", "registered" => "infra",
       "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism",
       "r_node" => "ros", "r_topic" => "ros", "r_service" => "ros"
     }.freeze
@@ -36,7 +44,8 @@ module Bridge
 
     attr_reader :nodes, :edges
 
-    def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil)
+    def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
+                   registry: nil)
       g = new
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
@@ -44,6 +53,7 @@ module Bridge
       g.add_ros(ros)
       g.link_tokens(admin)
       g.add_self_cert(self_cert)
+      g.add_registry(registry) if registry
       g
     end
 
@@ -306,6 +316,43 @@ module Bridge
       @nodes.each_value do |n|
         n["data"]["cert_name"] = name if n["kind"] == "session" && n["data"]["self"]
       end
+    end
+
+    # --------------------------------------------------------------- registry
+
+    def add_registry(registry)
+      by_name = registry.to_h { [ _1["name"].to_s, _1 ] }
+      seen = {}
+      @nodes.values.each do |n|
+        name = case n["kind"]
+        when "a_node" then n["data"]["node"]
+        when "router" then n["data"]["name"]
+        end
+        next if name.nil? || name.empty?
+        peer = by_name[name]
+        if peer
+          seen[name] = true
+          n["data"]["registry"] = peer["enabled"] ? "registered" : "disabled"
+          n["data"]["peer"] = peer.slice("name", "kind", "enabled", "in_acl", "expires").compact
+        else
+          n["data"]["registry"] = "unregistered"
+        end
+        n["data"]["via"] = via_router(n) if n["kind"] == "a_node"
+      end
+      by_name.each do |name, peer|
+        next if seen[name]
+        node("reg:#{name}", "registered", name, "registry" => "absent",
+             "peer" => peer.slice("name", "kind", "enabled", "in_acl", "expires", "description").compact)
+      end
+    end
+
+    # The router an Asterism node comes through (its session's router).
+    def via_router(n)
+      sid = @edges.values.find { _1["kind"] == "carries" && _1["target"] == n["id"] }&.dig("source")
+      return nil unless sid
+      rid = @edges.values.find { _1["kind"] == "session" && _1["target"] == sid }&.dig("source")
+      r = rid && @nodes[rid]
+      r && (r["data"]["name"] || r["label"])
     end
 
     # ---------------------------------------------------------------- output

@@ -1,0 +1,6 @@
+<% content_for(:title, "#{@peer.name} - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2><%= @peer.name %></h2>
+  <%= render "form", peer: @peer %>
+</section>

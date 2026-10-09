@@ -62,6 +62,7 @@ module Bridge
       @ros_keys = {}
       @admin = {}
       @own_links = {}
+      @registry = []
       @dirty = true
       @subs = {} # watch id => [key, Subscription]
       @rate = {} # watch id => [second, count, dropped]
@@ -198,15 +199,24 @@ module Bridge
         (admin[rz] ||= { "tokens" => {}, "linkstate" => {} })["tokens"][key.split("/token/", 2)[1]] = v
       end
       own = own_links
+      reg = registry
       @lock.synchronize do
-        if admin != @admin || own != @own_links
+        if admin != @admin || own != @own_links || reg != @registry
           @admin = admin
           @own_links = own
+          @registry = reg
           @dirty = true
         end
       end
     rescue Asterism::Zenoh::Error => e
       say "bridge: admin space: #{e.message}"
+    end
+
+    # The relay registry (W2), to mark the graph's nodes by it.
+    def registry
+      RelayPeer.registry
+    rescue ActiveRecord::ActiveRecordError
+      []
     end
 
     # This bridge's links (to the router it is connected to): the link's
@@ -249,7 +259,7 @@ module Bridge
         @dirty = false
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
-                    self_cert: self_cert).to_h
+                    self_cert: self_cert, registry: @registry).to_h
       end
       state = GraphState.current
       diff = Graph.diff(state.graph, graph)

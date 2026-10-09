@@ -1,0 +1,52 @@
+#!/bin/bash
+# Runs bin/signer in a container, with the CA in a docker volume
+# (asterism_signer_ca) that the console's files never touch: the console
+# (Rails) cannot read the CA's private key, it can only ask the signer to
+# sign over 127.0.0.1 with the token in storage/relay/signer.token.
+#
+#   script/signer_docker init                 # a new CA in the volume
+#   script/signer_docker import CA.pem CA.key # take an existing CA (then delete CA.key)
+#   script/signer_docker up                   # serve on 127.0.0.1:${SIGNER_PORT:-7450}
+#   script/signer_docker down | logs | ca
+#
+# The token is made on first use (0600). The image is a plain ruby one;
+# nothing is installed.
+set -e
+dir=$(cd "$(dirname "$0")/.." && pwd)
+image=${SIGNER_IMAGE:-ruby:3.3-alpine}
+volume=${SIGNER_VOLUME:-asterism_signer_ca}
+name=${SIGNER_CONTAINER:-asterism_signer}
+port=${SIGNER_PORT:-7450}
+token="$dir/storage/relay/signer.token"
+code=(-v "$dir/bin/signer:/app/bin/signer:ro" -v "$dir/lib/relay:/app/lib/relay:ro")
+
+make_token() {
+  mkdir -p "$(dirname "$token")"
+  if [ ! -s "$token" ]; then
+    (umask 077 && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$token")
+    echo "made $token"
+  fi
+}
+
+case "$1" in
+  init)
+    docker run --rm -v "$volume:/ca" "${code[@]}" "$image" ruby /app/bin/signer init --ca-dir /ca/ca
+    ;;
+  import)
+    [ -f "$2" ] && [ -f "$3" ] || { echo "usage: $0 import CA.pem CA.key" >&2; exit 2; }
+    cat "$2" "$3" | docker run --rm -i -v "$volume:/ca" "${code[@]}" "$image" \
+      ruby /app/bin/signer import --ca-dir /ca/ca
+    echo "now delete $3: the signer has its own copy"
+    ;;
+  up)
+    make_token
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    docker run -d --name "$name" -v "$volume:/ca" "${code[@]}" -v "$token:/run/signer.token:ro" \
+      -p "127.0.0.1:$port:7450" "$image" \
+      ruby /app/bin/signer serve --ca-dir /ca/ca --listen 0.0.0.0:7450 --token-file /run/signer.token
+    ;;
+  down) docker rm -f "$name" ;;
+  logs) docker logs "$name" ;;
+  ca) docker run --rm -v "$volume:/ca:ro" "$image" cat /ca/ca/ca.pem ;;
+  *) sed -n '2,13p' "$0"; exit 2 ;;
+esac

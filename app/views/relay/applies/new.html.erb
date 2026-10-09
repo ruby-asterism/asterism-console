@@ -1,0 +1,19 @@
+<% content_for(:title, "Apply - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2>Apply the registry to the cloud router</h2>
+  <% if @plan["same_config"] %>
+    <p class="hint">The file already holds this registry; applying again only restarts the router.</p>
+  <% end %>
+  <%= render "plan", plan: @plan %>
+  <% if current_user.admin? %>
+    <%= button_to "Write the configuration and restart the cloud router", relay_applies_path,
+                  disabled: @running, form: { data: { turbo_confirm: "Restart the cloud router now? Every link to it is cut." } } %>
+  <% else %>
+    <p class="hint">Only an admin can apply.</p>
+  <% end %>
+</section>
+<section class="card">
+  <h2>The configuration (digest <%= @config.digest %>)</h2>
+  <pre class="config"><%= @config.text(by: current_user.email_address) %></pre>
+</section>

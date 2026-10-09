@@ -105,8 +105,91 @@ The name in the locator must be one the router's certificate is valid for
 (`localhost` here). A Ruby node connects the same way (`config:`, see the
 asterism README).
 
-Keep the CA's key (`ca.key`) away from a server that faces the network once
-certificates are issued from the page (planned).
+`script/relay_certs` is the quick start: its CA key sits next to the
+certificates. Once the console issues certificates, the CA moves into the
+signer (next section) and `script/relay_certs` refuses to run on that
+directory.
+
+## The relay registry: certificates, ACL, apply
+
+Under "Relay" the console keeps the registry of the routers and clients
+the cloud router lets in, issues their certificates through a separate
+signer, makes the cloud router's configuration from the registry and
+applies it.
+
+```
+ browser --> Rails (registry, ledger, apply) --HTTP 127.0.0.1 + token--> bin/signer (the CA's key)
+                 |  writes storage/relay/generated/cloud.json5
+                 +--> docker compose restart zenohd-cloud (reads /generated/cloud.json5)
+```
+
+- **One name for everything.** A peer's name is its certificate's common
+  name, its subject in the cloud router's ACL and, by convention, its
+  Asterism node ID (a client) or its router name (`metadata/name`). The
+  graph matches nodes to the registry by it.
+- **Registry** (admins edit, everyone signed in reads): kind (router /
+  client), description, keys it may read and write, keys it may only read
+  (one key expression per line), whether it reads the admin space (a
+  client) or has its admin space read through (a router), enabled,
+  certificate lifetime, extra DNS names / IPs for a router that listens.
+  Reading a key also lets it query it, and an Asterism call is a query.
+- **The signer** (`bin/signer`, plain Ruby) is the only process that holds
+  the CA's private key. Rails makes the peer's key and a certificate request,
+  the signer checks the request and signs it for the peer's name (at most
+  825 days) and logs it in its own `issued.log`; Rails records the
+  certificate in its ledger (serial, dates, fingerprint, who) and answers
+  with a tar of the key, the certificate, the CA and an example
+  configuration. **The key is in that download only**; it is not stored.
+  Run the signer where Rails cannot read its directory: its own user, or a
+  container with the CA in a docker volume:
+
+  ```
+  script/signer_docker import storage/relay/certs/ca.pem storage/relay/certs/ca.key
+  rm storage/relay/certs/ca.key            # the signer has its own copy now
+  script/signer_docker up                  # 127.0.0.1:7450; token in storage/relay/signer.token
+  ```
+
+  (`script/signer_docker init` makes a new CA instead.) Rails finds it
+  with `ASTERISM_SIGNER_URL` and the token file (or `ASTERISM_SIGNER_TOKEN`).
+  `bin/rails relay:import` records certificates made before (by
+  `script/relay_certs`) in the ledger.
+- **Configuration** (`lib/relay/cloud_config.rb`): the TLS part as in W1 and
+  the ACL, one subject per peer that is enabled and has a valid certificate
+  (default deny; read-write keys get every message type both ways,
+  read-only keys only subscribing and querying from the peer). The file
+  starts with a line saying it is generated; the database is the source.
+  `bin/rails relay:show` prints it, `relay:generate` writes it.
+- **Apply** ("Relay" > "Apply"): shows who joins and leaves the ACL, the
+  sessions and router links on the cloud router that the restart will cut,
+  and the file; then writes `storage/relay/generated/cloud.json5` and runs
+  `docker compose -f docker-compose.yml -f docker-compose.relay.yml restart
+  zenohd-cloud` in the family-mruby directory (`ASTERISM_RELAY_GENERATED_DIR`,
+  `ASTERISM_RELAY_COMPOSE_DIR`, `ASTERISM_RELAY_RESTART`), and reports what
+  came back. The cloud router must have been created reading that file:
+
+  ```
+  ASTERISM_RELAY_GENERATED=./asterism-console/storage/relay/generated \
+  ASTERISM_RELAY_CLOUD_CONFIG=/generated/cloud.json5 \
+    docker compose -f docker-compose.yml -f docker-compose.relay.yml up -d zenohd zenohd-cloud
+  ```
+
+  What a restart does to the others: the home router and the bridge connect
+  again by themselves; Asterism nodes on the cloud router (CRuby) lose their
+  connection and must be restarted; ROS 2 peers (rmw_zenoh's default peer
+  mode) keep their data flowing but their liveliness tokens are not taken
+  back by zenohd 1.10.1, so their nodes leave the graph until they restart
+  (in client mode they come back).
+- **Shutting someone out**: disable it (or revoke its only certificate) and
+  apply. Its TLS link still opens (zenohd 1.10.1 has no revocation list; the
+  certificate is good until it expires, and `close_link_on_expiration` then
+  closes it), but the ACL denies it everything. A second valid certificate
+  with the same name is not told apart: the ACL matches the name. Keep
+  lifetimes short.
+- **The graph**: the "Relay registry" layer puts a halo on Asterism nodes and
+  routers: green (registered), orange (here but disabled), red (not in the
+  registry), and adds a grey node for each registered name that is not here.
+  Names that are neither node IDs nor router names (a ROS 2 peer's
+  certificate) cannot be matched and show as not here.
 
 ## Security
 
@@ -148,6 +231,11 @@ even on a LAN. What it does, and what it assumes:
   refuses to start while there are no users. Sign-in sends a password and
   the cookie in the clear over plain HTTP: beyond this machine, put a TLS
   proxy in front (and set `config.assume_ssl` / `force_ssl` in production).
+- **The CA's key** is the signer's only (above). In this repository's
+  setup the console's user can still run docker, and so could reach the
+  signer's volume; on a server, run Rails as a user without docker rights
+  and give `ASTERISM_RELAY_RESTART` a narrow helper (a sudo rule for the one
+  restart) instead.
 - **What it does not do**: no roles beyond admin / user, no limit on who may
   watch which keys, no lockout beyond the rate limit, no password reset by
   mail (an admin sets a new password with `console:user`).

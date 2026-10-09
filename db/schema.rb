@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_003318) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_010000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -53,6 +53,55 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_003318) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "relay_applies", force: :cascade do |t|
+    t.integer "user_id"
+    t.string "status", default: "running", null: false
+    t.string "config_digest"
+    t.text "config_text"
+    t.text "plan_json"
+    t.text "after_json"
+    t.text "output"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_relay_applies_on_user_id"
+  end
+
+  create_table "relay_certificates", force: :cascade do |t|
+    t.integer "relay_peer_id", null: false
+    t.string "serial", null: false
+    t.string "fingerprint", null: false
+    t.datetime "not_before", null: false
+    t.datetime "not_after", null: false
+    t.text "certificate_pem", null: false
+    t.string "source", default: "signer", null: false
+    t.integer "issued_by_id"
+    t.datetime "revoked_at"
+    t.integer "revoked_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["issued_by_id"], name: "index_relay_certificates_on_issued_by_id"
+    t.index ["relay_peer_id"], name: "index_relay_certificates_on_relay_peer_id"
+    t.index ["revoked_by_id"], name: "index_relay_certificates_on_revoked_by_id"
+    t.index ["serial"], name: "index_relay_certificates_on_serial", unique: true
+  end
+
+  create_table "relay_peers", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "kind", default: "client", null: false
+    t.string "description"
+    t.text "rw_keys"
+    t.text "ro_keys"
+    t.boolean "admin_space", default: false, null: false
+    t.boolean "enabled", default: true, null: false
+    t.text "dns_names"
+    t.text "ip_addresses"
+    t.integer "cert_days", default: 90, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_relay_peers_on_name", unique: true
+  end
+
   create_table "sessions", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "ip_address"
@@ -84,5 +133,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_003318) do
 
   add_foreign_key "bridge_requests", "users"
   add_foreign_key "call_permissions", "users", column: "created_by_id"
+  add_foreign_key "relay_applies", "users"
+  add_foreign_key "relay_certificates", "relay_peers"
+  add_foreign_key "relay_certificates", "users", column: "issued_by_id"
+  add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "sessions", "users"
 end

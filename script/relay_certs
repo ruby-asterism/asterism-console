@@ -12,6 +12,11 @@
 # zenohd-home certificate it signed (for checking that the cloud refuses it).
 #
 # DIR defaults to storage/relay/certs (ignored by git). Never commit it.
+#
+# This is the quick start of W1: the CA's key sits next to the certificates.
+# Once the console issues certificates, move the CA into the signer
+# (script/signer_docker import DIR/ca.pem DIR/ca.key, then delete
+# DIR/ca.key); this script then refuses to run on DIR.
 require "optparse"
 require_relative "../lib/relay/cert_authority"
 
@@ -50,6 +55,10 @@ def issue_all(ca, specs, force)
   end
 end
 
+if File.exist?(File.join(opt[:out], "ca.pem")) && !File.exist?(File.join(opt[:out], "ca.key"))
+  abort "#{opt[:out]} has ca.pem but no ca.key: the CA lives in the signer now " \
+        "(bin/signer, script/signer_docker). Issue certificates from the console's relay page."
+end
 fresh = !File.exist?(File.join(opt[:out], "ca.pem"))
 ca = Relay::CertAuthority.load_or_create(opt[:out])
 puts "#{fresh ? 'made' : 'kept'}    #{File.join(opt[:out], 'ca.pem')}  #{ca.cert.subject}"

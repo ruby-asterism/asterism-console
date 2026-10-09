@@ -104,6 +104,7 @@ details { margin-top: 8px; font-size: 12px; }
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
 .swatch.shape-ellipse { border-radius: 50%; }
 .swatch.shape-diamond { transform: rotate(45deg) scale(0.8); border-radius: 0; }
+.swatch.halo { width: 10px; height: 10px; border-radius: 50%; background: var(--panel); margin: 0 3px; vertical-align: middle; }
 .swatch.dashed { border: 2px dashed var(--text); background: transparent; }
 
 /* The pages around the graph: sign-in, account, permissions, call log, relay. */
@@ -149,6 +150,8 @@ tr.status-ok .badge, .badge.ok { border-color: var(--ok); color: var(--ok); }
 tr.status-denied .badge, tr.status-error .badge, tr.status-remote_error .badge, tr.status-timeout .badge, .badge.bad { border-color: var(--bad); color: var(--bad); }
 .badge.warn { border-color: #b26a00; color: #b26a00; }
 form.call.not-allowed code { color: var(--muted); text-decoration: line-through; }
+.tabs { display: flex; gap: 14px; font-size: 13px; }
+.tabs a { color: var(--accent); text-decoration: none; }
 pre.config { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; overflow: auto; max-height: 420px; }
 
 @media (prefers-color-scheme: dark) {

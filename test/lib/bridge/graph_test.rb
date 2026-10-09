@@ -224,4 +224,33 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_nil board["data"]["cert_name"]
     assert edge?(g, "session", "router:#{HOME}", "session:#{BOARD}")
   end
+  test "the relay registry over the graph: registered, disabled, unregistered, absent" do
+    adm = admin
+    adm[ROUTER]["router"]["metadata"] = { "name" => "zenohd-cloud" }
+    registry = [
+      { "name" => "console", "kind" => "client", "enabled" => true, "in_acl" => true, "expires" => "2027-01-01T00:00:00Z" },
+      { "name" => "fmruby-aaaaaa", "kind" => "client", "enabled" => false, "in_acl" => false },
+      { "name" => "zenohd-cloud", "kind" => "router", "enabled" => true, "in_acl" => false },
+      { "name" => "w2bot", "kind" => "client", "enabled" => true, "in_acl" => true, "description" => "not running" }
+    ]
+    g = Bridge::Graph.build(admin: adm, asterism: asterism + %w[asterism/stranger], ros: ros, self_node: "console",
+                            self_zids: [ READER ], registry: registry).to_h
+    c = node(g, "a_node:console")["data"]
+    assert_equal "registered", c["registry"]
+    assert_equal({ "name" => "console", "kind" => "client", "enabled" => true, "in_acl" => true,
+                   "expires" => "2027-01-01T00:00:00Z" }, c["peer"])
+    assert_equal "zenohd-cloud", c["via"]
+    assert_equal "disabled", node(g, "a_node:fmruby-aaaaaa")["data"]["registry"]
+    assert_equal "registered", node(g, "router:#{ROUTER}")["data"]["registry"]
+    assert_equal "unregistered", node(g, "a_node:stranger")["data"]["registry"]
+    ghost = node(g, "reg:w2bot")
+    assert_equal [ "registered", "infra", "absent" ], [ ghost["kind"], ghost["layer"], ghost["data"]["registry"] ]
+    assert_equal "not running", ghost["data"]["peer"]["description"]
+    refute g["nodes"].any? { _1["id"] == "reg:console" }
+    # Sessions and ROS 2 nodes are not names of the registry: left as they are.
+    assert_nil node(g, "session:#{BOARD}")["data"]["registry"]
+    assert_nil node(g, "r_node:#{ROS}/0")["data"]["registry"]
+    # No registry: no marks.
+    assert_nil node(graph, "a_node:console")["data"]["registry"]
+  end
 end

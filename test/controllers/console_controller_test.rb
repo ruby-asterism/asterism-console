@@ -17,7 +17,7 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "h1", "Asterism Console"
     assert_select ".nav .who", /user@example.com/
-    assert_select "input[type=checkbox][data-layer]", 3
+    assert_select "input[type=checkbox][data-layer]", 4
     assert_select "[data-controller=console]" do |el|
       state = JSON.parse(el.first["data-console-state-value"])
       assert_equal 3, state["version"]

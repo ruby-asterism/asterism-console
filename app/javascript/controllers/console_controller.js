@@ -16,6 +16,15 @@ const KINDS = {
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 30 },
   r_service: { label: "ROS 2 service",   shape: "round-triangle",  color: "#c2185b", size: 30 },
+  registered: { label: "Registered, not here", shape: "round-rectangle", color: "#c9ced6", size: 30 },
+}
+
+// The relay registry over the graph (W2): a halo by how a node matches it.
+const REGISTRY = {
+  registered:   { label: "registered, here",          color: "#2e7d32" },
+  disabled:     { label: "here, disabled in registry", color: "#ef6c00" },
+  unregistered: { label: "not in the registry",       color: "#d32f2f" },
+  absent:       { label: "registered, not here",      color: "#8a8f98" },
 }
 
 const EDGE_COLORS = {
@@ -41,7 +50,7 @@ export default class extends Controller {
 
   connect() {
     this.version = this.stateValue.version || 0
-    this.layers = { infra: true, asterism: true, ros: true }
+    this.layers = { infra: true, asterism: true, ros: true, registry: true }
     this.pending = new Map()   // request id -> handler
     this.samples = new Map()   // watch id -> [sample, ...]
     this.watches = new Map()
@@ -99,6 +108,14 @@ export default class extends Controller {
       { selector: "edge[kind = 'router_link'][label]", style: {
           label: "data(label)", "font-size": 9, color: "#1f4e99", "text-background-color": "#fff",
           "text-background-opacity": 1, "text-background-padding": 2 } },
+      { selector: "node[registry = 'registered'], node[registry = 'disabled'], node[registry = 'unregistered']",
+        style: { "underlay-opacity": 0.8, "underlay-padding": 8, "underlay-shape": "ellipse" } },
+      { selector: "node[registry = 'registered']", style: { "underlay-color": REGISTRY.registered.color } },
+      { selector: "node[registry = 'disabled']", style: { "underlay-color": REGISTRY.disabled.color } },
+      { selector: "node[registry = 'unregistered']", style: { "underlay-color": REGISTRY.unregistered.color } },
+      { selector: "node[kind = 'registered']", style: {
+          "border-width": 2, "border-style": "dashed", "border-color": "#6b7280", "background-opacity": 0.5, color: "#555" } },
+      { selector: "node.reg-off", style: { "underlay-opacity": 0 } },
       { selector: ".flash", style: { "overlay-color": "#ffb300", "overlay-opacity": 0.35, "overlay-padding": 6 } },
     ]
     for (const [kind, k] of Object.entries(KINDS)) {
@@ -118,9 +135,11 @@ export default class extends Controller {
   }
 
   nodeElement(n) {
-    const label = n.data?.self ? `${n.label} (this console)` : n.label
-    return { group: "nodes", data: { id: n.id, kind: n.kind, layer: n.layer, label, self: !!n.data?.self, info: n.data },
-             classes: `layer-${n.layer}` }
+    let label = n.data?.self ? `${n.label} (this console)` : n.label
+    if (n.kind === "registered") label = `${n.label} (registered, not here)`
+    const data = { id: n.id, kind: n.kind, layer: n.layer, label, self: !!n.data?.self, info: n.data }
+    if (n.data?.registry) data.registry = n.data.registry
+    return { group: "nodes", data, classes: `layer-${n.layer}` }
   }
 
   edgeElement(e) {
@@ -144,7 +163,7 @@ export default class extends Controller {
       for (const n of diff.change_nodes) {
         const el = cy.getElementById(n.id)
         const fresh = this.nodeElement(n).data
-        el.data({ label: fresh.label, info: fresh.info, self: fresh.self })
+        el.data({ label: fresh.label, info: fresh.info, self: fresh.self, registry: fresh.registry })
       }
       for (const e of diff.add_edges) {
         if (cy.getElementById(e.source).nonempty() && cy.getElementById(e.target).nonempty()) {
@@ -214,7 +233,13 @@ export default class extends Controller {
 
   applyLayers() {
     this.cy.batch(() => {
-      this.cy.nodes().forEach((n) => n.style("display", this.layers[n.data("layer")] ? "element" : "none"))
+      this.cy.nodes().forEach((n) => {
+        let shown = this.layers[n.data("layer")]
+        if (n.data("kind") === "registered") shown = shown && this.layers.registry
+        n.style("display", shown ? "element" : "none")
+        if (this.layers.registry) n.removeClass("reg-off")
+        else n.addClass("reg-off")
+      })
     })
   }
 
@@ -228,7 +253,9 @@ export default class extends Controller {
   renderLegend() {
     this.legendTarget.innerHTML = Object.values(KINDS).map((k) =>
       `<span class="key"><span class="swatch shape-${k.shape}" style="background:${k.color}"></span>${k.label}</span>`
-    ).join("") + `<span class="key"><span class="swatch dashed"></span>this console</span>`
+    ).join("") + `<span class="key"><span class="swatch dashed"></span>this console</span>` +
+      Object.values(REGISTRY).filter((r) => r !== REGISTRY.absent).map((r) =>
+        `<span class="key"><span class="swatch halo" style="box-shadow: 0 0 0 3px ${r.color}"></span>${r.label}</span>`).join("")
   }
 
   // ----------------------------------------------------------------- cable
@@ -341,6 +368,18 @@ export default class extends Controller {
                    names(`[kind = '${inn}']`).map((n) => esc(n.data("label"))).join("<br>") || "none", true])
         break
       }
+    }
+    if (["a_node", "router", "registered"].includes(kind) && info.registry) {
+      const p = info.peer || {}
+      const r = REGISTRY[info.registry]
+      const parts = [r ? r.label : info.registry]
+      if (p.kind) parts.push(p.kind)
+      if (p.name) parts.push(p.in_acl ? "in the ACL" : "not in the ACL")
+      if (p.expires) parts.push(`certificate until ${p.expires.slice(0, 10)}`)
+      rows.push(["Registry", `<span class="swatch halo" style="box-shadow: 0 0 0 3px ${r ? r.color : "#999"}"></span> ` +
+                 esc(parts.join(", ")) + (p.name ? ` <a href="/relay/peers">registry</a>` : ""), true])
+      if (info.via) rows.push(["Through", `router ${info.via}`])
+      if (kind === "registered" && p.description) rows.push(["Description", p.description])
     }
     html += `<dl>${rows.filter(([, b]) => b !== null).map(([a, b, raw]) => `<dt>${esc(a)}</dt><dd>${raw ? (b || "") : esc(b ?? "")}</dd>`).join("")}</dl>`
     if (kind === "a_object") html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
