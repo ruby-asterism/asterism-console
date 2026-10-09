@@ -220,3 +220,30 @@ ul.fields li label { display: flex; gap: 4px; align-items: baseline; }
 tr.lv-error td.msg, tr.lv-fatal td.msg { color: #a32424; }
 tr.lv-warn td.msg { color: #7a4100; }
 .log-filters input, .log-filters select { font: inherit; }
+
+/* Recordings (V4): the list, the timeline (like rqt_bag) and the graph rewind. */
+fieldset.pick { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 0; }
+fieldset.pick legend { font-size: 13px; color: var(--muted); }
+.topic-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 2px 14px; }
+label.check { display: flex; flex-direction: row; gap: 6px; align-items: baseline; color: var(--text); font-size: 13px; }
+.stack textarea { font: 12px ui-monospace, Menlo, Consolas, monospace; }
+.tl-bar .tl-time { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.tl-bar select { font: inherit; }
+.tl-main { flex: 1; min-width: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.tl-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tl-wrap canvas { display: block; cursor: crosshair; touch-action: none; }
+.tl-plot .chart { width: 100%; min-height: 220px; }
+pre.msg-value { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 11px;
+  max-height: 360px; overflow: auto; margin: 6px 0 0; white-space: pre-wrap; word-break: break-all; }
+ul.at-list li { padding: 2px 0; border-bottom: 1px dotted var(--line); }
+ul.fields li label { display: flex; gap: 4px; align-items: baseline; }
+.rewind-slider { flex: 1 1 240px; min-width: 160px; }
+.change-list { max-height: 260px; overflow-y: auto; }
+ol.changes { font-size: 12px; }
+ol.changes li { padding: 2px 4px; border-radius: 4px; }
+ol.changes li.current { background: rgba(31, 78, 153, 0.12); }
+ol.changes .added { color: var(--ok); }
+ol.changes .removed { color: var(--bad); }
+.row.upload input[type=submit] { flex: none; }
+.tl-links { margin-left: auto; font-size: 12px; display: inline-flex; gap: 10px; flex-wrap: wrap; }
+.tl-links a { color: var(--accent); }

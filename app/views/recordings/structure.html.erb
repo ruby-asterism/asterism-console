@@ -1,0 +1,49 @@
+<% content_for(:title, "Network of #{@recording.name} - Asterism Console") %>
+<div class="console" data-controller="console rewind"
+     data-console-replay-value="true"
+     data-console-state-value="<%= { version: 0, graph: { nodes: [], edges: [] }, bridge: {} }.to_json %>"
+     data-console-watches-value="[]"
+     data-rewind-id-value="<%= @recording.id %>"
+     data-rewind-changes-value="<%= @changes.to_json %>"
+     data-rewind-start-value="<%= @view.start_ns.to_s %>"
+     data-rewind-span-value="<%= @view.end_ns.to_i - @view.start_ns.to_i %>"
+     data-rewind-t-value="<%= params[:t].to_i %>">
+  <header class="bar">
+    <h1><%= link_to "Asterism Console", root_path %></h1>
+    <span class="hint">The network as recorded in <%= link_to @recording.name, recording_path(@recording) %> (read-only)</span>
+    <div class="bridge down" data-console-target="bridge">recorded</div>
+    <%= render "shared/nav" %>
+  </header>
+
+  <nav class="layers tl-bar" aria-label="Rewind">
+    <button type="button" data-action="rewind#first" title="The first state">|&larr;</button>
+    <button type="button" data-action="rewind#prev" title="The change before">&larr; Change</button>
+    <button type="button" data-action="rewind#next" title="The change after">Change &rarr;</button>
+    <input type="range" min="0" max="<%= [ @view.end_ns.to_i - @view.start_ns.to_i, 1 ].max %>" step="1" value="0"
+           data-rewind-target="slider" data-action="input->rewind#slide change->rewind#settle" aria-label="Time in the recording" class="rewind-slider">
+    <span class="tl-time" data-rewind-target="time"></span>
+    <span class="sep" aria-hidden="true"></span>
+    <label><input type="checkbox" data-layer="infra" data-action="console#toggleLayer" checked> Routers and sessions</label>
+    <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
+    <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
+    <label><input type="checkbox" name="hide_debug" data-action="console#toggleDebug" checked> Hide /rosout, /parameter_events</label>
+    <button type="button" data-action="console#relayout">Lay out again</button>
+    <span class="counts" data-console-target="counts"></span>
+  </nav>
+
+  <main class="body">
+    <section class="graph" data-console-target="graph" aria-label="Network graph at the chosen time"></section>
+    <aside class="side">
+      <section class="panel">
+        <h2>Changes</h2>
+        <div data-rewind-target="changes" class="change-list"></div>
+      </section>
+      <section class="panel details" data-console-target="details">
+        <h2>Details</h2>
+        <p class="hint">Click a node or a topic edge in the graph.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="legend" data-console-target="legend"></footer>
+</div>

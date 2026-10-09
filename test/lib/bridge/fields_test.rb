@@ -44,7 +44,7 @@ class Bridge::FieldsTest < ActiveSupport::TestCase
     assert_includes paths, "linear_acceleration.z"
     assert_includes paths, "orientation.w"
     assert_includes paths, "angular_velocity_covariance[8]"
-    e = assert_raises(Bridge::Types::Unknown) { Bridge::Types.ros("nav_msgs/msg/Odometry") }
+    e = assert_raises(Bridge::Types::Unknown) { Bridge::Types.ros("shape_msgs/msg/Mesh") }
     assert_match(/not bundled/, e.message)
     assert_raises(Bridge::Types::Unknown) { Bridge::Types.ros("../../etc/msg/X") }
   end

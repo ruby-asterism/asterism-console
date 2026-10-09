@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_200000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -53,12 +53,58 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_180000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "playbacks", force: :cascade do |t|
+    t.integer "user_id"
+    t.integer "recording_id"
+    t.string "recording_name"
+    t.float "speed", default: 1.0, null: false
+    t.string "status", default: "pending", null: false
+    t.text "channels"
+    t.bigint "start_ns"
+    t.bigint "messages_sent", default: 0, null: false
+    t.text "skipped"
+    t.text "error"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["recording_id"], name: "index_playbacks_on_recording_id"
+    t.index ["status"], name: "index_playbacks_on_status"
+    t.index ["user_id"], name: "index_playbacks_on_user_id"
+  end
+
   create_table "rate_leases", force: :cascade do |t|
     t.string "key", null: false
     t.datetime "expires_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_rate_leases_on_key", unique: true
+  end
+
+  create_table "recordings", force: :cascade do |t|
+    t.integer "user_id"
+    t.string "name", null: false
+    t.string "source", default: "recorded", null: false
+    t.string "status", default: "pending", null: false
+    t.string "filename", null: false
+    t.text "selection"
+    t.bigint "max_bytes", null: false
+    t.integer "max_seconds", null: false
+    t.bigint "messages", default: 0, null: false
+    t.bigint "bytes", default: 0, null: false
+    t.bigint "lost", default: 0, null: false
+    t.float "duration_s", default: 0.0, null: false
+    t.text "channel_counts"
+    t.string "stop_reason"
+    t.text "error"
+    t.text "info"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["filename"], name: "index_recordings_on_filename", unique: true
+    t.index ["status"], name: "index_recordings_on_status"
+    t.index ["user_id"], name: "index_recordings_on_user_id"
   end
 
   create_table "relay_applies", force: :cascade do |t|
@@ -156,6 +202,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_180000) do
 
   add_foreign_key "bridge_requests", "users"
   add_foreign_key "call_permissions", "users", column: "created_by_id"
+  add_foreign_key "playbacks", "recordings", on_delete: :nullify
+  add_foreign_key "playbacks", "users"
+  add_foreign_key "recordings", "users"
   add_foreign_key "relay_applies", "users"
   add_foreign_key "relay_certificates", "relay_peers"
   add_foreign_key "relay_certificates", "users", column: "issued_by_id"

@@ -1,0 +1,83 @@
+<% content_for(:title, "Recordings - Asterism Console") %>
+<section class="card">
+  <h2>Record</h2>
+  <p class="hint">The bridge subscribes to what you pick and writes it into an MCAP file (ROS 2 topics as CDR, Asterism keys
+    as MessagePack, the network structure as JSON) until you stop it or it reaches a limit. Like <code>ros2 bag record</code>;
+    <code>ros2 bag info</code> and Foxglove open the files.</p>
+  <%= form_with url: recordings_path, scope: :recording, class: "stack", id: "new-recording" do |f| %>
+    <label>Name <%= f.text_field :name, placeholder: "e.g. cmd_vel test drive", maxlength: 120 %></label>
+    <fieldset class="pick">
+      <legend>ROS 2 topics (on the network now)</legend>
+      <% if @topics.empty? %>
+        <p class="hint">No ROS 2 topic is on the network (or the bridge is not running).</p>
+      <% else %>
+        <div class="topic-picks">
+          <% @topics.each do |t| %>
+            <label class="check"><%= check_box_tag "recording[topics][]", t["id"], false, id: "topic-#{t['id'].parameterize}" %>
+              <code><%= t["name"] %></code><% if t["domain"] != "0" %> <span class="hint">domain <%= t["domain"] %></span><% end %>
+              <span class="hint"><%= t["type"] %></span></label>
+          <% end %>
+        </div>
+      <% end %>
+    </fieldset>
+    <label>Asterism keys (key expressions, one per line)
+      <%= f.text_area :keys, rows: 2, placeholder: "demo-node/sensors/imu\nasterism/*/*/log" %></label>
+    <label class="check"><%= f.check_box :structure, {}, "1", "0" %> The network structure (the graph, to rewind it later)</label>
+    <div class="grid-form">
+      <label>At most (MB) <%= f.number_field :max_mb, value: Recording::DEFAULT_MAX_BYTES / Recording::MB, min: 1,
+                                             max: Recording::LIMIT_MAX_BYTES / Recording::MB %></label>
+      <label>At most (seconds) <%= f.number_field :max_seconds, value: Recording::DEFAULT_MAX_SECONDS, min: 1,
+                                                  max: Recording::LIMIT_MAX_SECONDS %></label>
+    </div>
+    <div><%= f.submit "Start recording" %></div>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Upload an MCAP file</h2>
+  <p class="hint">For example one made with <code>ros2 bag record -s mcap</code>. Uncompressed chunks are read (rosbag2's default);
+    a file with zstd- or lz4-compressed chunks lists its channels and message times, but its messages cannot be shown.
+    At most <%= Recording::MAX_UPLOAD / Recording::MB %> MB.</p>
+  <%= form_with url: upload_recordings_path, multipart: true, class: "row upload", id: "upload-recording" do |f| %>
+    <%= f.file_field :file, accept: ".mcap", "aria-label": "MCAP file" %>
+    <%= f.submit "Upload" %>
+  <% end %>
+</section>
+
+<section class="card" data-controller="recordings" data-recordings-active-value="<%= @recordings.any?(&:active?) %>">
+  <h2>Recordings</h2>
+  <% if @recordings.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Status</th><th>Channels</th><th>Messages</th><th>Duration</th><th>Size</th><th>When, who</th><th></th></tr></thead>
+      <tbody>
+        <% @recordings.each do |r| %>
+          <% info = r.info_value %>
+          <tr data-recording-id="<%= r.id %>" class="status-<%= r.status == "done" || r.status == "uploaded" ? "ok" : r.status %>">
+            <td><%= link_to r.name, recording_path(r) %><% if r.source == "uploaded" %> <span class="hint">uploaded</span><% end %></td>
+            <td><span class="badge" data-field="status"><%= r.status %></span>
+              <span class="hint" data-field="reason"><%= r.stop_reason || r.error %></span></td>
+            <td class="hint"><%= info ? info["channels"].map { _1["topic"] }.join(", ").truncate(120) : r.selection_value.values_at("topics", "keys").flatten.map { _1.to_s.sub(/\Ar_topic:\d+/, "") }.join(", ").truncate(120) %></td>
+            <td data-field="messages"><%= r.messages %></td>
+            <td data-field="duration"><%= format("%.1f s", info ? info["duration_ns"] / 1e9 : r.duration_s) %></td>
+            <td data-field="bytes"><%= number_to_human_size(r.file? ? File.size(r.path) : r.bytes) %></td>
+            <td class="nowrap"><%= l(r.created_at, format: "%m-%d %H:%M:%S") %><br><span class="hint"><%= r.user&.email_address %></span></td>
+            <td class="nowrap">
+              <% if r.finished? && r.file? %>
+                <%= link_to "Download", download_recording_path(r) %>
+              <% end %>
+              <% if r.active? && r.owned_by?(current_user) %>
+                <%= button_to "Stop", stop_recording_path(r), class: "small", form_class: "inline" %>
+              <% elsif r.owned_by?(current_user) %>
+                <%= button_to "Delete", recording_path(r), method: :delete, class: "small", form_class: "inline",
+                              data: { turbo_confirm: "Delete #{r.name} and its file?" } %>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+  <p class="hint">Files are kept in <code>storage/recordings</code> (at most <%= Recording::MAX_TOTAL / Recording::MB %> MB together; <%= number_to_human_size(Recording.total_bytes) %> now).</p>
+</section>

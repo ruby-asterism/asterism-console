@@ -16,7 +16,12 @@
 #   - while a plot page is open (StreamLease "plot"), subscribes to the
 #     plotted topics and keys and sends their fields, decimated
 #     (Bridge::Plots); while a log page is open (StreamLease "log"),
-#     subscribes to /rosout and the Asterism log keys (Bridge::Logs).
+#     subscribes to /rosout and the Asterism log keys (Bridge::Logs);
+#   - records (Recording rows, V4): subscribes to the recording's topics
+#     and keys and writes them, with the network structure, into an MCAP
+#     file (Bridge::Recorder) until it is stopped or reaches a limit;
+#   - plays recordings back onto the network (Playback rows, admins only;
+#     Bridge::Player).
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -50,6 +55,10 @@ module Bridge
     # declared again (Runner#check_follows).
     LIVELINESS_DEPTH = 1024
     GET_TIMEOUT = 1.5
+    # The queue of a recording's subscriptions: the binding's maximum, so a
+    # receiving thread held up for a moment (20 s of a 50 Hz topic) delays
+    # messages instead of losing them. What is lost anyway is counted.
+    RECORD_DEPTH = 1024
     # Points and log lines go out this often (one broadcast each).
     STREAMS_EVERY = 0.2
 
@@ -104,6 +113,8 @@ module Bridge
       @log_subs = {} # key expression => Subscription
       @logs_dropped = 0
       @topic_types = {} # ROS 2 topic id => type (from the graph)
+      @recorders = {} # recording id => { recorder:, subs: [Subscription] }
+      @players = {} # playback id => Player
       @stop = false
     end
 
@@ -229,13 +240,17 @@ module Bridge
           sync_rates
           sync_plots
           sync_logs
+          sync_recordings
+          sync_playbacks
           expire_requests
           next_sync = now + SYNC_EVERY
         end
         if now >= next_rates
           publish_rates
+          report_recordings
           next_rates = now + RATES_EVERY
         end
+        @recorders.each_value { _1[:recorder].tick }
         if now >= next_streams
           publish_plots
           publish_logs
@@ -374,6 +389,7 @@ module Bridge
       state.update!(version: state.version + 1, snapshot: JSON.generate(graph), bridge_seen_at: Time.current,
                     bridge_info: JSON.generate(bridge_info))
       ConsoleChannel.send_message("graph_diff", "version" => state.version, "diff" => diff)
+      @recorders.each_value { _1[:recorder].graph(state.version, graph, diff) }
       say "bridge: graph v#{state.version}: #{graph['nodes'].size} nodes, #{graph['edges'].size} edges " \
           "(+#{diff['add_nodes'].size} -#{diff['remove_nodes'].size} ~#{diff['change_nodes'].size})"
     end
@@ -657,9 +673,216 @@ module Bridge
       nil
     end
 
+    # ------------------------------------------------------------- recordings
+
+    # Starts the pending recordings, ends the stopped ones and those at a
+    # limit. A row that says "recording" with no recorder here is left from
+    # a bridge that stopped without finishing it: its file is given a
+    # summary (Bag::Repair) and the row ends.
+    def sync_recordings
+      rows = Recording.where(status: Recording::ACTIVE).to_a
+      rows.each do |r|
+        entry = @recorders[r.id]
+        case r.status
+        when "pending" then start_recording(r) unless entry
+        when "recording"
+          if entry.nil? then recover_recording(r)
+          elsif (why = entry[:recorder].limit_reached) then finish_recording(r, why)
+          end
+        when "stopping"
+          entry ? finish_recording(r, "stopped") : recover_recording(r)
+        end
+      end
+      (@recorders.keys - rows.map(&:id)).each do |id| # the row went (deleted): just close
+        entry = @recorders.delete(id)
+        entry[:subs].each { _1.close rescue nil }
+        entry[:recorder].finish("the recording was deleted")
+        say "bridge: recording #{id}: deleted while recording"
+      end
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: recordings: #{e.message}"
+    end
+
+    def start_recording(r)
+      sel = r.selection_value
+      rec = Recorder.new(id: r.id, path: r.path, max_bytes: r.max_bytes, max_seconds: r.max_seconds,
+                         structure: sel["structure"]) { |tid| ros_qos(tid) }
+      rec.open
+      subs = []
+      sel["topics"].each do |tid|
+        expr = RateLease.key_expr(tid)
+        subs << @z.subscribe(expr, depth: RECORD_DEPTH) { |sample| rec.ros(sample) }
+      end
+      sel["keys"].each do |expr|
+        subs << @z.subscribe(expr, depth: RECORD_DEPTH) { |sample| rec.key(expr, sample) }
+      end
+      rec.lost = -> { subs.sum { _1.respond_to?(:dropped) ? _1.dropped.to_i : 0 } }
+      @recorders[r.id] = { recorder: rec, subs: subs }
+      if sel["structure"]
+        state = GraphState.current
+        rec.graph(state.version, state.graph)
+      end
+      r.update!(status: "recording", started_at: Time.current)
+      say "bridge: recording #{r.id} (#{r.filename}): #{sel['topics'].size} topics, #{sel['keys'].size} keys" \
+          "#{sel['structure'] ? ', the network structure' : ''}"
+    rescue Asterism::Zenoh::ClosedError
+      raise
+    rescue StandardError => e
+      subs&.each { _1.close rescue nil }
+      rec&.finish
+      @recorders.delete(r.id)
+      r.update!(status: "failed", error: "#{e.class}: #{e.message}", finished_at: Time.current)
+      say "bridge: recording #{r.id}: #{e.class}: #{e.message}"
+    end
+
+    def finish_recording(r, why)
+      entry = @recorders.delete(r.id)
+      entry[:subs].each { _1.close rescue nil }
+      p = entry[:recorder].finish(why)
+      reason = entry[:recorder].stop_reason || why
+      info = read_info(r)
+      r.update!(status: "done", stop_reason: reason, finished_at: Time.current, **progress_attrs(p),
+                info: info && JSON.generate(info))
+      say "bridge: recording #{r.id}: #{reason}; #{p['messages']} messages, #{p['bytes']} bytes"
+    end
+
+    # A recording left by a bridge that did not finish it.
+    def recover_recording(r)
+      if r.file?
+        n = Bag::Repair.call(r.path)
+        info = read_info(r)
+        r.update!(status: "done", stop_reason: "the bridge stopped during the recording; what it had written is kept",
+                  finished_at: Time.current, messages: n, bytes: File.size(r.path), info: info && JSON.generate(info))
+      else
+        r.update!(status: "failed", error: "the bridge stopped before writing anything", finished_at: Time.current)
+      end
+      say "bridge: recording #{r.id}: recovered (#{r.status})"
+    rescue MCAP::Error, SystemCallError => e
+      r.update!(status: "failed", error: "the bridge stopped during the recording; the file does not read: #{e.message}",
+                finished_at: Time.current)
+    end
+
+    def read_info(r)
+      reader = MCAP::Reader.new(r.path.to_s)
+      reader.info
+    rescue MCAP::Error, SystemCallError
+      nil
+    ensure
+      reader&.close
+    end
+
+    def progress_attrs(p)
+      { messages: p["messages"], bytes: p["bytes"], duration_s: p["duration_s"], lost: p["lost"].to_i + p["dropped"].to_i,
+        channel_counts: JSON.generate(p["channel_counts"]) }
+    end
+
+    # Once a second: the progress of the running recordings into their rows.
+    def report_recordings
+      @recorders.each do |id, entry|
+        Recording.where(id: id, status: "recording").update_all(progress_attrs(entry[:recorder].progress).merge(updated_at: Time.current))
+      end
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: recordings: #{e.message}"
+    end
+
+    def stop_recordings(why)
+      @recorders.keys.each do |id|
+        r = Recording.find_by(id: id)
+        if r
+          finish_recording(r, why)
+        else
+          entry = @recorders.delete(id)
+          entry[:subs].each { _1.close rescue nil }
+          entry[:recorder].finish(why)
+        end
+      rescue StandardError => e
+        say "bridge: recording #{id}: #{e.class}: #{e.message}"
+      end
+    end
+
+    # The QoS profiles of a topic's publishers, from their liveliness tokens.
+    def ros_qos(tid)
+      domain, name = tid.delete_prefix("r_topic:").split("/", 2)
+      keys = @lock.synchronize { @ros_keys.keys }
+      keys.filter_map do |k|
+        t = Graph.parse_ros_token(k)
+        Bag::Qos.parse(t[:qos]) if t && t[:kind] == :publisher && t[:domain] == domain && t[:name] == "/#{name}"
+      end
+    end
+
+    # -------------------------------------------------------------- playbacks
+
+    # Starts a pending playback (one at a time), follows the running one,
+    # stops it when asked. The rows are the audit log.
+    def sync_playbacks
+      Playback.where(status: Playback::ACTIVE).order(:id).each do |pb|
+        pl = @players[pb.id]
+        case pb.status
+        when "pending"
+          if pb.created_at < Playback::EXPIRE_AFTER.ago
+            pb.update!(status: "failed", error: "the bridge did not pick it up in time", finished_at: Time.current)
+          elsif @players.empty?
+            start_player(pb)
+          end
+        when "running"
+          if pl.nil?
+            pb.update!(status: "failed", error: "the bridge restarted during the playback", finished_at: Time.current)
+          elsif !pl.alive?
+            end_player(pb, pl, pl.error ? "failed" : "done")
+          else
+            pb.update!(messages_sent: pl.sent, skipped: JSON.generate(pl.skipped))
+          end
+        when "stopping"
+          pl&.stop
+          if pl.nil? || !pl.alive?
+            end_player(pb, pl, "stopped")
+          end
+        end
+      end
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: playbacks: #{e.message}"
+    end
+
+    def start_player(pb)
+      rec = pb.recording
+      unless rec&.file?
+        pb.update!(status: "failed", error: "the recording's file is gone", finished_at: Time.current)
+        return
+      end
+      pl = Player.new(playback_id: pb.id, path: rec.path, speed: pb.speed, channel_ids: pb.channel_ids,
+                      start_ns: pb.start_ns, session: @z.session, put: ->(key, bytes) { @z.put(key, bytes) },
+                      logger: ->(text) { say(text) })
+      @players[pb.id] = pl.start
+      pb.update!(status: "running", started_at: Time.current)
+      say "bridge: playback #{pb.id}: #{rec.filename} at #{pb.speed}x (by #{pb.user&.email_address || '?'})"
+    end
+
+    def end_player(pb, pl, status)
+      pl&.join(2)
+      @players.delete(pb.id)
+      pb.update!(status: status, messages_sent: pl&.sent.to_i, skipped: JSON.generate(pl&.skipped || {}),
+                 error: pl&.error, finished_at: Time.current)
+      say "bridge: playback #{pb.id}: #{status}, #{pl&.sent.to_i} messages sent"
+    end
+
+    def stop_players
+      @players.each_value(&:stop)
+      @players.each_value { _1.join(2) }
+      @players.each do |id, pl|
+        Playback.where(id: id, status: Playback::ACTIVE).update_all(
+          status: "stopped", messages_sent: pl.sent, error: "the bridge stopped", finished_at: Time.current
+        )
+      end
+      @players.clear
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: playbacks: #{e.message}"
+    end
+
     # --------------------------------------------------------------- shutdown
 
     def shutdown
+      stop_recordings("the bridge stopped (or lost its router)")
+      stop_players
       @workers.each { _1.join(3) }
       @workers.clear
       @subs.each_value { _1[1].close rescue nil }

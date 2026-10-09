@@ -6,6 +6,7 @@
 /tmp/pids/*
 !/tmp/pids/.keep
 /storage/*
+# (storage/recordings: the MCAP files of V4, under /storage/* too)
 !/storage/.keep
 /public/assets
 /config/master.key
@@ -13,3 +14,4 @@
 /script/headless/node_modules
 /script/headless/package*.json
 /script/headless/*.png
+/script/headless/*.mcap

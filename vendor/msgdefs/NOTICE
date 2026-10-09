@@ -1,0 +1,24 @@
+ROS 2 message definitions (.msg files), for the schemas of recorded topics.
+
+An MCAP file of ROS 2 topics carries each topic's definition and the
+definitions it uses (schema encoding "ros2msg", as rosbag2 writes it), so
+that ros2 bag and other readers (Foxglove) can decode the messages without
+the console. These are the .msg files of the ROS 2 Jazzy packages
+std_msgs, builtin_interfaces, geometry_msgs, sensor_msgs, rcl_interfaces,
+nav_msgs, diagnostic_msgs, visualization_msgs, example_interfaces and
+service_msgs, copied unchanged from a Jazzy install (/opt/ros/jazzy/share/
+<package>/msg/*.msg; https://github.com/ros2/common_interfaces,
+https://github.com/ros2/rcl_interfaces, https://github.com/ros2/example_interfaces).
+They are licensed under the Apache License, Version 2.0
+(LICENSE-Apache-2.0.txt), as their packages declare (package.xml).
+Copyright in the definitions belongs to their authors (Open Source Robotics
+Foundation, Inc. and the ROS 2 contributors).
+
+Types of other packages are looked up in the share directories of a ROS 2
+install named by AMENT_PREFIX_PATH, when there is one; else their schema is
+written empty (encoding "unknown"), as rosbag2 does when it cannot find a
+definition.
+
+Refresh with (in a ROS 2 Jazzy container):
+
+  cd /opt/ros/jazzy/share && tar cf - <package>/msg/*.msg | tar xf - -C vendor/msgdefs

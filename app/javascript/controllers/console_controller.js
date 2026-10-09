@@ -18,6 +18,11 @@ cytoscape.use(fcose)
 // as before. Positions stay where they are: only new nodes are placed
 // (next to their neighbours, the others held fixed), and "Lay out again"
 // lays out everything.
+//
+// Replay mode (replay: true, the graph rewind of a recording): no
+// connection to the bridge, no leases, no watches, no calls; the rewind
+// controller hands it graphs (showRecorded) and the differences are applied
+// as the live diffs are, so what stays keeps its place.
 
 const KINDS = {
   router:    { label: "Router",          shape: "diamond",         color: "#1f4e99", size: 46 },
@@ -71,7 +76,7 @@ function globMatch(pattern, value) {
 
 export default class extends Controller {
   static targets = ["graph", "details", "bridge", "counts", "watchList", "watchError", "legend", "rateStatus"]
-  static values = { state: Object, watches: Array }
+  static values = { state: Object, watches: Array, replay: Boolean }
 
   connect() {
     this.version = this.stateValue.version || 0
@@ -92,6 +97,8 @@ export default class extends Controller {
     this.renderLegend()
     this.renderRateStatus()
     this.setupGraph(this.stateValue.graph)
+    this.shownGraph = this.stateValue.graph
+    if (this.replayValue) return
     this.showBridge(this.stateValue.bridge || {})
     this.watchesValue.forEach((w) => this.watches.set(w.id, w))
     this.renderWatches()
@@ -300,6 +307,22 @@ export default class extends Controller {
       if (sel.empty()) this.showGone(this.selected)
       else if (sel.data("kind") !== "a_object" || diff.change_nodes.some((n) => n.id === this.selected)) this.refreshDetails()
     }
+  }
+
+  // Replay mode: shows a recorded graph. The first one is laid out from
+  // scratch; after that only the difference is applied (new nodes flash).
+  showRecorded(graph, version) {
+    const diff = graphDiff(this.shownGraph, graph)
+    this.shownGraph = graph
+    this.version = version || 0
+    if (this.cy.nodes().empty()) {
+      this.cy.add(this.elementsOf(graph))
+      this.applyView()
+      this.layoutAll()
+      this.updateCounts()
+      return
+    }
+    this.applyDiff(diff)
   }
 
   // The whole graph again (the page missed a diff): what is still there
@@ -562,6 +585,7 @@ export default class extends Controller {
   // Asks the bridge to go on measuring (RateLease): all topics while the
   // box is ticked, and the topics of the selected node or edge.
   renewLeases() {
+    if (this.replayValue) return
     const keys = new Set(this.selectedTopics())
     if (this.measureAll) keys.add("*")
     for (const topic of keys) {
@@ -829,6 +853,10 @@ export default class extends Controller {
 
   renderDetails(html) {
     this.detailsTarget.innerHTML = html
+    if (this.replayValue) {
+      // Recorded: nothing to watch or call.
+      this.detailsTarget.querySelectorAll("[data-watch], [data-role=methods], [data-role=results]").forEach((e) => e.remove())
+    }
     this.detailsTarget.querySelectorAll("[data-select]").forEach((a) => a.addEventListener("click", (ev) => {
       ev.preventDefault()
       this.select(a.dataset.select)
@@ -837,6 +865,7 @@ export default class extends Controller {
   }
 
   async loadMeta(path) {
+    if (this.replayValue) return
     const box = () => this.detailsTarget.querySelector("[data-role=methods]")
     let rules = []
     try {
@@ -992,6 +1021,20 @@ export default class extends Controller {
         : `<p class="hint">Nothing yet.</p>`)
     div.querySelector("button").addEventListener("click", () => this.removeWatch(id))
   }
+}
+
+// What changed from one graph (Bridge::Graph#to_h) to another, in the
+// shape of the bridge's diffs (Bridge::Graph.diff).
+function graphDiff(oldG, newG) {
+  const out = {}
+  for (const part of ["nodes", "edges"]) {
+    const a = new Map((oldG?.[part] || []).map((x) => [x.id, x]))
+    const b = new Map((newG?.[part] || []).map((x) => [x.id, x]))
+    out[`add_${part}`] = [...b.values()].filter((x) => !a.has(x.id))
+    out[`remove_${part}`] = [...a.keys()].filter((id) => !b.has(id))
+    out[`change_${part}`] = [...b.values()].filter((x) => a.has(x.id) && JSON.stringify(a.get(x.id)) !== JSON.stringify(x))
+  }
+  return out
 }
 
 // The badge of a ROS 2 node (an SVG image in the node's corner): the number

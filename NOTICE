@@ -24,6 +24,17 @@ This repository includes third-party code:
   Apache License 2.0 (vendor/msgs/LICENSE-Apache-2.0.txt, vendor/msgs/NOTICE),
   Copyright the Open Source Robotics Foundation, Inc. and the ROS 2
   contributors.
+- vendor/msgdefs/<package>/msg/*.msg: the ROS 2 Jazzy message definitions
+  of std_msgs, builtin_interfaces, geometry_msgs, sensor_msgs,
+  rcl_interfaces, nav_msgs, diagnostic_msgs, visualization_msgs,
+  example_interfaces and service_msgs, unchanged
+  (https://github.com/ros2/common_interfaces, ros2/rcl_interfaces,
+  ros2/example_interfaces), Apache License 2.0
+  (vendor/msgdefs/LICENSE-Apache-2.0.txt, vendor/msgdefs/NOTICE), Copyright
+  the Open Source Robotics Foundation, Inc. and the ROS 2 contributors.
+- test/fixtures/files/rosbag2_jazzy*.mcap: demo data recorded for the tests
+  with ros2 bag (ROS 2 Jazzy); the schemas in them are the definitions
+  above.
 
 Not included here (installed by Bundler / importmap from their own
 packages): Ruby on Rails, Hotwire (Turbo, Stimulus), Action Cable, and the

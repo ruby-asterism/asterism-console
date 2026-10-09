@@ -1,0 +1,23 @@
+<% content_for(:title, "#{@recording.name} - Asterism Console") %>
+<section class="card" data-controller="recordings" data-recordings-active-value="true"
+         data-recordings-url-value="<%= recording_path(@recording, format: :json) %>">
+  <h2><%= @recording.name %></h2>
+  <% sel = @recording.selection_value %>
+  <dl class="facts">
+    <dt>Status</dt><dd><span class="badge" data-field="status"><%= @recording.status %></span>
+      <span data-field="reason"><%= @recording.stop_reason || @recording.error %></span></dd>
+    <dt>Recording</dt><dd><%= (sel["topics"].map { _1.sub(/\Ar_topic:\d+/, "") } + sel["keys"] + (sel["structure"] ? [ "the network structure" ] : [])).join(", ") %></dd>
+    <dt>Messages</dt><dd><span data-field="messages"><%= @recording.messages %></span>
+      <span class="hint">(lost: <span data-field="lost"><%= @recording.lost %></span>)</span></dd>
+    <dt>Bytes</dt><dd><span data-field="bytes"><%= number_to_human_size(@recording.bytes) %></span>
+      of at most <%= number_to_human_size(@recording.max_bytes) %></dd>
+    <dt>Duration</dt><dd><span data-field="duration"><%= format("%.1f s", @recording.duration_s) %></span>
+      of at most <%= @recording.max_seconds %> s</dd>
+    <dt>By channel</dt><dd data-field="channels"><%= @recording.channel_counts_value.map { |t, n| "#{t}: #{n}" }.join(", ") %></dd>
+    <dt>File</dt><dd><code><%= @recording.filename %></code></dd>
+  </dl>
+  <% if @recording.active? && @recording.owned_by?(current_user) %>
+    <%= button_to "Stop recording", stop_recording_path(@recording), form_class: "inline" %>
+  <% end %>
+  <p class="hint">The page shows the timeline once the recording has stopped. <%= link_to "All recordings", recordings_path %></p>
+</section>

@@ -32,6 +32,7 @@ const steps = JSON.parse(process.argv[3] || "[]");
       logs.push(`download ${dl.suggestedFilename()} -> ${s.download[1]}`);
     }
     if (s.select) await page.selectOption(s.select[0], s.select[1]);
+    if (s.upload) await page.setInputFiles(s.upload[0], `/work/${s.upload[1]}`);
     if (s.accept) page.once("dialog", (d) => d.accept());
     if (s.tapNode) await page.evaluate((id) => { const n = window.consoleGraph.getElementById(id); n.select(); n.emit("tap"); }, s.tapNode);
     if (s.tapEdge) await page.evaluate((id) => { const e = window.consoleGraph.getElementById(id); e.select(); e.emit("tap"); }, s.tapEdge);
@@ -42,7 +43,7 @@ const steps = JSON.parse(process.argv[3] || "[]");
     if (s.press) await page.press(s.press[0], s.press[1]);
     if (s.uncheck) await page.uncheck(s.uncheck);
     if (s.check) await page.check(s.check);
-    if (s.shot) await page.screenshot({ path: s.shot });
+    if (s.shot) await page.screenshot({ path: s.shot, fullPage: !!s.full });
     if (s.text) logs.push(`text ${s.text}: ` + (await page.locator(s.text).innerText()).replace(/\s+/g, " ").slice(0, 1500));
     if (s.graph) logs.push("graph: " + JSON.stringify(await page.evaluate(() => {
       const by = {}; window.consoleGraph.nodes().forEach(n => { (by[n.data('kind')] ||= []).push(n.data('label')) }); return by; })));

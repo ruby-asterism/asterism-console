@@ -1,0 +1,91 @@
+<% content_for(:title, "#{@recording.name} - Asterism Console") %>
+<% content_for(:head, stylesheet_link_tag("uplot", "data-turbo-track": "reload")) %>
+<% channels = Array(@info["channels"]) %>
+<% has_graph = channels.any? { _1["topic"] == Bag::Channels::GRAPH_TOPIC && _1["message_encoding"] == "json" } %>
+<div class="console" data-controller="timeline"
+     data-timeline-id-value="<%= @recording.id %>"
+     data-timeline-info-value="<%= @info.except("start", "end").merge("start" => @info["start"].to_s).to_json %>"
+     data-timeline-can-play-value="<%= @can_play %>">
+  <header class="bar">
+    <h1><%= link_to "Asterism Console", root_path %></h1>
+    <span class="hint">Recording: <strong><%= @recording.name %></strong>
+      (<%= @recording.source == "uploaded" ? "uploaded" : "recorded" %><%= ", #{@recording.stop_reason}" if @recording.stop_reason %>)</span>
+    <%= render "shared/nav" %>
+  </header>
+
+  <nav class="layers tl-bar" aria-label="Playback">
+    <button type="button" data-timeline-target="playButton" data-action="timeline#togglePlay">Play</button>
+    <label>Speed
+      <select data-timeline-target="speed" data-action="change->timeline#changeSpeed">
+        <option value="0.25">0.25x</option><option value="1" selected>1x</option><option value="4">4x</option>
+      </select></label>
+    <label>Play
+      <select data-timeline-target="mode">
+        <option value="page" selected>in the page only</option>
+        <% if @can_play %><option value="network">to the network (sends the messages)</option><% end %>
+      </select></label>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" data-action="timeline#stepPrev" title="The previous message of the selected channel">&larr; Prev</button>
+    <button type="button" data-action="timeline#stepNext" title="The next message of the selected channel">Next &rarr;</button>
+    <span class="tl-time" data-timeline-target="time"></span>
+    <span class="hint" data-timeline-target="playStatus"></span>
+    <span class="tl-links">
+      <%= link_to "Download", download_recording_path(@recording) %>
+      <% if channels.any? { _1["message_encoding"] == "cdr" } && channels.any? { _1["message_encoding"] != "cdr" } %>
+        <%= link_to "ROS 2 topics only", download_recording_path(@recording, ros2: 1), title: "For ros2 bag play, which needs every channel to be CDR" %>
+      <% end %>
+      <% if has_graph %><a href="<%= structure_recording_path(@recording) %>" data-timeline-target="rewindLink">Network at the cursor</a><% end %>
+    </span>
+  </nav>
+
+  <main class="body">
+    <section class="tl-main">
+      <% if @info["error"] %><p class="error"><%= @info["error"] %></p><% end %>
+      <div class="tl-wrap" data-timeline-target="wrap">
+        <canvas data-timeline-target="canvas" aria-label="Message timeline: one row per channel, click to move the cursor"></canvas>
+      </div>
+      <section class="panel tl-plot">
+        <div class="plot-head"><h2>Plot</h2><div class="chips" data-timeline-target="chips"></div>
+          <button type="button" class="small" data-action="timeline#clearPlot">Clear</button></div>
+        <div class="chart" data-timeline-target="plot"></div>
+        <p class="hint" data-timeline-target="plotHint">Select a channel (click its row), tick numeric fields on the right, then "Plot". Click the plot to move the cursor.</p>
+      </section>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Message</h2>
+        <div data-timeline-target="message"><p class="hint">Click a channel's row.</p></div>
+      </section>
+      <section class="panel">
+        <h2>Fields</h2>
+        <div data-timeline-target="fields"><p class="hint">The numeric fields of the selected channel.</p></div>
+      </section>
+      <section class="panel">
+        <h2>At the cursor</h2>
+        <div data-timeline-target="atList"></div>
+      </section>
+      <section class="panel">
+        <h2>File</h2>
+        <dl>
+          <dt>Messages</dt><dd><%= @info["messages"] %><%= " (#{@recording.lost} lost while recording)" if @recording.lost.positive? %></dd>
+          <dt>Duration</dt><dd><%= format("%.2f s", @info["duration_ns"].to_i / 1e9) %></dd>
+          <dt>Size</dt><dd><%= number_to_human_size(@info["size"]) %></dd>
+          <dt>Profile</dt><dd><%= @info["profile"].presence || "(none)" %></dd>
+          <dt>Written by</dt><dd><%= @info["library"] %></dd>
+          <dt>Chunks</dt><dd><%= @info["chunks"] %> (compression: <%= Array(@info["compression"]).map { _1.presence || "none" }.join(", ").presence || "none" %>)</dd>
+          <% if @info["truncated"] %><dt>Note</dt><dd>cut off at the end (read up to the last whole record)</dd><% end %>
+        </dl>
+        <% if Array(@info["compression"]).any?(&:present?) %>
+          <p class="error">Chunks compressed with <%= Array(@info["compression"]).compact_blank.join(", ") %> cannot be read here
+            (no zstd / lz4 in Ruby's standard library): the message times show, the messages do not.
+            Record with <code>--storage-preset-profile none</code> (or no compression) to look inside.</p>
+        <% end %>
+        <% if @recording.owned_by?(current_user) %>
+          <%= button_to "Delete this recording", recording_path(@recording), method: :delete, class: "small",
+                        data: { turbo_confirm: "Delete #{@recording.name} and its file?" } %>
+        <% end %>
+      </section>
+    </aside>
+  </main>
+</div>

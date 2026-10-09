@@ -32,7 +32,7 @@ class Bridge::RunnerStreamsTest < ActiveSupport::TestCase
     @runner.instance_variable_set(:@z, @z)
     @runner.instance_variable_get(:@ros_keys)["@ros2_lv/0/abc/0/0/NN/%/%/talker"] = true
     @runner.instance_variable_set(:@topic_types, "r_topic:0/cmd_vel" => "geometry_msgs/msg/Twist",
-                                                 "r_topic:0/odom" => "nav_msgs/msg/Odometry")
+                                                 "r_topic:0/mesh" => "shape_msgs/msg/Mesh")
     Bridge::Types.setup
     @twist = Bridge::Types.ros("geometry_msgs/msg/Twist")
   end
@@ -80,12 +80,12 @@ class Bridge::RunnerStreamsTest < ActiveSupport::TestCase
   end
 
   test "a type that is not bundled, or a topic not on the network: told, not subscribed" do
-    lease("plot", "page-aaaaaaaa", [ { "target" => "r_topic:0/odom", "fields" => [] },
+    lease("plot", "page-aaaaaaaa", [ { "target" => "r_topic:0/mesh", "fields" => [] },
                                      { "target" => "r_topic:0/nowhere", "fields" => [] } ])
     @runner.send(:sync_plots)
     assert_empty @z.subs
     metas = plots_broadcasts.select { _1["type"] == "plot_meta" }.to_h { [ _1["meta"]["target"], _1["meta"] ] }
-    assert_match(/nav_msgs\/msg\/Odometry is not bundled/, metas["r_topic:0/odom"]["error"])
+    assert_match(/shape_msgs\/msg\/Mesh is not bundled/, metas["r_topic:0/mesh"]["error"])
     assert_match(/not on the network/, metas["r_topic:0/nowhere"]["error"])
   end
 

@@ -1,7 +1,10 @@
 # ROS 2 message types for the plots and the log list: the ones asterism
 # bundles (its data/msgs) and the console's own (vendor/msgs:
 # rcl_interfaces/msg/Log), loaded with Asterism::ROS.require_type. The
-# bridge alone loads them (Puma never loads Asterism).
+# bridge loads the whole gem (require "asterism"). The pages that read
+# recordings (V4) decode in Puma, which never connects to Zenoh: there only
+# the gem's pure-Ruby type layer is loaded (its mrblib/asterism.rb, cdr.rb
+# and ros.rb, the files the boards run), not asterism-zenoh.
 module Bridge
   module Types
     DIR = File.expand_path("../../vendor/msgs", __dir__)
@@ -12,8 +15,16 @@ module Bridge
     module_function
 
     def setup
-      require "asterism"
+      load_type_layer unless defined?(::Asterism::ROS::Message)
       Asterism::ROS::TYPE_PATH << DIR unless Asterism::ROS::TYPE_PATH.include?(DIR)
+    end
+
+    # The type layer alone (no Zenoh): the same files asterism.rb loads, by
+    # their real paths, so a later require "asterism" does not load them again.
+    def load_type_layer
+      root = File.realpath(Gem.loaded_specs.fetch("asterism").full_gem_path)
+      %w[asterism cdr ros].each { |f| require File.join(root, "mrblib", f) }
+      ::Asterism::ROS::TYPE_PATH.replace([ File.join(root, "data", "msgs") ])
     end
 
     # The generated type, or raises Unknown (with a message for the page).

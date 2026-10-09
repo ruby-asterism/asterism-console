@@ -27,3 +27,29 @@
     </table>
   <% end %>
 </section>
+
+<section class="card" id="playbacks">
+  <h2>Playbacks to the network</h2>
+  <p>Recordings an admin played back onto the network (newest first). Playing in the page only sends nothing and is not listed.</p>
+  <% if @playbacks.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>When</th><th>Who</th><th>Recording</th><th>Speed</th><th>Status</th><th>Sent</th><th>Not sent</th></tr></thead>
+      <tbody>
+        <% @playbacks.each do |p| %>
+          <tr class="status-<%= p.status == "done" ? "ok" : p.status %>">
+            <td class="nowrap"><%= l(p.created_at, format: "%Y-%m-%d %H:%M:%S") %></td>
+            <td><%= p.user&.email_address %></td>
+            <td><%= p.recording ? link_to(p.recording_name, recording_path(p.recording)) : "#{p.recording_name} (deleted)" %>
+              <% if p.start_ns %><span class="hint">from <%= Time.at(p.start_ns / 1_000_000_000r).utc.strftime("%H:%M:%S.%L") %> UTC</span><% end %></td>
+            <td><%= p.speed %>x</td>
+            <td><span class="badge"><%= p.status %></span> <%= p.error.to_s.truncate(160) %></td>
+            <td><%= p.messages_sent %></td>
+            <td class="hint"><%= p.skipped_value.map { |t, why| "#{t}: #{why}" }.join("; ").truncate(200) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

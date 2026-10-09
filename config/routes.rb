@@ -23,6 +23,24 @@ Rails.application.routes.draw do
     post :lease
     post :release
   end
+  # Recordings (V4): record, list, upload, download, the timeline, the graph
+  # rewind, and playback to the network.
+  resources :recordings, only: %i[index create show destroy] do
+    member do
+      post :stop
+      get :download
+      get :ticks
+      get :message
+      get :fields
+      get :series
+      get :graph
+      get :structure
+    end
+    post :upload, on: :collection
+  end
+  resources :playbacks, only: %i[create show] do
+    post :stop, on: :member
+  end
   resources :call_permissions, only: %i[index create destroy]
   resources :calls, only: :index
 

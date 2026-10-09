@@ -9,6 +9,7 @@
 # With CONSOLE_EMAIL / CONSOLE_PASSWORD it signs in first.
 # Steps (JSON): tapNode, tapEdge, tapKind, fill, click, check, uncheck, press, wait,
 # goto (a path), download ([selector, file]), select ([selector, value]),
+# upload ([selector, a file next to this script]),
 # accept (the next confirm dialog), shot, text (prints the element's text),
 # graph (prints the nodes by kind), eval (a JS expression; prints its value).
 # The PNG is written next to this script.
