@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Asterism Console" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="plain">
+    <header class="bar">
+      <h1><%= link_to "Asterism Console", root_path %></h1>
+      <%= render "shared/nav" %>
+    </header>
+    <main class="page">
+      <%= tag.p(flash[:alert], class: "flash alert", role: "alert") if flash[:alert] %>
+      <%= tag.p(flash[:notice], class: "flash notice", role: "status") if flash[:notice] %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

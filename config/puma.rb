@@ -28,8 +28,12 @@
 threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
 threads threads_count, threads_count
 
-# Specifies the `port` that Puma will listen on to receive requests; default is 3000.
-port ENV.fetch("PORT", 3000)
+# Where the console listens: 127.0.0.1 (this machine only) unless
+# CONSOLE_BIND names another address. Every page and the WebSocket need a
+# signed-in user whatever the address (there is no switch to turn that
+# off); listening beyond loopback also needs a user to exist
+# (config/initializers/exposure.rb) and should sit behind TLS (README).
+bind "tcp://#{ENV.fetch('CONSOLE_BIND', '127.0.0.1')}:#{ENV.fetch('PORT', 3000)}"
 
 # Allow puma to be restarted by `bin/rails restart` command.
 plugin :tmp_restart

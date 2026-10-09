@@ -2,6 +2,7 @@ require "test_helper"
 
 class ConsoleControllerTest < ActionDispatch::IntegrationTest
   setup do
+    sign_in_as(users(:user))
     GraphState.delete_all
     GraphState.create!(version: 3, bridge_seen_at: Time.current,
                        bridge_info: JSON.generate("router" => "tcp/127.0.0.1:7447", "node" => "console"),
@@ -11,11 +12,11 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     Watch.create!(key: "fmrb/test/out")
   end
 
-  test "the page carries the graph, the layers, the warning and the watches" do
+  test "the page carries the graph, the layers, who is signed in and the watches" do
     get root_path
     assert_response :success
     assert_select "h1", "Asterism Console"
-    assert_select ".warning", /No authentication/
+    assert_select ".nav .who", /user@example.com/
     assert_select "input[type=checkbox][data-layer]", 3
     assert_select "[data-controller=console]" do |el|
       state = JSON.parse(el.first["data-console-state-value"])

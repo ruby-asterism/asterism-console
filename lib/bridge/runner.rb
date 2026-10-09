@@ -293,6 +293,14 @@ module Bridge
     end
 
     def perform(req)
+      # The page checked the call permissions when it wrote the row; check
+      # again here (a row may have been removed since, or written by hand).
+      unless req.permitted?
+        req.deny!("no call permission allows it (checked by the bridge)")
+        say "bridge: #{req.kind} #{req.path} #{req.method_name} -> denied"
+        ConsoleChannel.send_message("request", "request" => req.as_payload)
+        return
+      end
       t0 = mono
       timeout_ms = (req.timeout_s * 1000).round
       attrs =

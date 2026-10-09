@@ -1,0 +1,11 @@
+<% password_digest = BCrypt::Password.create("password-for-tests") %>
+
+admin:
+  email_address: admin@example.com
+  password_digest: <%= password_digest %>
+  admin: true
+
+user:
+  email_address: user@example.com
+  password_digest: <%= password_digest %>
+  admin: false

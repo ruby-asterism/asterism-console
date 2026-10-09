@@ -1,0 +1,9 @@
+<% if authenticated? %>
+  <nav class="nav" aria-label="Pages">
+    <%= link_to "Graph", root_path %>
+    <%= link_to "Call log", calls_path %>
+    <%= link_to "Call permissions", call_permissions_path %>
+    <span class="who"><%= link_to current_user.email_address, account_path %><%= " (admin)" if current_user.admin? %></span>
+    <%= button_to "Sign out", session_path, method: :delete, class: "small", form_class: "inline" %>
+  </nav>
+<% end %>

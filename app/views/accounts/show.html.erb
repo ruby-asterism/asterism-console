@@ -1,0 +1,42 @@
+<% content_for(:title, "Account - Asterism Console") %>
+<section class="card">
+  <h2>Account</h2>
+  <dl class="facts">
+    <dt>Email address</dt><dd><%= @user.email_address %></dd>
+    <dt>Role</dt><dd><%= @user.admin? ? "admin (edits call permissions and the relay registry)" : "user" %></dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Two-factor sign-in (TOTP)</h2>
+  <% if @user.otp_enabled? %>
+    <p>On since <%= l(@user.otp_enabled_at, format: :long) %>. Signing in asks for a code from your authenticator app.</p>
+    <%= form_with url: disable_otp_account_path, method: :delete, class: "row" do |f| %>
+      <%= f.password_field :current_password, placeholder: "Current password", required: true, autocomplete: "current-password", "aria-label": "Current password" %>
+      <%= f.submit "Turn off" %>
+    <% end %>
+  <% elsif @user.otp_secret.present? %>
+    <p>Add this secret to your authenticator app (it is shown until you confirm it), then type the code it shows.</p>
+    <dl class="facts">
+      <dt>Secret</dt><dd><code><%= @user.otp_secret.scan(/.{1,4}/).join(" ") %></code></dd>
+      <dt>URI</dt><dd><code class="wrap"><%= @user.otp_uri %></code></dd>
+    </dl>
+    <%= form_with url: otp_confirm_account_path, class: "row" do |f| %>
+      <%= f.text_field :code, placeholder: "123456", required: true, inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6, autocomplete: "one-time-code", "aria-label": "Code" %>
+      <%= f.submit "Confirm" %>
+    <% end %>
+  <% else %>
+    <p>Off. Turn it on to ask for a code from an authenticator app after the password.</p>
+    <%= button_to "Turn on", start_otp_account_path %>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Password</h2>
+  <%= form_with url: password_account_path, method: :patch, class: "stack" do |f| %>
+    <label>Current password <%= f.password_field :current_password, required: true, autocomplete: "current-password" %></label>
+    <label>New password (12 characters or more) <%= f.password_field :password, required: true, minlength: 12, maxlength: 72, autocomplete: "new-password" %></label>
+    <label>New password again <%= f.password_field :password_confirmation, required: true, autocomplete: "new-password" %></label>
+    <%= f.submit "Change the password" %>
+  <% end %>
+</section>

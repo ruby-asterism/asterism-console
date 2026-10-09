@@ -1,6 +1,8 @@
 require "test_helper"
 
 class WatchesControllerTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as(users(:user)) }
+
   include ActionCable::TestHelper
 
   test "watch, list and stop" do

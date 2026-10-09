@@ -1,0 +1,42 @@
+<% content_for(:title, "Call permissions - Asterism Console") %>
+<section class="card">
+  <h2>Call permissions</h2>
+  <p>The page can call a method only when a row below allows it: the object's path
+     <code>&lt;node&gt;/&lt;app&gt;/&lt;object&gt;</code> and the method's name.
+     <code>*</code> matches any run of characters within one part. With no rows nothing can be called.
+     A row also lets the page read the object's list of methods (its meta).</p>
+  <% if @rows.empty? %>
+    <p class="hint">No rows: nothing can be called from the page.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Node</th><th>App</th><th>Object</th><th>Method</th><th>Note</th><th>Added</th><th></th></tr></thead>
+      <tbody>
+        <% @rows.each do |r| %>
+          <tr>
+            <td><code><%= r.node %></code></td><td><code><%= r.app %></code></td><td><code><%= r.object %></code></td>
+            <td><code><%= r.method_name %></code></td><td><%= r.note %></td>
+            <td class="hint"><%= r.created_by&.email_address %> <%= l(r.created_at, format: :short) %></td>
+            <td><%= button_to "Remove", call_permission_path(r), method: :delete, class: "small", disabled: !current_user.admin? %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
+
+<% if current_user.admin? %>
+  <section class="card">
+    <h2>Allow</h2>
+    <% if @row.errors.any? %><p class="error"><%= @row.errors.full_messages.to_sentence %></p><% end %>
+    <%= form_with model: @row, class: "grid-form" do |f| %>
+      <label>Node <%= f.text_field :node, required: true %></label>
+      <label>App <%= f.text_field :app, required: true %></label>
+      <label>Object <%= f.text_field :object, required: true %></label>
+      <label>Method <%= f.text_field :method_name, required: true, placeholder: "say" %></label>
+      <label>Note <%= f.text_field :note %></label>
+      <%= f.submit "Allow" %>
+    <% end %>
+  </section>
+<% else %>
+  <p class="hint">Only an admin can change these.</p>
+<% end %>

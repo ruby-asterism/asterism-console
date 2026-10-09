@@ -26,7 +26,13 @@ const EDGE_COLORS = {
 
 const STATUS_TEXT = {
   ok: "ok", remote_error: "RemoteError", timeout: "Timeout", error: "error",
-  expired: "expired", pending: "waiting for the bridge", running: "running",
+  expired: "expired", pending: "waiting for the bridge", running: "running", denied: "not permitted",
+}
+
+// Same rule as CallPermission.match? (Ruby): * matches any run of characters.
+function globMatch(pattern, value) {
+  const re = new RegExp("^" + String(pattern).replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*") + "$")
+  return re.test(String(value))
 }
 
 export default class extends Controller {
@@ -350,6 +356,18 @@ export default class extends Controller {
 
   async loadMeta(path) {
     const box = () => this.detailsTarget.querySelector("[data-role=methods]")
+    let rules = []
+    try {
+      const res = await fetch(`/call_permissions.json?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } })
+      if (res.ok) rules = await res.json()
+    } catch (_e) { /* treated as none */ }
+    if (this.selected !== `a_object:${path}` || !box()) return
+    if (rules.length === 0) {
+      box().innerHTML = `<p class="hint">No call permission covers this object, so its methods are not read or called.
+        <a href="/call_permissions">Call permissions</a></p>`
+      return
+    }
+    const allowed = (name) => rules.some((r) => globMatch(r.method, name))
     const req = await this.request({ kind: "meta", path, timeout_s: 3 })
     if (this.selected !== `a_object:${path}` || !box()) return
     if (req.status !== "ok") {
@@ -360,11 +378,12 @@ export default class extends Controller {
     let html = `<h3>Exposed methods</h3>`
     for (const [name, arity] of methods) {
       const hint = arity >= 0 ? `${arity} argument${arity === 1 ? "" : "s"}` : "any arguments"
-      const example = name === "say" ? '["hello from the console"]' : (arity === 0 ? "[]" : "[]")
-      html += `<form class="call" data-method="${esc(name)}">
-        <label><code>${esc(name)}</code> <span class="hint">${hint}</span></label>
-        <div class="row"><input type="text" name="args" value='${esc(example)}' aria-label="Arguments of ${esc(name)} (JSON array)">
-        <button type="submit">Call</button></div></form>`
+      const example = name === "say" ? '["hello from the console"]' : "[]"
+      const ok = allowed(name)
+      html += `<form class="call${ok ? "" : " not-allowed"}" data-method="${esc(name)}">
+        <label><code>${esc(name)}</code> <span class="hint">${hint}${ok ? "" : ", not permitted"}</span></label>
+        <div class="row"><input type="text" name="args" value='${esc(example)}' aria-label="Arguments of ${esc(name)} (JSON array)"${ok ? "" : " disabled"}>
+        <button type="submit"${ok ? "" : " disabled"}>Call</button></div></form>`
     }
     html += `<details><summary>Another method (not in the list)</summary>
       <form class="call" data-method="">
@@ -409,8 +428,9 @@ export default class extends Controller {
       return { status: "error", error_message: String(e) }
     }
     const created = await res.json()
+    if (res.status === 403 && created.status === "denied") return created
     if (!res.ok) return { errors: created.errors || ["rejected"], status: "error" }
-    if (["ok", "remote_error", "timeout", "error", "expired"].includes(created.status)) return created
+    if (["ok", "remote_error", "timeout", "error", "expired", "denied"].includes(created.status)) return created
     return new Promise((resolve) => {
       this.pending.set(created.id, resolve)
       const limit = Date.now() + (body.timeout_s + 35) * 1000

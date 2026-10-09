@@ -16,7 +16,9 @@ gem "turbo-rails"
 gem "stimulus-rails"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
-# gem "bcrypt", "~> 3.1.7"
+gem "bcrypt", "~> 3.1.7"
+# TOTP codes for the optional second factor (no dependencies)
+gem "rotp", "~> 6.3"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
@@ -61,3 +63,4 @@ end
 # elsewhere.
 gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
 gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
+

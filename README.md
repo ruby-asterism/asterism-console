@@ -16,11 +16,9 @@ value, `RemoteError` or `Timeout`, and the time it took). Click a ROS 2
 topic for its type, publishers and subscribers. The watch panel shows the
 values arriving on any key.
 
-> **No authentication.** The console is for a local network you trust.
-> Anyone who can open the page can call every exposed method on the
-> network. The bridge connects to a router on 127.0.0.1 and the server
-> listens on 127.0.0.1 by default. Do not open either to other machines
-> before authentication is added.
+Everything needs a signed-in user: the graph, the values, the calls and
+the WebSocket. What the page may call is limited to the combinations an
+admin allowed, and every call is logged (see [Security](#security)).
 
 ## Running it
 
@@ -30,11 +28,13 @@ the default configuration) and the two Asterism gems.
 ```
 bundle install
 bin/rails db:prepare
-bin/rails server            # http://127.0.0.1:3000 (development)
+bin/rails console:user EMAIL=me@example.org ADMIN=1   # asks for a password (12+ characters)
+bin/rails server            # http://127.0.0.1:3000
 bin/bridge                  # in another terminal: the one process on the network
 ```
 
-`bin/dev` starts both.
+`bin/dev` starts both. Sign in, then allow what the page may call under
+"Call permissions" (nothing can be called until then).
 
 | Variable | Default | |
 |---|---|---|
@@ -43,6 +43,7 @@ bin/bridge                  # in another terminal: the one process on the networ
 | `ASTERISM_TLS_CERT`, `ASTERISM_TLS_KEY` | | mutual TLS: the bridge's certificate and key |
 | `ASTERISM_ZENOH_CONFIG` | | a zenoh configuration file (JSON5) for both sessions, instead of the three above |
 | `ASTERISM_CONSOLE_NODE` | `console` | the bridge's Asterism node ID (app `console`) |
+| `CONSOLE_BIND` | `127.0.0.1` | the address the server listens on (see Security) |
 | `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
 | `ASTERISM_DIR`, `ASTERISM_ZENOH_DIR` | `../asterism`, `../asterism-zenoh` | the gem checkouts |
 
@@ -107,6 +108,50 @@ asterism README).
 Keep the CA's key (`ca.key`) away from a server that faces the network once
 certificates are issued from the page (planned).
 
+## Security
+
+The console calls methods on the boards of a network, so it is guarded
+even on a LAN. What it does, and what it assumes:
+
+- **Sign-in for everything.** Rails 8's authentication (`has_secure_password`,
+  bcrypt). Every controller requires a signed-in user except the sign-in
+  pages; JSON requests without one get 401. Action Cable takes the same
+  signed cookie and refuses the connection without it, so graph diffs,
+  answers and watched values reach signed-in browsers only. There is no
+  setting that turns sign-in off. A session lasts 12 hours; sign-in is
+  rate limited (10 tries in 3 minutes).
+- **Accounts** are made on the command line (there is no sign-up page). The
+  password is read from the terminal or `CONSOLE_PASSWORD`, never from the
+  command line:
+
+  ```
+  bin/rails console:user EMAIL=me@example.org ADMIN=1    # make (or set a new password)
+  bin/rails console:users                                # list
+  bin/rails console:otp_off EMAIL=me@example.org         # a user who lost the device
+  ```
+
+- **Two-factor sign-in (TOTP, optional per user).** On the account page,
+  "Turn on" shows a secret (and its `otpauth://` URI) to add to an
+  authenticator app; a code confirms it. From then on signing in asks for a
+  code after the password. Each code is taken once (the `rotp` gem).
+- **Call permissions.** The page can read an object's methods and call one
+  only when a row under "Call permissions" allows the object's path
+  (`<node>/<app>/<object>`) and the method; `*` matches any run of
+  characters within one part. No rows (the default): nothing can be called.
+  Only admins add or remove rows. Rails checks before a request reaches
+  the bridge, and the bridge checks again before it calls.
+- **Call log.** Every request is kept: who, when, the path, method and
+  arguments, and the answer (`ok`, `remote_error`, `timeout`, ...), refused
+  ones as `denied`. "Call log" shows the last 200.
+- **Listening.** The server listens on 127.0.0.1 (in every environment).
+  `CONSOLE_BIND=0.0.0.0` (or `-b`) opens it to other machines; it then
+  refuses to start while there are no users. Sign-in sends a password and
+  the cookie in the clear over plain HTTP: beyond this machine, put a TLS
+  proxy in front (and set `config.assume_ssl` / `force_ssl` in production).
+- **What it does not do**: no roles beyond admin / user, no limit on who may
+  watch which keys, no lockout beyond the rate limit, no password reset by
+  mail (an admin sets a new password with `console:user`).
+
 ## How it is built
 
 ```
@@ -148,10 +193,12 @@ bin/rails test
 `test/lib/bridge/` covers the graph (from inputs shaped like zenohd 1.10.1
 and rmw_zenoh 0.2.11 give them), the diff, payloads and how the bridge
 writes answers back; `test/controllers/` the page, the graph JSON,
-requests and watches.
+requests, watches, sign-in (with TOTP), that every route needs it, the call
+permissions and the call log; `test/channels/` that the WebSocket needs it.
 
 `script/headless/run out.png` takes a screenshot with a headless Chromium
-in a container (Playwright's image; nothing installed on the host).
+in a container (Playwright's image; nothing installed on the host);
+`CONSOLE_EMAIL` / `CONSOLE_PASSWORD` make it sign in first.
 
 ## License
 

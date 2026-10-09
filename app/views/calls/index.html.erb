@@ -1,0 +1,29 @@
+<% content_for(:title, "Call log - Asterism Console") %>
+<section class="card">
+  <h2>Call log</h2>
+  <p>
+    <%= params[:all].present? ? "Calls and meta reads" : "Calls" %> from the page, newest first (the last <%= CallsController::LIMIT %>).
+    <%= params[:all].present? ? link_to("Calls only", calls_path) : link_to("Also the meta reads", calls_path(all: 1)) %>
+  </p>
+  <% if @rows.empty? %>
+    <p class="hint">Nothing yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>Arguments</th><th>Result</th><th>ms</th></tr></thead>
+      <tbody>
+        <% @rows.each do |r| %>
+          <tr class="status-<%= r.status %>">
+            <td class="nowrap"><%= l(r.created_at, format: "%Y-%m-%d %H:%M:%S") %></td>
+            <td><%= r.user&.email_address || "(before sign-in existed)" %></td>
+            <td><code><%= r.path %></code> <%= r.kind == "call" ? tag.code(r.method_name) : tag.span("meta", class: "hint") %></td>
+            <td><code class="wrap"><%= r.args %></code></td>
+            <td><span class="badge"><%= r.status %></span>
+              <% if r.status == "ok" %><code class="wrap"><%= r.result.to_s.truncate(160) %></code>
+              <% else %><%= [ r.error_class, r.error_message ].compact.join(": ").truncate(200) %><% end %></td>
+            <td><%= r.took_ms %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

@@ -1,0 +1,12 @@
+<% content_for(:title, "Sign in - Asterism Console") %>
+<section class="card narrow">
+  <h2>Sign in</h2>
+  <%= form_with url: session_path, class: "stack" do |form| %>
+    <label>Email address
+      <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", value: params[:email_address] %></label>
+    <label>Password
+      <%= form.password_field :password, required: true, autocomplete: "current-password", maxlength: 72 %></label>
+    <%= form.submit "Sign in" %>
+  <% end %>
+  <p class="hint">Accounts are made by an administrator with <code>bin/rails console:user</code>.</p>
+</section>

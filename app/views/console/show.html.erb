@@ -4,10 +4,8 @@
      data-console-watches-value="<%= @watches.map(&:as_payload).to_json %>">
   <header class="bar">
     <h1>Asterism Console</h1>
-    <p class="warning" role="note">
-      No authentication: for a local network you trust only. Anyone who can open this page can call the exposed methods.
-    </p>
     <div class="bridge" data-console-target="bridge">bridge: waiting</div>
+    <%= render "shared/nav" %>
   </header>
 
   <nav class="layers" aria-label="Layers">

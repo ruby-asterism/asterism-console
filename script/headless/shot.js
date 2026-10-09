@@ -8,11 +8,29 @@ const steps = JSON.parse(process.argv[3] || "[]");
   const logs = [];
   page.on("console", (m) => logs.push(`console.${m.type()}: ${m.text()}`));
   page.on("pageerror", (e) => logs.push(`pageerror: ${e.message}`));
-  await page.goto(process.env.CONSOLE_URL || "http://host.docker.internal:3000/");
+  const base = process.env.CONSOLE_URL || "http://host.docker.internal:3000/"
+  // Sign in first when CONSOLE_EMAIL / CONSOLE_PASSWORD are given (every
+  // page needs a signed-in user).
+  if (process.env.CONSOLE_EMAIL) {
+    await page.goto(new URL("/session/new", base).href)
+    await page.fill("input[name=email_address]", process.env.CONSOLE_EMAIL)
+    await page.fill("input[name=password]", process.env.CONSOLE_PASSWORD || "")
+    await Promise.all([page.waitForNavigation(), page.click("input[type=submit]")])
+  }
+  await page.goto(base);
   await page.waitForFunction(() => window.consoleGraph && window.consoleGraph.nodes().length > 0, null, { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(2500);
   for (const s of steps) {
     if (s.wait) await page.waitForTimeout(s.wait);
+    if (s.goto) await page.goto(new URL(s.goto, base).href);
+    if (s.download) {
+      // [selector to click, file name to save under /work]
+      const [dl] = await Promise.all([page.waitForEvent("download"), page.click(s.download[0])]);
+      await dl.saveAs(`/work/${s.download[1]}`);
+      logs.push(`download ${dl.suggestedFilename()} -> ${s.download[1]}`);
+    }
+    if (s.select) await page.selectOption(s.select[0], s.select[1]);
+    if (s.accept) page.once("dialog", (d) => d.accept());
     if (s.tapNode) await page.evaluate((id) => { const n = window.consoleGraph.getElementById(id); n.select(); n.emit("tap"); }, s.tapNode);
     if (s.tapKind) await page.evaluate((k) => { const n = window.consoleGraph.nodes(`[kind = '${k.kind}']`).filter(x => x.data('label').includes(k.label || "")).first(); n.select(); n.emit("tap"); }, s.tapKind);
     if (s.fill) await page.fill(s.fill[0], s.fill[1]);

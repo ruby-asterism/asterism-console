@@ -31,6 +31,7 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
   end
 
   setup do
+    CallPermission.create!(node: "*", app: "*", object: "*", method_name: "*")
     @objects = Objects.new
     @runner = Bridge::Runner.new(objects: @objects, logger: Logger.new(nil))
     @runner.define_singleton_method(:say) { |_text| nil }
@@ -69,6 +70,17 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
     assert_match(/2500 ms/, r.error_message)
     r = run_request(method_name: "gone")
     assert_equal [ "error", "Asterism::Disconnected" ], [ r.status, r.error_class ]
+  end
+
+  test "the bridge checks the call permissions again" do
+    CallPermission.delete_all
+    CallPermission.create!(node: "fmruby-*", app: "demo", object: "screen", method_name: "say")
+    r = run_request(method_name: "say", args: '["x"]')
+    assert_equal "ok", r.status
+    r = run_request(method_name: "status") # written by hand, past the page
+    assert_equal [ "denied", "NotPermitted" ], [ r.status, r.error_class ]
+    assert_match(/checked by the bridge/, r.error_message)
+    assert_equal 1, @objects.calls.size
   end
 
   test "requests nobody picked up expire" do

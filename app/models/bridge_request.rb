@@ -2,15 +2,21 @@
 # object's meta, or call one of its methods. Puma writes the row, the
 # bridge (bin/bridge) picks it up, runs it and writes the answer back,
 # then tells the page over Action Cable.
+#
+# The rows are also the call log: who asked (user), when, what (path,
+# method, arguments) and the answer. A request that no CallPermission
+# allows is kept with the status "denied" and never reaches the bridge.
 class BridgeRequest < ApplicationRecord
   KINDS = %w[meta call].freeze
-  STATUSES = %w[pending running ok remote_error timeout error expired].freeze
+  STATUSES = %w[pending running ok remote_error timeout error expired denied].freeze
   MAX_TIMEOUT = 30.0
   # A request the bridge has not picked up within this time is dropped.
   EXPIRE_AFTER = 30.seconds
   # <node>/<app>/<object>: no wildcards, no empty parts, nothing starting with @.
   PATH = %r{\A[^/*$?#@\s][^/*$?#\s]*/[^/*$?#@\s][^/*$?#\s]*/[^/*$?#@\s][^/*$?#\s]*\z}
   METHOD = /\A[a-z_][A-Za-z0-9_]*[?!]?\z/
+
+  belongs_to :user, optional: true
 
   validates :kind, inclusion: { in: KINDS }
   validates :status, inclusion: { in: STATUSES }
@@ -20,6 +26,16 @@ class BridgeRequest < ApplicationRecord
   validate :arguments_are_json
 
   scope :pending, -> { where(status: "pending") }
+
+  # Whether the call permissions allow this request (meta: the object is
+  # covered by some row; call: the method too).
+  def permitted?(rows: CallPermission.all)
+    CallPermission.allows?(path, kind == "call" ? method_name : nil, rows: rows)
+  end
+
+  def deny!(reason = "no call permission allows #{kind == 'call' ? "#{path} #{method_name}" : path}")
+    update!(status: "denied", error_class: "NotPermitted", error_message: reason, finished_at: Time.current)
+  end
 
   def args_value
     args.present? ? JSON.parse(args) : []
@@ -40,7 +56,8 @@ class BridgeRequest < ApplicationRecord
   def as_payload
     { "id" => id, "kind" => kind, "path" => path, "method" => method_name, "args" => args_value,
       "kwargs" => kwargs_value, "status" => status, "result" => result_value,
-      "error_class" => error_class, "error_message" => error_message, "took_ms" => took_ms }
+      "error_class" => error_class, "error_message" => error_message, "took_ms" => took_ms,
+      "user" => user&.email_address, "at" => created_at&.iso8601 }
   end
 
   private

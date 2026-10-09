@@ -1,0 +1,10 @@
+<% content_for(:title, "Code - Asterism Console") %>
+<section class="card narrow">
+  <h2>Two-factor code</h2>
+  <%= form_with url: verify_otp_session_path, class: "stack" do |form| %>
+    <label>The 6-digit code from your authenticator app
+      <%= form.text_field :code, required: true, autofocus: true, autocomplete: "one-time-code", inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6 %></label>
+    <%= form.submit "Continue" %>
+  <% end %>
+  <p><%= link_to "Start again", new_session_path %></p>
+</section>

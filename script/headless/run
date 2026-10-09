@@ -3,10 +3,14 @@
 # installed on the host). The server must answer to host.docker.internal:
 #
 #   CONSOLE_EXTRA_HOST=host.docker.internal bin/rails server
-#   script/headless/run out.png ['[{"tapNode":"r_topic:0/chatter"},{"wait":1000}]']
+#   CONSOLE_EMAIL=me@example.org CONSOLE_PASSWORD=... \
+#     script/headless/run out.png ['[{"tapNode":"r_topic:0/chatter"},{"wait":1000}]']
 #
+# With CONSOLE_EMAIL / CONSOLE_PASSWORD it signs in first.
 # Steps (JSON): tapNode, tapKind, fill, click, check, uncheck, press, wait,
-# shot, text (prints the element's text), graph (prints the nodes by kind).
+# goto (a path), download ([selector, file]), select ([selector, value]),
+# accept (the next confirm dialog), shot, text (prints the element's text),
+# graph (prints the nodes by kind).
 # The PNG is written next to this script.
 set -e
 dir=$(cd "$(dirname "$0")" && pwd)
@@ -15,5 +19,5 @@ if [ ! -d "$dir/node_modules/playwright" ]; then
   docker run --rm -v "$dir:/work" -w /work "$image" \
     bash -c "npm init -y >/dev/null && npm i playwright@1.56.0 >/dev/null"
 fi
-docker run --rm -v "$dir:/work" -w /work -e CONSOLE_URL "$image" \
+docker run --rm -v "$dir:/work" -w /work -e CONSOLE_URL -e CONSOLE_EMAIL -e CONSOLE_PASSWORD "$image" \
   node shot.js "/work/$(basename "${1:-console.png}")" "${2:-[]}"
