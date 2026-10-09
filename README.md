@@ -25,6 +25,12 @@ calls the methods that Asterism nodes expose.
   window, pause.
 - **Logs** like rqt_console (`/logs`): `/rosout` and the Asterism log keys,
   filtered by level, node and text, with pause and clear.
+- **Recordings** like rosbag and rqt_bag (`/recordings`): ROS 2 topics,
+  Asterism keys and the network structure into one MCAP file (CDR,
+  MessagePack and JSON), which `ros2 bag info` and Foxglove open; upload a
+  file from `ros2 bag record -s mcap`; a timeline with the messages at a
+  cursor and plots; the graph as it was at any time; playback in the page
+  or, for admins, to the network (see [Recordings](#recordings)).
 
 Nodes appear and disappear without reloading, and what is on the screen
 stays where it is: only new nodes are placed, next to their neighbours
@@ -75,8 +81,8 @@ node.
 
 ### The Asterism gems
 
-The console needs asterism and asterism-zenoh 0.4.0 (the version in
-`Gemfile.lock`). The Gemfile takes them from the checkouts next to this
+The console needs asterism and asterism-zenoh 0.4.0 or later (the versions
+in `Gemfile.lock`; V4 was checked with the asterism 0.4.1 checkout). The Gemfile takes them from the checkouts next to this
 repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
 asterism-zenoh's C extension there with `rake compile`, or let Bundler
 build it). To use the gems from rubygems.org instead, replace the two
@@ -118,6 +124,57 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   topic costs its traffic and a counter per message, not its decoding. At
   most 16 plotted topics, 200 log lines a second. Details, bounds and the
   live check: docs/v3.md.
+
+## Recordings
+
+`/recordings` (V4, the roles of rosbag and rqt_bag; details in docs/v4.md):
+
+- **Record**: tick ROS 2 topics (those on the network now), type Asterism
+  key expressions, tick "the network structure", set the limits (MB,
+  seconds) and start. The bridge subscribes and writes
+  `storage/recordings/<time>-<random>.mcap` (gitignored) until you stop it
+  or a limit is reached; the page shows messages, bytes, the duration, the
+  count per channel and any messages lost on the way. At most 2 at once,
+  512 MB and an hour each, `ASTERISM_RECORDINGS_MAX_BYTES` (4 GB) for all.
+- **The file**: one MCAP file. ROS 2 topics as rosbag2 writes them (CDR,
+  schema `ros2msg` with the concatenated .msg definitions, the topic's QoS
+  and type hash in the channel), Asterism keys as MessagePack, the network
+  structure as JSON on `/asterism/graph` (a snapshot, then the changes).
+  `ros2 bag info file.mcap` lists all of it; `ros2 bag play` refuses a file
+  whose channels are not all CDR, so "ROS 2 topics only" downloads the
+  copy it plays.
+- **Upload** an `.mcap` (for example from `ros2 bag record -s mcap`; up to
+  256 MB). Uncompressed chunks (rosbag2's default) are read; zstd or lz4
+  chunks (`--storage-preset-profile zstd_fast`, `--compression-mode`) list
+  their channels and message times but not the messages.
+- **Timeline**: a row per channel with its message ticks, a cursor (click,
+  drag, or step to the previous / next message), the selected channel's
+  message at the cursor decoded (V3's decoders: the bundled ROS 2 types,
+  MessagePack, `/rosout` and the Asterism log key as log lines), every
+  channel's message at the cursor, and plots of numeric fields over the
+  whole recording (the cursor follows a click on the plot).
+- **The network at the cursor**: the graph page, read-only, as it was at
+  a time; step from one change to the next (what appeared, what left).
+- **Playback**: "in the page only" moves the cursor at 0.25x / 1x / 4x and
+  sends nothing. "To the network" (admins, after a confirmation)
+  republishes from the cursor: ROS 2 topics through a ROS 2 node of the
+  console's own (`/asterism_console_playback`: its liveliness tokens, GID,
+  new sequence numbers and times, so `ros2 topic echo` sees it), Asterism
+  keys as they were recorded; never the network structure. Each playback
+  is a row of the audit log ("Call log" page).
+
+**MCAP in Ruby** (`lib/mcap.rb`, `lib/mcap/writer.rb`, `lib/mcap/reader.rb`):
+a writer and a reader of the MCAP format (version 0, https://mcap.dev)
+with the standard library only, kept apart from the console (no Rails, no
+Asterism) so it can become a gem. The writer makes chunked, indexed files
+(chunks uncompressed, with message indexes, chunk indexes, statistics,
+summary offsets and every CRC); the reader uses the summary when there is
+one and scans otherwise (a file cut off mid-record reads up to the last
+whole record), and gives the message index without reading the messages.
+zstd and lz4 are not in Ruby's standard library: compressed chunks raise
+`MCAP::UnsupportedCompression` (the summary and index still read). Its
+tests: `test/lib/mcap/` (round trips, CRCs, files without a summary, cut-off
+files, unknown records, a file written by rosbag2, a zstd one).
 
 ## Two routers: a relay with mutual TLS and an ACL
 
@@ -306,7 +363,9 @@ even on a LAN. What it does, and what it assumes:
 
 - **Puma never talks to Zenoh.** Only `bin/bridge` (lib/bridge/runner.rb)
   loads Asterism, so however many Puma workers or threads run, the network
-  sees one node. The bridge loads the Rails environment for the database
+  sees one node. (The recording pages decode messages in Puma with the
+  asterism gem's pure-Ruby type layer alone, its `mrblib/` files, without
+  asterism-zenoh: `Bridge::Types.setup`.) The bridge loads the Rails environment for the database
   and Action Cable.
 - **Delivery across processes**: Action Cable uses solid_cable in
   development too (config/cable.yml), so a broadcast from the bridge
@@ -345,6 +404,10 @@ even on a LAN. What it does, and what it assumes:
   camera's bandwidth. When the measured topics together bring in more than
   `ASTERISM_RATES_MAX_BPS` (default 8000000 bytes/s) the bridge drops the
   wildcards for 60 s (single topics go on) and the page says so.
+- **Recordings and playbacks** are rows too (`Recording`, `Playback`): the
+  bridge starts what is pending, writes with `Bridge::Recorder` (on the
+  receiving thread, under a lock) and plays with `Bridge::Player` (a thread
+  of its own); the pages read the files with `Bag::View` (lib/bag/).
 
 ## Tests
 
@@ -358,7 +421,10 @@ attributes, topic edges, unmatched topics, nesting), the diff, payloads and
 CDR previews, the rates (window, aggregation, bounds), what the bridge
 subscribes to for the rate leases, and how it writes answers back, the
 plots and logs (field paths, decimation, bounds, /rosout with the generated
-Log type, the Asterism log key, the stream leases); `test/controllers/` the page, the graph JSON,
+Log type, the Asterism log key, the stream leases), recording and playback
+(the recorder's files, its limits, the player's wire output, the bridge's
+rows); `test/lib/mcap/` and `test/lib/bag/` the MCAP format and the timeline's
+reading; `test/controllers/` the page, the graph JSON,
 requests, watches, sign-in (with TOTP), that every route needs it, the call
 permissions and the call log; `test/channels/` that the WebSocket needs it.
 
@@ -379,4 +445,5 @@ in a container (Playwright's image; nothing installed on the host);
 
 MIT (LICENSE). Third-party code included in this repository is listed in NOTICE
 (Cytoscape.js and the fcose layout, uPlot: MIT; a ROS 2 message type
-generated from its Apache-2.0 definition).
+generated from its Apache-2.0 definition; ROS 2 .msg definitions, Apache-2.0,
+in `vendor/msgdefs`).
