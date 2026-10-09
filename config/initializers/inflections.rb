@@ -14,3 +14,6 @@
 # ActiveSupport::Inflector.inflections(:en) do |inflect|
 #   inflect.acronym "RESTful"
 # end
+
+# lib/mcap.rb is MCAP (the file format's name), not Mcap.
+Rails.autoloaders.each { |l| l.inflector.inflect("mcap" => "MCAP") }
