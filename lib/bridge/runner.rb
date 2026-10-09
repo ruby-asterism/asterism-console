@@ -12,7 +12,11 @@
 #     (RateLease): one wildcard per ROS 2 domain for "all topics", or the
 #     one topic whose details are open. Broadcast once a second, what
 #     changed only; paused when the topics together bring in more than
-#     RATES_MAX_BPS.
+#     RATES_MAX_BPS;
+#   - while a plot page is open (StreamLease "plot"), subscribes to the
+#     plotted topics and keys and sends their fields, decimated
+#     (Bridge::Plots); while a log page is open (StreamLease "log"),
+#     subscribes to /rosout and the Asterism log keys (Bridge::Logs).
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -46,6 +50,8 @@ module Bridge
     # declared again (Runner#check_follows).
     LIVELINESS_DEPTH = 1024
     GET_TIMEOUT = 1.5
+    # Points and log lines go out this often (one broadcast each).
+    STREAMS_EVERY = 0.2
 
     attr_reader :locator, :node_id, :config
 
@@ -91,6 +97,13 @@ module Bridge
       @rates_paused_until = 0.0
       @rates_status = nil
       @follows = {} # pattern => [set, Watch, dropped so far]
+      @plots = Plots.new
+      @plot_subs = {} # target => [key expression, Subscription]
+      @plot_meta = {} # target => what the plot page is told about it
+      @logs = Logs.new
+      @log_subs = {} # key expression => Subscription
+      @logs_dropped = 0
+      @topic_types = {} # ROS 2 topic id => type (from the graph)
       @stop = false
     end
 
@@ -100,6 +113,7 @@ module Bridge
     # yet) it tries again every RETRY_AFTER seconds.
     def run
       require "asterism"
+      Types.setup
       @objects ||= Objects.new
       trap_signals
       until @stop
@@ -150,6 +164,11 @@ module Bridge
       @rates.clear
       @rates_status = nil
       @follows = {}
+      @plots.clear
+      @plot_subs = {}
+      @plot_meta = {}
+      @logs.clear
+      @log_subs = {}
     end
 
     def stop
@@ -196,7 +215,7 @@ module Bridge
     end
 
     def loop_until_stopped
-      next_admin = next_sync = next_beat = next_rates = 0.0
+      next_admin = next_sync = next_beat = next_rates = next_streams = 0.0
       until @stop
         now = mono
         if now >= next_admin
@@ -208,12 +227,19 @@ module Bridge
           check_follows
           sync_watches
           sync_rates
+          sync_plots
+          sync_logs
           expire_requests
           next_sync = now + SYNC_EVERY
         end
         if now >= next_rates
           publish_rates
           next_rates = now + RATES_EVERY
+        end
+        if now >= next_streams
+          publish_plots
+          publish_logs
+          next_streams = now + STREAMS_EVERY
         end
         take_requests
         flush_outbox
@@ -338,6 +364,9 @@ module Bridge
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
                     self_cert: self_cert, registry: @registry).to_h
+      end
+      @topic_types = graph["nodes"].each_with_object({}) do |n, h|
+        h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"
       end
       state = GraphState.current
       diff = Graph.diff(state.graph, graph)
@@ -515,6 +544,109 @@ module Bridge
       ConsoleChannel.send_message("rates", "rates" => snap, "status" => status)
     end
 
+    # ------------------------------------------------------------------ plots
+
+    # Subscribe to the targets the open plot pages lease, with the fields
+    # they want; drop the rest. A target whose type is not known (not on
+    # the network yet, or not bundled) is not subscribed; the pages are
+    # told why, and it is tried again on the next sync.
+    def sync_plots
+      wanted = StreamLease.wanted("plot").first(Plots::MAX_TARGETS).to_h
+      (@plot_subs.keys - wanted.keys).each do |target|
+        expr, sub = @plot_subs.delete(target)
+        sub.close
+        @plots.remove(target)
+        say "bridge: plots: stop #{expr}"
+      end
+      (@plot_meta.keys - wanted.keys).each { @plot_meta.delete(_1) }
+      wanted.each do |target, fields|
+        unless @plot_subs.key?(target)
+          meta, decoder, expr = plot_source(target)
+          if decoder && @plots.set(target, decoder: decoder, fields: fields)
+            begin
+              @plot_subs[target] = [ expr, @z.subscribe(expr) { |sample| @plots.record(target, sample.payload) } ]
+              say "bridge: plots: subscribe #{expr} (#{target})"
+            rescue Asterism::Zenoh::Error, ArgumentError => e
+              @plots.remove(target)
+              meta = meta.merge("error" => "cannot subscribe to #{expr}: #{e.message}")
+            end
+          end
+          tell_plot_meta(target, meta.merge("observed" => @plot_meta.dig(target, "observed")).compact)
+        end
+        if @plot_subs.key?(target) && @plots.fields(target) != fields.first(Plots::MAX_FIELDS)
+          @plots.wanted(target, fields)
+          say "bridge: plots: #{target}: #{fields.size} fields (#{fields.first(6).join(', ')})"
+        end
+      end
+      @plot_meta.each { |target, meta| StreamLease.write_meta("plot", target, meta) }
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: plots: #{e.message}"
+    end
+
+    # [meta for the page, decoder or nil, key expression] of a target.
+    def plot_source(target)
+      if target.start_with?("key:")
+        expr = target.delete_prefix("key:")
+        return [ { "target" => target, "kind" => "key", "key" => expr, "fields" => [] }, Plots.msgpack_decoder, expr ]
+      end
+      type = @topic_types[target]
+      meta = { "target" => target, "kind" => "ros", "type" => type }
+      return [ meta.merge("error" => "the topic is not on the network (no publisher or subscriber seen)"), nil, nil ] unless type
+      t = Types.ros(type)
+      fields = Types.fields(t)
+      [ meta.merge("fields" => fields), ->(bytes) { t.decode(bytes).to_h }, RateLease.key_expr(target) ]
+    rescue Types::Unknown => e
+      [ meta.merge("error" => e.message), nil, nil ]
+    end
+
+    def tell_plot_meta(target, meta)
+      return if @plot_meta[target] == meta
+      @plot_meta[target] = meta
+      StreamLease.write_meta("plot", target, meta)
+      ConsoleChannel.send_to("plots", "plot_meta", "meta" => meta)
+    end
+
+    def publish_plots
+      return if @plot_subs.empty?
+      points, observed = @plots.drain
+      observed.each { |target, seen| tell_plot_meta(target, (@plot_meta[target] || {}).merge("observed" => seen)) }
+      ConsoleChannel.send_to("plots", "plot", "points" => points) unless points.empty?
+    end
+
+    # ------------------------------------------------------------------- logs
+
+    # While a log page is open: /rosout of every ROS 2 domain seen, and the
+    # Asterism log keys.
+    def sync_logs
+      exprs = []
+      if StreamLease.wanted("log").any?
+        exprs = ros_domains.map { "#{_1}/rosout/**" } << Logs::ASTERISM_KEY
+      end
+      return if exprs.sort == @log_subs.keys.sort
+      (@log_subs.keys - exprs).each do |e|
+        @log_subs.delete(e).close
+        say "bridge: logs: stop #{e}"
+      end
+      exprs.each do |e|
+        next if @log_subs.key?(e)
+        @log_subs[e] = @z.subscribe(e) { |sample| @logs.record(sample.key, sample.payload) }
+        say "bridge: logs: subscribe #{e}"
+      rescue Asterism::Zenoh::Error, ArgumentError => err
+        say "bridge: logs: #{e}: #{err.message}"
+      end
+      @logs.clear if @log_subs.empty?
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: logs: #{e.message}"
+    end
+
+    def publish_logs
+      return if @log_subs.empty?
+      lines = @logs.drain
+      return if lines.empty? && @logs.dropped == @logs_dropped
+      @logs_dropped = @logs.dropped
+      ConsoleChannel.send_to("logs", "logs", "lines" => lines, "dropped" => @logs.dropped, "errors" => @logs.errors)
+    end
+
     # Called on the receiving thread, so the database (Action Cable's
     # adapter) is left to the main thread.
     def flush_outbox
@@ -535,6 +667,12 @@ module Bridge
       @rate_subs.each_value { _1.close rescue nil }
       @rate_subs.clear
       @rates.clear
+      @plot_subs.each_value { _1[1].close rescue nil }
+      @plot_subs.clear
+      @plots.clear
+      @log_subs.each_value { _1.close rescue nil }
+      @log_subs.clear
+      @logs.clear
       Asterism.close
       @z&.close
       @z = nil

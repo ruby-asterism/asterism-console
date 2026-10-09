@@ -10,3 +10,4 @@ pin "@rails/actioncable", to: "actioncable.esm.js"
 pin "cytoscape-fcose" # @2.2.0
 pin "cose-base" # @2.2.0
 pin "layout-base" # @2.0.1
+pin "uplot" # @1.6.32

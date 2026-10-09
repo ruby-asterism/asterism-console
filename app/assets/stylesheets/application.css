@@ -172,3 +172,51 @@ pre.config { background: var(--bg); border: 1px solid var(--line); border-radius
   .graph { height: 60vh; flex: none; }
   .side { width: auto; border-left: none; border-top: 1px solid var(--line); }
 }
+
+/* Buttons that are links (Plot this topic, Show its logs). */
+a.button {
+  display: inline-block; font: inherit; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--text); text-decoration: none;
+}
+a.button:hover { border-color: var(--accent); }
+a.button.small { padding: 1px 8px; font-size: 12px; }
+.actions { margin: 8px 0 0; gap: 6px; align-items: center; }
+
+/* Plots (V3). */
+.plots { flex: 1; min-width: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.empty-note { margin: 16px; }
+.plot-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.plot-head h2 { margin: 0; }
+.plot-head .chips { flex: 1; display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 1px 4px 1px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.chip button.x { border: 0; padding: 0 4px; line-height: 1; background: transparent; color: var(--muted); }
+.plot.paused { border-color: var(--warn-text); }
+.plot .chart { width: 100%; min-height: 240px; }
+.plot-table { font-size: 12px; border-collapse: collapse; margin-top: 4px; }
+.plot-table td { padding: 1px 10px 1px 0; }
+.plot-table td.num { font-family: ui-monospace, Menlo, Consolas, monospace; text-align: right; }
+.picker label, .add-form label { display: block; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.picker select { width: 100%; font: inherit; }
+.add-form select { flex: 1; font: inherit; }
+.add-form input { width: 100%; }
+.field-list { max-height: 320px; overflow-y: auto; margin-top: 6px; }
+ul.fields li label { display: flex; gap: 4px; align-items: baseline; }
+
+/* Logs (V3): severity by the status colours, the level's name beside it. */
+.log-body { display: block; overflow: hidden; }
+.log-wrap { height: 100%; overflow: auto; background: var(--panel); }
+.log-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.log-table th { position: sticky; top: 0; background: var(--bg); text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.log-table td { padding: 2px 8px; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+.log-table td.time, .log-table td.where, .log-table td.fn { white-space: nowrap; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+.log-table td.msg { word-break: break-word; }
+.log-table td.node { white-space: nowrap; }
+.level { display: inline-block; min-width: 46px; padding: 0 6px; border-radius: 4px; font-weight: 700; font-size: 11px; text-align: center; border-left: 4px solid transparent; }
+.level.lv-debug { background: #eef0f3; color: #5f6670; }
+.level.lv-info { background: #e6f1fb; color: #1c5cab; }
+.level.lv-warn { background: #fff4d6; color: #7a4100; border-left-color: #fab219; }
+.level.lv-error { background: #fde8e8; color: #a32424; border-left-color: #d03b3b; }
+.level.lv-fatal { background: #d03b3b; color: #fff; }
+tr.lv-error td.msg, tr.lv-fatal td.msg { color: #a32424; }
+tr.lv-warn td.msg { color: #7a4100; }
+.log-filters input, .log-filters select { font: inherit; }

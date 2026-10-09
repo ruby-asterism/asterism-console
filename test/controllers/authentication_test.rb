@@ -36,9 +36,11 @@ class AuthenticationTest < ActionDispatch::IntegrationTest
   end
 
   test "nothing is written without signing in" do
-    assert_no_difference -> { BridgeRequest.count + Watch.count + CallPermission.count } do
+    assert_no_difference -> { BridgeRequest.count + Watch.count + CallPermission.count + StreamLease.count } do
       post bridge_requests_path, params: { kind: "call", path: "a/b/c", method_name: "x" }, as: :json
       post watches_path, params: { key: "demo/**" }, as: :json
+      post lease_plots_path, params: { page: "page-aaaaaaaa", wanted: [ { target: "r_topic:0/cmd_vel" } ] }, as: :json
+      post lease_logs_path, params: { page: "page-aaaaaaaa", wanted: [ { target: "*" } ] }, as: :json
       post call_permissions_path, params: { call_permission: { node: "*", app: "*", object: "*", method_name: "*" } }
     end
   end

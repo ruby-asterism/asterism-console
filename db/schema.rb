@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_180000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -119,6 +119,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_120000) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
+  create_table "stream_leases", force: :cascade do |t|
+    t.string "kind", null: false
+    t.string "page", null: false
+    t.string "target", null: false
+    t.text "fields"
+    t.text "meta"
+    t.integer "user_id"
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kind", "page", "target"], name: "index_stream_leases_on_kind_and_page_and_target", unique: true
+    t.index ["kind", "target"], name: "index_stream_leases_on_kind_and_target"
+    t.index ["user_id"], name: "index_stream_leases_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email_address", null: false
     t.string "password_digest", null: false
@@ -146,4 +161,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_120000) do
   add_foreign_key "relay_certificates", "users", column: "issued_by_id"
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "sessions", "users"
+  add_foreign_key "stream_leases", "users"
 end

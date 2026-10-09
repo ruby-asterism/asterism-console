@@ -15,6 +15,14 @@ Rails.application.routes.draw do
   resources :bridge_requests, only: %i[create show]
   resources :watches, only: %i[index create destroy]
   resources :rates, only: :create
+  resource :plots, only: :show do
+    post :lease
+    post :release
+  end
+  resource :logs, only: :show do
+    post :lease
+    post :release
+  end
   resources :call_permissions, only: %i[index create destroy]
   resources :calls, only: :index
 

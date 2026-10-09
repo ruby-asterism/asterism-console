@@ -1,0 +1,39 @@
+<% content_for(:title, "Logs - Asterism Console") %>
+<div class="console" data-controller="logs" data-logs-node-value="<%= @node %>">
+  <header class="bar">
+    <h1><%= link_to "Asterism Console", root_path %></h1>
+    <span class="hint">Logs</span>
+    <%= render "shared/nav" %>
+  </header>
+
+  <nav class="layers log-filters" aria-label="Filters">
+    <label>Level at least
+      <select data-logs-target="level" data-action="change->logs#filter">
+        <option value="0">all</option>
+        <option value="10">DEBUG</option>
+        <option value="20">INFO</option>
+        <option value="30">WARN</option>
+        <option value="40">ERROR</option>
+        <option value="50">FATAL</option>
+      </select></label>
+    <label>Node
+      <input type="text" list="log-nodes" data-logs-target="node" data-action="input->logs#filter" placeholder="talker" size="18"></label>
+    <datalist id="log-nodes" data-logs-target="nodes"></datalist>
+    <label>Text
+      <input type="search" data-logs-target="text" data-action="input->logs#filter" placeholder="in the message, file, function" size="26"></label>
+    <span class="sep" aria-hidden="true"></span>
+    <button type="button" data-logs-target="pause" data-action="logs#togglePause">Pause</button>
+    <button type="button" data-action="logs#clear">Clear</button>
+    <span class="counts" data-logs-target="counts"></span>
+  </nav>
+
+  <main class="body log-body">
+    <div class="log-wrap" data-logs-target="wrap">
+      <table class="log-table">
+        <thead><tr><th>Time</th><th>Level</th><th>Node</th><th>Message</th><th>File:line</th><th>Function</th></tr></thead>
+        <tbody data-logs-target="rows"></tbody>
+      </table>
+      <p class="hint empty-note" data-logs-target="empty">Waiting for log lines (/rosout of the ROS 2 nodes, and asterism/&lt;node&gt;/&lt;app&gt;/log). The bridge listens only while this page is open.</p>
+    </div>
+  </main>
+</div>

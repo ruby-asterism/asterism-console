@@ -4,7 +4,9 @@ const out = process.argv[2] || "shot.png";
 const steps = JSON.parse(process.argv[3] || "[]");
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+  // locale: the image's POSIX locale makes navigator.language "en-US@posix",
+  // which Intl (uPlot's number format) refuses.
+  const page = await browser.newPage({ viewport: { width: 1500, height: 950 }, locale: "en-US" });
   const logs = [];
   page.on("console", (m) => logs.push(`console.${m.type()}: ${m.text()}`));
   page.on("pageerror", (e) => logs.push(`pageerror: ${e.message}`));

@@ -761,9 +761,11 @@ export default class extends Controller {
       if (kind === "registered" && p.description) rows.push(["Description", p.description])
     }
     html += dl(rows)
+    if (kind === "r_node") html += `<p class="actions"><a class="button" href="/logs?node=${encodeURIComponent(loggerName(info.name))}" target="_blank" rel="noopener">Show its logs</a></p>`
     if (kind === "r_node") html += this.rosNodeExtras(info)
     if (kind === "a_object") html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
-    if (kind === "r_topic") html += `<button type="button" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>`
+    if (kind === "r_topic") html += `<div class="row actions"><button type="button" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>` +
+      `${plotLink(id)}</div>`
     this.renderDetails(html)
     if (kind === "a_object") this.loadMeta(info.path)
   }
@@ -816,7 +818,7 @@ export default class extends Controller {
       // rmw_zenoh's data keys do not name the publisher, so a topic's rate
       // is of all its publishers, not of this edge's alone.
       if (pubs > 1) html += `<p class="hint">Rate and messages count all ${pubs} publishers of the topic.</p>`
-      html += `<button type="button" class="small" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>`
+      html += `<div class="row actions"><button type="button" class="small" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>${plotLink(tid, true)}</div>`
     }
     const hidden = el.data("topics").filter((tid) => !shown.includes(tid))
     if (hidden.length) {
@@ -1012,6 +1014,16 @@ function badgeOf(info, hideDebug) {
   const width = x - 2
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="14" viewBox="0 0 ${width} 14">${parts.join("")}</svg>`
   return { badge: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, badgeW: width }
+}
+
+// "Plot this topic": the plot page, in a tab of its own (the graph keeps its layout).
+function plotLink(tid, small = false) {
+  return `<a class="button${small ? " small" : ""}" href="/plots?topic=${encodeURIComponent(tid)}" target="_blank" rel="noopener">Plot this topic</a>`
+}
+
+// The logger name rclcpp gives a node: /ns/talker -> ns.talker.
+function loggerName(node) {
+  return String(node || "").replace(/^\//, "").replace(/\//g, ".")
 }
 
 function dl(rows) {

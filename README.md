@@ -19,6 +19,12 @@ calls the methods that Asterism nodes expose.
   messages and the last one (time, size, a short preview: strings,
   numbers, `geometry_msgs` vectors and twists, `/rosout` lines, the header
   of stamped messages), on the edges and in the details (below).
+- **Plots** like rqt_plot (`/plots`): numeric fields of ROS 2 topics
+  (decoded with the real message types) and of Asterism keys (MessagePack)
+  over time, several fields per plot and several plots, a 10 / 30 / 60 s
+  window, pause.
+- **Logs** like rqt_console (`/logs`): `/rosout` and the Asterism log keys,
+  filtered by level, node and text, with pause and clear.
 
 Nodes appear and disappear without reloading, and what is on the screen
 stays where it is: only new nodes are placed, next to their neighbours
@@ -27,7 +33,9 @@ Asterism object to see its exposed methods and call them with JSON
 arguments (the return value, `RemoteError` or `TimeoutError`, and the time it
 took). Click a ROS 2 node for its topics and services (the parameter ones
 folded), a topic edge or a topic for its type, ends, rate and last value.
-The watch panel shows the values arriving on any key.
+The watch panel shows the values arriving on any key. A topic's details
+have "Plot this topic", a ROS 2 node's "Show its logs" (see
+[Plots and logs](#plots-and-logs)).
 
 Everything needs a signed-in user: the graph, the values, the calls and
 the WebSocket. What the page may call is limited to the combinations an
@@ -89,6 +97,27 @@ run the tests and the bridge with deprecated calls raising:
 ASTERISM_DEPRECATIONS=raise bin/rails test
 ASTERISM_DEPRECATIONS=raise bin/bridge
 ```
+
+## Plots and logs
+
+- **Plots** (`/plots`): pick a ROS 2 topic or type an Asterism key, tick
+  fields (the list comes from the topic's type, and from the values seen) or
+  type a path (`linear.x`, `position[2]`, `poses[0].pose.position.x`), and
+  add them to a plot (at most 8 series each). ROS 2 messages are decoded by
+  the bridge with the generated types of the asterism gem (its `data/msgs`)
+  and the console's `vendor/msgs` (`rcl_interfaces/msg/Log`); a topic whose
+  type is not among them says "type ... is not bundled". An Asterism key's
+  payload is MessagePack (a Hash: paths into it; a number: path `""`).
+- **Logs** (`/logs`): time, level, node (logger name), message, file:line
+  and function; filters for the level (at least), the node and a text; the
+  last 2000 lines. Asterism nodes can log on `asterism/<node>/<app>/log`
+  as a MessagePack Hash `{"level", "msg", "time"}` (a proposal; docs/v3.md).
+- **Cost**: the bridge subscribes only while such a page is open
+  (`StreamLease`, renewed every 10 s, 30 s, released when the page is left)
+  and keeps at most 30 messages a second of each plotted topic, so a fast
+  topic costs its traffic and a counter per message, not its decoding. At
+  most 16 plotted topics, 200 log lines a second. Details, bounds and the
+  live check: docs/v3.md.
 
 ## Two routers: a relay with mutual TLS and an ACL
 
@@ -294,6 +323,12 @@ even on a LAN. What it does, and what it assumes:
   picks it up, runs it through an Asterism proxy (`Bridge::Objects`) and writes
   the answer back. Methods that are not exposed are refused by the node
   that owns the object (`RemoteError NoMethodError ... (not exposed)`).
+- **Plots and logs** (`Bridge::Plots`, `Bridge::Logs`, `Bridge::Fields`,
+  `Bridge::Types`): `StreamLease` rows, read every 0.5 s like the rate
+  leases; the points and lines go every 0.2 s on streams of their own
+  (`ConsoleChannel` with `stream: "plots"` / `"logs"`). The bridge alone
+  loads the message types (Puma still never loads Asterism). The charts are
+  uPlot (vendored by `bin/importmap pin`, its CSS in `vendor/assets`).
 - **Watches** are rows too; the bridge subscribes to each key and sends at
   most 10 values per key and second (text, MessagePack, ROS 2 CDR decoded
   as for the rates, or hex).
@@ -321,7 +356,9 @@ bin/rails test
 and rmw_zenoh 0.2.11 give them, and the busy fixture: services as
 attributes, topic edges, unmatched topics, nesting), the diff, payloads and
 CDR previews, the rates (window, aggregation, bounds), what the bridge
-subscribes to for the rate leases, and how it writes answers back; `test/controllers/` the page, the graph JSON,
+subscribes to for the rate leases, and how it writes answers back, the
+plots and logs (field paths, decimation, bounds, /rosout with the generated
+Log type, the Asterism log key, the stream leases); `test/controllers/` the page, the graph JSON,
 requests, watches, sign-in (with TOTP), that every route needs it, the call
 permissions and the call log; `test/channels/` that the WebSocket needs it.
 
@@ -341,4 +378,5 @@ in a container (Playwright's image; nothing installed on the host);
 ## License
 
 MIT (LICENSE). Third-party code included in this repository is listed in NOTICE
-(Cytoscape.js, MIT).
+(Cytoscape.js and the fcose layout, uPlot: MIT; a ROS 2 message type
+generated from its Apache-2.0 definition).

@@ -1,0 +1,52 @@
+<% content_for(:title, "Plots - Asterism Console") %>
+<% content_for(:head, stylesheet_link_tag("uplot", "data-turbo-track": "reload")) %>
+<div class="console" data-controller="plots"
+     data-plots-topics-value="<%= @topics.to_json %>"
+     data-plots-topic-value="<%= @topic %>">
+  <header class="bar">
+    <h1><%= link_to "Asterism Console", root_path %></h1>
+    <span class="hint">Plots</span>
+    <%= render "shared/nav" %>
+  </header>
+
+  <main class="body">
+    <section class="plots" data-plots-target="plots" aria-label="Plots">
+      <p class="hint empty-note" data-plots-target="empty">No plot yet. Pick a topic and its fields on the right, then "Add".</p>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Fields to plot</h2>
+        <form class="picker" data-action="submit->plots#pickKey">
+          <label for="plot-source">Source</label>
+          <select id="plot-source" name="source" data-plots-target="source" data-action="change->plots#pickSource">
+            <option value="">(a ROS 2 topic)</option>
+          </select>
+          <label for="plot-key">or an Asterism key (MessagePack)</label>
+          <div class="row">
+            <input type="text" id="plot-key" name="key" placeholder="demo/imu" data-plots-target="key">
+            <button type="submit">Use</button>
+          </div>
+        </form>
+        <div data-plots-target="meta" class="meta"></div>
+        <div data-plots-target="fields" class="field-list"></div>
+        <form class="add-form" data-action="submit->plots#addFields">
+          <label for="plot-path">Path</label>
+          <input type="text" id="plot-path" name="path" placeholder="linear.x, position[2]" data-plots-target="path">
+          <label for="plot-into">Into</label>
+          <div class="row">
+            <select id="plot-into" name="into" data-plots-target="into"><option value="new">a new plot</option></select>
+            <button type="submit">Add</button>
+          </div>
+        </form>
+        <p class="error" data-plots-target="error"></p>
+      </section>
+      <section class="panel">
+        <h2>How it works</h2>
+        <p class="hint">The bridge subscribes to a topic only while this page plots it (or shows its fields), decodes
+          at most 30 messages a second of it and sends those points. Closing the page stops it.</p>
+        <p class="hint" data-plots-target="status"></p>
+      </section>
+    </aside>
+  </main>
+</div>
