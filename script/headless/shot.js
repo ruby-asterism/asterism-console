@@ -32,6 +32,8 @@ const steps = JSON.parse(process.argv[3] || "[]");
     if (s.select) await page.selectOption(s.select[0], s.select[1]);
     if (s.accept) page.once("dialog", (d) => d.accept());
     if (s.tapNode) await page.evaluate((id) => { const n = window.consoleGraph.getElementById(id); n.select(); n.emit("tap"); }, s.tapNode);
+    if (s.tapEdge) await page.evaluate((id) => { const e = window.consoleGraph.getElementById(id); e.select(); e.emit("tap"); }, s.tapEdge);
+    if (s.eval) logs.push(`eval: ${JSON.stringify(await page.evaluate(s.eval))}`);
     if (s.tapKind) await page.evaluate((k) => { const n = window.consoleGraph.nodes(`[kind = '${k.kind}']`).filter(x => x.data('label').includes(k.label || "")).first(); n.select(); n.emit("tap"); }, s.tapKind);
     if (s.fill) await page.fill(s.fill[0], s.fill[1]);
     if (s.click) await page.click(s.click);

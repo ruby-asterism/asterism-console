@@ -7,7 +7,12 @@
 #   - builds the graph (Bridge::Graph), keeps it in GraphState and
 #     broadcasts what changed (ConsoleChannel);
 #   - runs the page's requests (BridgeRequest: meta, call) and subscribes
-#     to the watched keys (Watch).
+#     to the watched keys (Watch);
+#   - measures ROS 2 topic rates (Bridge::Rates) while a page asks for them
+#     (RateLease): one wildcard per ROS 2 domain for "all topics", or the
+#     one topic whose details are open. Broadcast once a second, what
+#     changed only; paused when the topics together bring in more than
+#     RATES_MAX_BPS.
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -28,6 +33,12 @@ module Bridge
     MAX_WORKERS = 4
     # At most this many values per watched key and second reach the page.
     WATCH_RATE = 10
+    RATES_EVERY = 1.0
+    # Measuring every topic stops (for RATES_PAUSE seconds, the single
+    # topics go on) when the topics bring in more than this many bytes per
+    # second: the bridge receives every message of every topic it measures.
+    RATES_MAX_BPS = Integer(ENV.fetch("ASTERISM_RATES_MAX_BPS", 8_000_000))
+    RATES_PAUSE = 60.0
 
     attr_reader :locator, :node_id, :config
 
@@ -68,6 +79,10 @@ module Bridge
       @rate = {} # watch id => [second, count, dropped]
       @workers = []
       @outbox = Queue.new # values seen on watched keys, broadcast by the main thread
+      @rates = Rates.new
+      @rate_subs = {} # key expression => Subscription
+      @rates_paused_until = 0.0
+      @rates_status = nil
       @stop = false
     end
 
@@ -123,6 +138,9 @@ module Bridge
       end
       @subs = {}
       @rate = {}
+      @rate_subs = {}
+      @rates.clear
+      @rates_status = nil
     end
 
     def stop
@@ -151,7 +169,7 @@ module Bridge
     end
 
     def loop_until_stopped
-      next_admin = next_sync = next_beat = 0.0
+      next_admin = next_sync = next_beat = next_rates = 0.0
       until @stop
         now = mono
         if now >= next_admin
@@ -161,8 +179,13 @@ module Bridge
         publish_graph if @lock.synchronize { @dirty }
         if now >= next_sync
           sync_watches
+          sync_rates
           expire_requests
           next_sync = now + SYNC_EVERY
+        end
+        if now >= next_rates
+          publish_rates
+          next_rates = now + RATES_EVERY
         end
         take_requests
         flush_outbox
@@ -375,9 +398,66 @@ module Bridge
         r[2] += 1
         return
       end
-      @outbox << Payload.describe(sample.payload).merge(
+      @outbox << Payload.describe(sample.payload, key: sample.key).merge(
         "watch_id" => id, "key" => sample.key, "at" => Time.now.strftime("%H:%M:%S.%L"), "dropped" => r[2]
       )
+    end
+
+    # ------------------------------------------------------------------ rates
+
+    # Subscribe to what the live leases ask for, drop the rest.
+    def sync_rates
+      wanted = RateLease.wanted
+      exprs = {}
+      if wanted.include?("*") && mono >= @rates_paused_until
+        ros_domains.each { exprs["#{_1}/**"] = true }
+      end
+      wanted.each do |k|
+        next if k == "*"
+        e = RateLease.key_expr(k)
+        exprs[e] = true unless exprs.key?("#{e.split('/').first}/**")
+      end
+      return if exprs.keys.sort == @rate_subs.keys.sort
+      (@rate_subs.keys - exprs.keys).each do |e|
+        @rate_subs.delete(e).close
+        say "bridge: rates: stop #{e}"
+      end
+      exprs.each_key do |e|
+        next if @rate_subs.key?(e)
+        @rate_subs[e] = @z.subscribe(e) { |sample| @rates.record(sample.key, sample.payload) }
+        say "bridge: rates: measure #{e}"
+      rescue Asterism::Zenoh::Error, ArgumentError => err
+        say "bridge: rates: #{e}: #{err.message}"
+      end
+      @rates.keep_if { |tid| Rates.covered?(tid, @rate_subs.keys) }
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: rates: #{e.message}"
+    end
+
+    def ros_domains
+      @lock.synchronize { @ros_keys.keys.filter_map { _1.split("/")[1] } }.uniq.grep(/\A\d+\z/).sort
+    end
+
+    # Once a second: what changed, and how the measuring stands.
+    def publish_rates
+      wildcards = @rate_subs.keys.select { _1.match?(%r{\A\d+/\*\*\z}) }
+      if wildcards.any? && (bps = @rates.total_bps) > RATES_MAX_BPS
+        wildcards.each { @rate_subs.delete(_1).close }
+        @rates_paused_until = mono + RATES_PAUSE
+        @rates.keep_if { |tid| Rates.covered?(tid, @rate_subs.keys) }
+        say "bridge: rates: #{bps} B/s is over #{RATES_MAX_BPS}; all topics paused for #{RATES_PAUSE.to_i} s"
+      end
+      paused = [ @rates_paused_until - mono, 0 ].max.round
+      status = { "measuring" => @rate_subs.keys.sort, "paused_s" => paused, "limit_bps" => RATES_MAX_BPS,
+                 "topics" => @rates.size, "dropped" => @rates.dropped }
+      snap = @rates.snapshot
+      # Nothing measured yet counts as already told; the pause's countdown
+      # alone is no news.
+      last = @rates_status || status.merge("measuring" => [], "topics" => 0, "dropped" => 0, "paused_s" => 0)
+      same = ->(a, b) { a.merge("paused_s" => a["paused_s"].positive?) == b.merge("paused_s" => b["paused_s"].positive?) }
+      return if snap.empty? && same.(status, last)
+      @rates_status = status
+      ConsoleChannel.send_message("rates", "rates" => snap, "status" => status)
     end
 
     # Called on the receiving thread, so the database (Action Cable's
@@ -397,6 +477,9 @@ module Bridge
       @workers.clear
       @subs.each_value { _1[1].close rescue nil }
       @subs.clear
+      @rate_subs.each_value { _1.close rescue nil }
+      @rate_subs.clear
+      @rates.clear
       Asterism.close
       @z&.close
       @z = nil

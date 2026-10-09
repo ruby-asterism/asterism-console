@@ -7,10 +7,10 @@
 #     script/headless/run out.png ['[{"tapNode":"r_topic:0/chatter"},{"wait":1000}]']
 #
 # With CONSOLE_EMAIL / CONSOLE_PASSWORD it signs in first.
-# Steps (JSON): tapNode, tapKind, fill, click, check, uncheck, press, wait,
+# Steps (JSON): tapNode, tapEdge, tapKind, fill, click, check, uncheck, press, wait,
 # goto (a path), download ([selector, file]), select ([selector, value]),
 # accept (the next confirm dialog), shot, text (prints the element's text),
-# graph (prints the nodes by kind).
+# graph (prints the nodes by kind), eval (a JS expression; prints its value).
 # The PNG is written next to this script.
 set -e
 dir=$(cd "$(dirname "$0")" && pwd)

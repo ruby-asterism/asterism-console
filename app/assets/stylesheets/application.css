@@ -106,6 +106,11 @@ details { margin-top: 8px; font-size: 12px; }
 .swatch.shape-diamond { transform: rotate(45deg) scale(0.8); border-radius: 0; }
 .swatch.halo { width: 10px; height: 10px; border-radius: 50%; background: var(--panel); margin: 0 3px; vertical-align: middle; }
 .swatch.dashed { border: 2px dashed var(--text); background: transparent; }
+.swatch.line { width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; }
+.pill { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 8px; color: #fff; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center; }
+ul.plain { list-style: none; margin: 2px 0 0; padding: 0; font-size: 12px; }
+ul.plain li { padding: 1px 0; word-break: break-all; }
+.layers .sep { width: 1px; align-self: stretch; background: var(--line); }
 
 /* The pages around the graph: sign-in, account, permissions, call log, relay. */
 .bar h1 a { color: inherit; text-decoration: none; }

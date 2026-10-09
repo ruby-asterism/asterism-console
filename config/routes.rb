@@ -14,6 +14,7 @@ Rails.application.routes.draw do
   resource :graph, only: :show
   resources :bridge_requests, only: %i[create show]
   resources :watches, only: %i[index create destroy]
+  resources :rates, only: :create
   resources :call_permissions, only: %i[index create destroy]
   resources :calls, only: :index
 

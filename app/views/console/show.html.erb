@@ -13,6 +13,15 @@
     <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
     <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
     <label><input type="checkbox" data-layer="registry" data-action="console#toggleLayer" checked> Relay registry</label>
+    <span class="sep" aria-hidden="true"></span>
+    <label title="ROS 2 topics as nodes between their publishers and subscribers, instead of edges">
+      <input type="checkbox" name="topic_nodes" data-action="console#toggleTopicNodes"> Topics as nodes</label>
+    <label title="Topics every rclcpp node has">
+      <input type="checkbox" name="hide_debug" data-action="console#toggleDebug" checked> Hide /rosout, /parameter_events</label>
+    <label><input type="checkbox" name="show_hz" data-action="console#toggleHz" checked> Hz on topics</label>
+    <label title="The bridge subscribes to every ROS 2 topic while this is ticked (each topic's messages then reach the bridge)">
+      <input type="checkbox" name="measure_all" data-action="console#toggleMeasure"> Measure all topics</label>
+    <span class="hint" data-console-target="rateStatus"></span>
     <button type="button" data-action="console#relayout">Lay out again</button>
     <span class="counts" data-console-target="counts"></span>
   </nav>
@@ -23,7 +32,7 @@
     <aside class="side">
       <section class="panel details" data-console-target="details">
         <h2>Details</h2>
-        <p class="hint">Click a node in the graph.</p>
+        <p class="hint">Click a node or a topic edge in the graph.</p>
       </section>
 
       <section class="panel watches">

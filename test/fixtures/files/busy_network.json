@@ -825,7 +825,7 @@
       "size": 724,
       "at": 1791590399984,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590399.967, frame_id \"odom\""
     },
     "r_topic:0/joint_states": {
       "hz": 50.0,
@@ -834,7 +834,7 @@
       "size": 132,
       "at": 1791590399990,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590399.980, frame_id \"\""
     },
     "r_topic:0/tf": {
       "hz": 80.0,
@@ -843,7 +843,7 @@
       "size": 236,
       "at": 1791590399994,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "CDR 00 01 00 00 01 00 00 00 ..."
     },
     "r_topic:0/tf_static": {
       "hz": 0.0,
@@ -852,7 +852,7 @@
       "size": 412,
       "at": 1791590396000,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "CDR 00 01 00 00 02 00 00 00 ..."
     },
     "r_topic:0/scan": {
       "hz": 10.0,
@@ -861,7 +861,7 @@
       "size": 2928,
       "at": 1791590399950,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590399.900, frame_id \"laser\""
     },
     "r_topic:0/map": {
       "hz": 0.2,
@@ -870,7 +870,7 @@
       "size": 160268,
       "at": 1791590397500,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590395.000, frame_id \"map\""
     },
     "r_topic:0/battery": {
       "hz": 1.0,
@@ -879,7 +879,7 @@
       "size": 88,
       "at": 1791590399500,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590399.500, frame_id \"base_link\""
     },
     "r_topic:0/camera/image_raw": {
       "hz": 15.0,
@@ -888,7 +888,7 @@
       "size": 921664,
       "at": 1791590399967,
       "format": "cdr",
-      "text": "CDR 00 01 00 00 ..."
+      "text": "stamp 1791590399.933, frame_id \"camera_optical\""
     },
     "r_topic:0/rosout": {
       "hz": 0.5,

@@ -5,16 +5,29 @@ calls the methods that Asterism nodes expose.
 
 - **Routers and sessions** from the router's admin space (`@/<zid>/router`,
   its linkstate and token table).
-- **Asterism** nodes, apps and exposed objects from their liveliness tokens
-  (`asterism/**`).
-- **ROS 2** nodes, topics (publishers / subscribers, with their types) and
-  services from rmw_zenoh's liveliness tokens (`@ros2_lv/**`).
+- **Asterism** nodes from their liveliness tokens (`asterism/**`), each a
+  box holding its apps, each app a box holding its exposed objects.
+- **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
+  rqt_graph's nodes-only view: a topic is an edge from the node that
+  publishes it to the node that subscribes to it, labelled with its name
+  (and rate). A node's services, and its topics nobody is at the other end
+  of, are its attributes: a badge (services in red, unmatched topics in
+  orange) and the details. "Topics as nodes" draws the topics as nodes
+  between their ends instead; "Hide /rosout, /parameter_events" (on by
+  default) leaves out the topics every rclcpp node has.
+- **Topic rates** like rqt_topic: rate (Hz), bandwidth, the number of
+  messages and the last one (time, size, a short preview: strings,
+  numbers, `geometry_msgs` vectors and twists, `/rosout` lines, the header
+  of stamped messages), on the edges and in the details (below).
 
-Nodes appear and disappear without reloading. Click an Asterism object to
-see its exposed methods and call them with JSON arguments (the return
-value, `RemoteError` or `Timeout`, and the time it took). Click a ROS 2
-topic for its type, publishers and subscribers. The watch panel shows the
-values arriving on any key.
+Nodes appear and disappear without reloading, and what is on the screen
+stays where it is: only new nodes are placed, next to their neighbours
+("Lay out again" lays out everything; fcose, compound-aware). Click an
+Asterism object to see its exposed methods and call them with JSON
+arguments (the return value, `RemoteError` or `Timeout`, and the time it
+took). Click a ROS 2 node for its topics and services (the parameter ones
+folded), a topic edge or a topic for its type, ends, rate and last value.
+The watch panel shows the values arriving on any key.
 
 Everything needs a signed-in user: the graph, the values, the calls and
 the WebSocket. What the page may call is limited to the combinations an
@@ -43,6 +56,7 @@ bin/bridge                  # in another terminal: the one process on the networ
 | `ASTERISM_TLS_CERT`, `ASTERISM_TLS_KEY` | | mutual TLS: the bridge's certificate and key |
 | `ASTERISM_ZENOH_CONFIG` | | a zenoh configuration file (JSON5) for both sessions, instead of the three above |
 | `ASTERISM_CONSOLE_NODE` | `console` | the bridge's Asterism node ID (app `console`) |
+| `ASTERISM_RATES_MAX_BPS` | `8000000` | measuring all topics pauses above this many bytes per second (see Topic rates) |
 | `CONSOLE_BIND` | `127.0.0.1` | the address the server listens on (see Security) |
 | `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
 | `ASTERISM_DIR`, `ASTERISM_ZENOH_DIR` | `../asterism`, `../asterism-zenoh` | the gem checkouts |
@@ -269,8 +283,21 @@ even on a LAN. What it does, and what it assumes:
   the answer back. Methods that are not exposed are refused by the node
   that owns the object (`RemoteError NoMethodError ... (not exposed)`).
 - **Watches** are rows too; the bridge subscribes to each key and sends at
-  most 10 values per key and second (text, MessagePack, ROS 2 CDR strings
-  or hex).
+  most 10 values per key and second (text, MessagePack, ROS 2 CDR decoded
+  as for the rates, or hex).
+- **Topic rates** (`Bridge::Rates`) are measured only while a page asks:
+  "Measure all topics" (the page renews a `RateLease` "*" every 10 s; it
+  lasts 30 s) subscribes to `<domain>/**` once per ROS 2 domain, and the
+  details of a topic or topic edge lease just those topics
+  (`<domain>/<name>/**`). Per topic the bridge counts messages and bytes in
+  one-second buckets over a 5 s window and keeps the first 4 KB of the last
+  message; it decodes the preview only when a new one came, and broadcasts
+  what changed once a second (`rates`). At most 300 topics. **The cost**:
+  every message of every measured topic reaches the bridge (over a relay,
+  across it), so "all topics" with a camera on the network is that
+  camera's bandwidth. When the measured topics together bring in more than
+  `ASTERISM_RATES_MAX_BPS` (default 8000000 bytes/s) the bridge drops the
+  wildcards for 60 s (single topics go on) and the page says so.
 
 ## Tests
 
@@ -279,8 +306,10 @@ bin/rails test
 ```
 
 `test/lib/bridge/` covers the graph (from inputs shaped like zenohd 1.10.1
-and rmw_zenoh 0.2.11 give them), the diff, payloads and how the bridge
-writes answers back; `test/controllers/` the page, the graph JSON,
+and rmw_zenoh 0.2.11 give them, and the busy fixture: services as
+attributes, topic edges, unmatched topics, nesting), the diff, payloads and
+CDR previews, the rates (window, aggregation, bounds), what the bridge
+subscribes to for the rate leases, and how it writes answers back; `test/controllers/` the page, the graph JSON,
 requests, watches, sign-in (with TOTP), that every route needs it, the call
 permissions and the call log; `test/channels/` that the WebSocket needs it.
 

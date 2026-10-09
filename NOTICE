@@ -6,6 +6,15 @@ This repository includes third-party code:
 - vendor/javascript/cytoscape.js: Cytoscape.js 3.34.3
   (https://github.com/cytoscape/cytoscape.js), MIT License,
   Copyright (c) 2016-2026, The Cytoscape Consortium.
+- vendor/javascript/cytoscape-fcose.js: cytoscape-fcose 2.2.0
+  (https://github.com/iVis-at-Bilkent/cytoscape.js-fcose), MIT License,
+  Copyright (c) 2018 - present, iVis-at-Bilkent.
+- vendor/javascript/cose-base.js: cose-base 2.2.0
+  (https://github.com/iVis-at-Bilkent/cose-base), MIT License,
+  Copyright (c) 2019 - present, iVis@Bilkent.
+- vendor/javascript/layout-base.js: layout-base 2.0.1
+  (https://github.com/iVis-at-Bilkent/layout-base), MIT License,
+  Copyright (c) 2019 iVis@Bilkent.
 
 Not included here (installed by Bundler / importmap from their own
 packages): Ruby on Rails, Hotwire (Turbo, Stimulus), Action Cable, and the

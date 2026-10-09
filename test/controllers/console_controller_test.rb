@@ -18,6 +18,7 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Asterism Console"
     assert_select ".nav .who", /user@example.com/
     assert_select "input[type=checkbox][data-layer]", 4
+    %w[topic_nodes hide_debug show_hz measure_all].each { assert_select "input[type=checkbox][name=#{_1}]" }
     assert_select "[data-controller=console]" do |el|
       state = JSON.parse(el.first["data-console-state-value"])
       assert_equal 3, state["version"]
@@ -36,6 +37,21 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     assert_equal 3, body["version"]
     refute body["bridge"]["alive"]
     assert_equal 3, body["graph"]["nodes"].size
+  end
+
+  test "fixture mode: the recorded network and its rates, nothing saved" do
+    Rails.application.config.x.console_fixture = Rails.root.join("test/fixtures/files/busy_network.json").to_s
+    get root_path
+    assert_response :success
+    assert_select "[data-controller=console]" do |el|
+      state = JSON.parse(el.first["data-console-state-value"])
+      assert state["bridge"]["fixture"]
+      assert_includes state["graph"]["nodes"].map { _1["id"] }, "a_app:fmruby-bbbbbb/sensors"
+      assert_equal 10.0, state["rates"]["r_topic:0/cmd_vel"]["hz"]
+    end
+    assert_equal 3, GraphState.first.version, "the saved graph is left alone"
+  ensure
+    Rails.application.config.x.console_fixture = nil
   end
 
   test "a page with no bridge yet" do

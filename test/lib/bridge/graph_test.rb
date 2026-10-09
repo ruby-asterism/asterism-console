@@ -77,14 +77,14 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_equal "peer", node(g, "session:#{ROS}")["data"]["whatami"]
   end
 
-  test "Asterism nodes, apps and objects, and the session that carries them" do
+  test "Asterism nodes, apps and objects nested in them, and the session that carries them" do
     g = graph
-    node(g, "a_node:fmruby-aaaaaa")
-    node(g, "a_app:fmruby-aaaaaa/demo")
+    assert_nil node(g, "a_node:fmruby-aaaaaa")["parent"]
+    assert_equal "a_node:fmruby-aaaaaa", node(g, "a_app:fmruby-aaaaaa/demo")["parent"]
     o = node(g, "a_object:fmruby-aaaaaa/demo/screen")
     assert_equal "fmruby-aaaaaa/demo/screen", o["data"]["path"]
-    assert edge?(g, "has_app", "a_node:fmruby-aaaaaa", "a_app:fmruby-aaaaaa/demo")
-    assert edge?(g, "exposes", "a_app:fmruby-aaaaaa/demo", "a_object:fmruby-aaaaaa/demo/info")
+    assert_equal "a_app:fmruby-aaaaaa/demo", o["parent"]
+    refute g["edges"].any? { %w[has_app exposes].include?(_1["kind"]) }, "nesting, not edges"
     assert edge?(g, "carries", "session:#{BOARD}", "a_node:fmruby-aaaaaa")
     assert_equal "cross", g["edges"].find { _1["kind"] == "carries" }["layer"]
     # Keys of other shapes are not Asterism's objects.
@@ -100,7 +100,7 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     refute node(g, "session:#{BOARD}")["data"]["self"]
   end
 
-  test "ROS 2 nodes, topics with their types, and services" do
+  test "ROS 2 nodes, topics with their types, and services as attributes of the nodes" do
     g = graph
     n = node(g, "r_node:#{ROS}/0")
     assert_equal "/talker", n["data"]["name"]
@@ -109,9 +109,10 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_equal "std_msgs/msg/String", t["data"]["type"]
     assert edge?(g, "publishes", "r_node:#{ROS}/0", "r_topic:0/chatter")
     assert edge?(g, "subscribes", "r_topic:0/chatter_back", "r_node:#{ROS}/0")
-    svc = node(g, "r_service:0/talker/get_parameters")
-    assert_equal "rcl_interfaces/srv/GetParameters", svc["data"]["type"]
-    assert edge?(g, "serves", "r_service:0/talker/get_parameters", "r_node:#{ROS}/0")
+    assert_equal [ { "name" => "/talker/get_parameters", "type" => "rcl_interfaces/srv/GetParameters", "domain" => "0",
+                     "parameter" => true } ], n["data"]["services"]
+    refute g["nodes"].any? { _1["kind"] == "r_service" }
+    refute g["edges"].any? { %w[serves calls].include?(_1["kind"]) }
     assert edge?(g, "carries", "session:#{ROS}", "r_node:#{ROS}/0")
     assert_equal 1, g["nodes"].count { _1["kind"] == "r_node" }
   end
@@ -149,7 +150,7 @@ class Bridge::GraphTest < ActiveSupport::TestCase
                             self_node: "console", self_zids: [ READER ]).to_h
     d = Bridge::Graph.diff(a, b)
     assert_equal [ "a_object:fmruby-aaaaaa/demo/info" ], d["remove_nodes"]
-    assert_equal [ "exposes:a_app:fmruby-aaaaaa/demo->a_object:fmruby-aaaaaa/demo/info" ], d["remove_edges"]
+    assert_empty d["remove_edges"]
     assert_empty d["add_nodes"]
 
     d = Bridge::Graph.diff(b, a)

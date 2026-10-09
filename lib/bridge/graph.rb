@@ -29,13 +29,33 @@
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
 # "source" / "target" (edges). Sorted by id, so equal networks give equal
 # graphs and the diff is stable.
+#
+# The shape (V2, like rqt_graph's nodes-only view):
+#   - Asterism apps and objects nest in their node: they carry "parent"
+#     (the node's / app's id; compound nodes in the page), no edges.
+#   - ROS 2 services are not nodes: each ROS 2 node lists the services it
+#     serves and calls (data "services" / "clients", with "parameter" for
+#     the parameter services every rclcpp node has).
+#   - ROS 2 topics are edges from the publishing node to the subscribing
+#     node ("topic_link", one per pair, its "topics" listed). Topics stay as
+#     nodes with "publishes" / "subscribes" edges too, for the page's
+#     topics-as-nodes view; data "matched" says whether a topic has a
+#     publisher and a subscriber on different nodes. A node's topics with
+#     no counterpart are its data "unmatched".
 module Bridge
   class Graph
     LAYERS = {
       "router" => "infra", "session" => "infra", "registered" => "infra",
       "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism",
-      "r_node" => "ros", "r_topic" => "ros", "r_service" => "ros"
+      "r_node" => "ros", "r_topic" => "ros"
     }.freeze
+
+    # The services every rclcpp node serves for its parameters (and its
+    # type description): /<node>/<one of these>.
+    PARAMETER_SERVICES = %w[
+      describe_parameters get_parameters set_parameters list_parameters get_parameter_types
+      set_parameters_atomically get_type_description
+    ].freeze
 
     ROS_ENTITIES = {
       "NN" => :node, "MP" => :publisher, "MS" => :subscriber,
@@ -51,6 +71,7 @@ module Bridge
       g.add_own_links(own_links)
       g.add_asterism(asterism, self_node)
       g.add_ros(ros)
+      g.finish_ros
       g.link_tokens(admin)
       g.add_self_cert(self_cert)
       g.add_registry(registry) if registry
@@ -127,10 +148,16 @@ module Bridge
       @session_of = {} # normalized zid => node id (router or session)
     end
 
-    def node(id, kind, label, data = {})
+    def node(id, kind, label, data = {}, parent = nil)
       n = (@nodes[id] ||= { "id" => id, "kind" => kind, "layer" => LAYERS.fetch(kind), "label" => label, "data" => {} })
+      n["parent"] = parent if parent
       n["data"].merge!(data.transform_keys(&:to_s))
       n
+    end
+
+    # A parameter service of a node (/<node>/describe_parameters, ...).
+    def self.parameter_service?(name)
+      PARAMETER_SERVICES.include?(name.to_s.split("/").last)
     end
 
     def edge(source, target, kind, label = nil)
@@ -232,11 +259,9 @@ module Bridge
           nid, app, obj = parts
           a_node(nid, self_node)
           aid = "a_app:#{nid}/#{app}"
-          node(aid, "a_app", app, "node" => nid, "app" => app)
+          node(aid, "a_app", app, { "node" => nid, "app" => app }, "a_node:#{nid}")
           oid = "a_object:#{nid}/#{app}/#{obj}"
-          node(oid, "a_object", obj, "path" => "#{nid}/#{app}/#{obj}", "node" => nid, "app" => app)
-          edge("a_node:#{nid}", aid, "has_app")
-          edge(aid, oid, "exposes")
+          node(oid, "a_object", obj, { "path" => "#{nid}/#{app}/#{obj}", "node" => nid, "app" => app }, aid)
         end
       end
     end
@@ -248,6 +273,8 @@ module Bridge
     # -------------------------------------------------------------------- ros
 
     def add_ros(keys)
+      @ros_topics = {}   # topic id => { "publishers" => Set, "subscribers" => Set }
+      @ros_services = {} # node id => { "services" => {name => entry}, "clients" => {...} }
       keys.each do |key|
         t = self.class.parse_ros_token(key)
         next unless t
@@ -257,21 +284,52 @@ module Bridge
           tid = "r_topic:#{t[:domain]}#{t[:name]}"
           node(tid, "r_topic", t[:name], "name" => t[:name], "type" => t[:type],
                "type_hash" => t[:type_hash], "domain" => t[:domain])
+          ends = (@ros_topics[tid] ||= { "publishers" => {}, "subscribers" => {} })
           if t[:kind] == :publisher
+            ends["publishers"][nid] = true
             edge(nid, tid, "publishes")
           else
+            ends["subscribers"][nid] = true
             edge(tid, nid, "subscribes")
           end
         when :server, :client
-          sid = "r_service:#{t[:domain]}#{t[:name]}"
-          node(sid, "r_service", t[:name], "name" => t[:name], "type" => t[:type], "domain" => t[:domain])
-          if t[:kind] == :server
-            edge(sid, nid, "serves")
-          else
-            edge(nid, sid, "calls")
-          end
+          role = t[:kind] == :server ? "services" : "clients"
+          entry = { "name" => t[:name], "type" => t[:type], "domain" => t[:domain],
+                    "parameter" => self.class.parameter_service?(t[:name]) }
+          ((@ros_services[nid] ||= { "services" => {}, "clients" => {} })[role])[t[:name]] = entry
         end
       end
+    end
+
+    # After all the tokens: the services as node attributes, topic edges
+    # between the nodes, and the topics that have no counterpart.
+    def finish_ros
+      (@ros_services || {}).each do |nid, roles|
+        roles.each do |role, by_name|
+          @nodes[nid]["data"][role] = by_name.keys.sort.map { by_name[_1] }
+        end
+      end
+      unmatched = Hash.new { |h, k| h[k] = [] }
+      links = Hash.new { |h, k| h[k] = [] }
+      (@ros_topics || {}).sort.each do |tid, ends|
+        pubs = ends["publishers"].keys.sort
+        subs = ends["subscribers"].keys.sort
+        topic = @nodes[tid]
+        topic["data"]["publishers"] = pubs
+        topic["data"]["subscribers"] = subs
+        pairs = pubs.product(subs).reject { |a, b| a == b }
+        topic["data"]["matched"] = pairs.any?
+        pairs.each { |a, b| links[[ a, b ]] << tid }
+        brief = topic["data"].slice("name", "type").merge("topic" => tid)
+        pubs.each { |p| unmatched[p] << brief.merge("role" => "publishes") if (subs - [ p ]).empty? }
+        subs.each { |q| unmatched[q] << brief.merge("role" => "subscribes") if (pubs - [ q ]).empty? }
+      end
+      links.each do |(a, b), tids|
+        e = edge(a, b, "topic_link")
+        e["topics"] = tids.sort
+        e["label"] = tids.sort.map { @nodes[_1]["label"] }.join("\n")
+      end
+      unmatched.each { |nid, list| @nodes[nid]["data"]["unmatched"] = list }
     end
 
     def ros_node(t)

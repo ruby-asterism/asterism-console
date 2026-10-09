@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_09_120000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -51,6 +51,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_010000) do
     t.text "bridge_info"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "rate_leases", force: :cascade do |t|
+    t.string "key", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_rate_leases_on_key", unique: true
   end
 
   create_table "relay_applies", force: :cascade do |t|
