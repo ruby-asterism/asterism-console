@@ -24,7 +24,7 @@ Nodes appear and disappear without reloading, and what is on the screen
 stays where it is: only new nodes are placed, next to their neighbours
 ("Lay out again" lays out everything; fcose, compound-aware). Click an
 Asterism object to see its exposed methods and call them with JSON
-arguments (the return value, `RemoteError` or `Timeout`, and the time it
+arguments (the return value, `RemoteError` or `TimeoutError`, and the time it
 took). Click a ROS 2 node for its topics and services (the parameter ones
 folded), a topic edge or a topic for its type, ends, rate and last value.
 The watch panel shows the values arriving on any key.
@@ -67,16 +67,28 @@ node.
 
 ### The Asterism gems
 
-Until 0.3.0 is on rubygems.org, the Gemfile takes them from the checkouts
-next to this repository (`path:`; build asterism-zenoh's C extension there
-with `rake compile`, or let Bundler build it). Once they are published,
-replace the two `path:` lines with
+The console needs asterism and asterism-zenoh 0.4.0 (the version in
+`Gemfile.lock`). The Gemfile takes them from the checkouts next to this
+repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
+asterism-zenoh's C extension there with `rake compile`, or let Bundler
+build it). To use the gems from rubygems.org instead, replace the two
+`path:` lines of the Gemfile with
 
 ```ruby
-gem "asterism", "~> 0.3.0", require: false   # asterism-zenoh comes with it
+gem "asterism", "~> 0.4.0", require: false   # asterism-zenoh comes with it
 ```
 
-and run `bundle install`.
+and run `bundle install`. Installing asterism-zenoh compiles a C extension
+against the prebuilt zenoh-c release it pins (a C compiler is all it
+needs; see asterism-zenoh's README for using a zenoh-c of your own).
+
+The console uses no call that 0.4.0 deprecates. To check after a change,
+run the tests and the bridge with deprecated calls raising:
+
+```
+ASTERISM_DEPRECATIONS=raise bin/rails test
+ASTERISM_DEPRECATIONS=raise bin/bridge
+```
 
 ## Two routers: a relay with mutual TLS and an ACL
 
@@ -279,7 +291,7 @@ even on a LAN. What it does, and what it assumes:
   The admin space is read every 2 s, tokens follow liveliness at once.
 - **Calls from the page** go through the database: the page creates a
   `BridgeRequest` (meta or call, with a timeout up to 30 s), the bridge
-  picks it up, runs it with `Asterism.meta` / `Asterism.call` and writes
+  picks it up, runs it through an Asterism proxy (`Bridge::Objects`) and writes
   the answer back. Methods that are not exposed are refused by the node
   that owns the object (`RemoteError NoMethodError ... (not exposed)`).
 - **Watches** are rows too; the bridge subscribes to each key and sends at

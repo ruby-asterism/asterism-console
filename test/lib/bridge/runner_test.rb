@@ -13,18 +13,18 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
       @calls = []
     end
 
-    def meta(path, timeout_ms)
-      @calls << [ :meta, path, timeout_ms ]
+    def meta(path, timeout:)
+      @calls << [ :meta, path, timeout ]
       { "methods" => [ [ "say", -1 ], [ "status", 0 ] ] }
     end
 
-    def call(path, name, args, kwargs, timeout_ms)
-      @calls << [ :call, path, name, args, kwargs, timeout_ms ]
+    def call(path, name, args, kwargs, timeout:)
+      @calls << [ :call, path, name, args, kwargs, timeout ]
       case name
       when "say" then args[0].to_s.length
       when "status" then { "name" => "fmruby-aaaaaa", "up_ms" => 5 }
       when "secret" then raise Asterism::RemoteError.new("NoMethodError", "undefined method 'secret' (not exposed)")
-      when "slow" then raise Asterism::Timeout, "no answer within #{timeout_ms} ms"
+      when "slow" then raise Asterism::TimeoutError, "no answer within #{timeout} s (#{(timeout * 1000).round} ms)"
       when "gone" then raise Asterism::Disconnected, "the connection was lost"
       end
     end
@@ -49,7 +49,7 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
     assert_equal 5, r.result_value
     assert r.took_ms >= 0
     assert r.finished_at
-    assert_equal [ :call, "fmruby-aaaaaa/demo/screen", "say", [ "hello" ], { tag: "x" }, 2500 ], @objects.calls.last
+    assert_equal [ :call, "fmruby-aaaaaa/demo/screen", "say", [ "hello" ], { tag: "x" }, 2.5 ], @objects.calls.last
   end
 
   test "a Hash comes back as JSON" do
@@ -66,8 +66,8 @@ class Bridge::RunnerTest < ActiveSupport::TestCase
     assert_equal [ "remote_error", "NoMethodError" ], [ r.status, r.error_class ]
     assert_match(/not exposed/, r.error_message)
     r = run_request(method_name: "slow")
-    assert_equal "timeout", r.status
-    assert_match(/2500 ms/, r.error_message)
+    assert_equal [ "timeout", "Asterism::TimeoutError" ], [ r.status, r.error_class ]
+    assert_match(/2.5 s/, r.error_message)
     r = run_request(method_name: "gone")
     assert_equal [ "error", "Asterism::Disconnected" ], [ r.status, r.error_class ]
   end

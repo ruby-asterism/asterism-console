@@ -67,7 +67,7 @@ module Bridge
       @node_id = node_id
       @app = app
       @log = logger
-      @objects = objects # what runs meta and calls (Asterism; the tests pass a stand-in)
+      @objects = objects # what runs meta and calls (Bridge::Objects; the tests pass a stand-in)
       @lock = Mutex.new
       @asterism_keys = {}
       @ros_keys = {}
@@ -92,12 +92,12 @@ module Bridge
     # yet) it tries again every RETRY_AFTER seconds.
     def run
       require "asterism"
-      @objects ||= Asterism
+      @objects ||= Objects.new
       trap_signals
       until @stop
         begin
           serve
-        rescue Asterism::Error, Asterism::Zenoh::Error => e
+        rescue Asterism::Error => e # Zenoh::Error and ClosedError are under it
           say "bridge: #{e.class}: #{e.message}"
         ensure
           shutdown
@@ -259,6 +259,8 @@ module Bridge
       return @self_cert if defined?(@self_cert)
       file = @config.is_a?(Hash) ? @config["transport/link/tls/connect_certificate"] : nil
       @self_cert = file && OpenSSL::X509::Certificate.new(File.read(file)).subject.to_a.find { _1[0] == "CN" }&.dig(1)
+    rescue Asterism::Zenoh::ClosedError
+      raise # the main loop notices and connects again
     rescue OpenSSL::X509::CertificateError, SystemCallError
       @self_cert = nil
     end
@@ -296,7 +298,7 @@ module Bridge
 
     def bridge_info
       { "router" => @locator, "node" => @node_id, "zid" => @z.zid, "routers" => @z.router_zids,
-        "tls" => @locator.start_with?("tls/"), "pid" => Process.pid }
+        "connections" => @z.connection_count, "tls" => @locator.start_with?("tls/"), "pid" => Process.pid }
     end
 
     def heartbeat
@@ -335,21 +337,21 @@ module Bridge
         return
       end
       t0 = mono
-      timeout_ms = (req.timeout_s * 1000).round
+      timeout = req.timeout_s.to_f
       attrs =
         begin
           value =
             case req.kind
-            when "meta" then @objects.meta(req.path, timeout_ms)
+            when "meta" then @objects.meta(req.path, timeout: timeout)
             when "call"
               kw = req.kwargs_value.transform_keys(&:to_sym)
-              @objects.call(req.path, req.method_name, req.args_value, kw, timeout_ms)
+              @objects.call(req.path, req.method_name, req.args_value, kw, timeout: timeout)
             end
           { status: "ok", result: JSON.generate([ value ]) }
         rescue Asterism::RemoteError => e
           { status: "remote_error", error_class: e.remote_class, error_message: e.remote_message }
-        rescue Asterism::Timeout => e
-          { status: "timeout", error_class: "Asterism::Timeout", error_message: e.message }
+        rescue Asterism::TimeoutError => e
+          { status: "timeout", error_class: e.class.name, error_message: e.message }
         rescue Asterism::Error, ArgumentError, JSON::GeneratorError => e
           { status: "error", error_class: e.class.name, error_message: e.message }
         end

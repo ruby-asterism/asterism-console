@@ -46,7 +46,7 @@ const EDGE_COLORS = {
 const BADGE = { services: "#c2185b", unmatched: "#ef6c00" }
 
 const STATUS_TEXT = {
-  ok: "ok", remote_error: "RemoteError", timeout: "Timeout", error: "error",
+  ok: "ok", remote_error: "RemoteError", timeout: "TimeoutError", error: "error",
   expired: "expired", pending: "waiting for the bridge", running: "running", denied: "not permitted",
 }
 
@@ -585,7 +585,7 @@ export default class extends Controller {
     if (b.alive) this.lastBeat = Date.now()
     const el = this.bridgeTarget
     el.classList.toggle("down", !b.alive)
-    el.textContent = b.alive ? `bridge: ${b.node || "?"} on ${b.router || "?"}` : "bridge: not running (start bin/bridge)"
+    el.textContent = b.alive ? `bridge: ${b.node || "?"} on ${b.router || "?"}${b.connections === 0 ? " (no router connected)" : ""}` : "bridge: not running (start bin/bridge)"
   }
 
   checkBeat() {
