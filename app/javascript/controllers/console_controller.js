@@ -363,25 +363,51 @@ export default class extends Controller {
     if (fresh.empty()) return
     const placed = eles.nodes().filter((n) => this.placed.has(n.id()) && n.isChildless())
     if (placed.empty()) return this.layoutAll()
+    // Nodes given a place in this pass count as placed for the ones after
+    // them: a whole board that comes back (node, app and objects in one
+    // diff) is put together in one spot instead of each object on its own.
+    const now = new Set()
+    const isPlaced = (x) => this.placed.has(x.id()) || now.has(x.id())
+    const spots = new Map() // outermost box => where its first child went
+    const grids = new Map() // first child of a box new as a whole => [[node, offset]]
     fresh.filter((n) => n.isChildless()).forEach((n) => {
+      now.add(n.id())
       // In a box with placed siblings: next to them, inside the box.
-      const siblings = n.parent().nonempty() ? n.parent().children().filter((x) => this.placed.has(x.id())) : n.parent()
+      const siblings = n.parent().nonempty() ? n.parent().children().filter((x) => x !== n && isPlaced(x)) : n.parent()
+      if (siblings.nonempty() && siblings.every((x) => now.has(x.id()))) {
+        // A box that is new as a whole: two to a row, as fcose draws them.
+        const k = siblings.length
+        const off = { x: (k % 2) * 50, y: Math.floor(k / 2) * 55 }
+        const first = siblings.first()
+        const p0 = first.position()
+        n.position({ x: p0.x + off.x, y: p0.y + off.y })
+        if (!grids.has(first.id())) grids.set(first.id(), [[first, { x: 0, y: 0 }]])
+        grids.get(first.id()).push([n, off])
+        return
+      }
       if (siblings.nonempty()) {
         const bb = siblings.boundingBox({ includeLabels: false })
         n.position({ x: bb.x2 + 18, y: (bb.y1 + bb.y2) / 2 })
         return
       }
-      let near = n.neighborhood("node").filter((x) => this.placed.has(x.id()) && !x.hasClass("off"))
-      if (near.empty() && n.parent().nonempty()) near = n.parent().descendants().filter((x) => this.placed.has(x.id()))
-      if (near.empty()) near = n.parent().nonempty() ? n.parent().neighborhood("node").filter((x) => this.placed.has(x.id())) : near
+      let near = n.neighborhood("node").filter((x) => isPlaced(x) && !x.hasClass("off"))
+      if (near.empty() && n.parent().nonempty()) near = n.parent().descendants().filter((x) => x !== n && isPlaced(x))
+      if (near.empty()) near = n.ancestors().neighborhood("node").filter((x) => isPlaced(x) && x.isChildless())
+      const box = n.ancestors().last()
       let p
       if (near.nonempty()) {
         const xs = near.map((x) => x.position())
         p = { x: xs.reduce((a, q) => a + q.x, 0) / xs.length, y: xs.reduce((a, q) => a + q.y, 0) / xs.length }
+      } else if (box.nonempty() && spots.has(box.id())) {
+        p = spots.get(box.id())
       } else {
+        // Nothing to go next to: beside the drawing, but inside the view
+        // (the view does not move, so a node placed past it is not seen).
         const bb = placed.boundingBox()
-        p = { x: bb.x2 + 80, y: bb.y1 + Math.random() * bb.h }
+        const ext = this.cy.extent()
+        p = { x: Math.max(Math.min(bb.x2 + 80, ext.x2 - 120), ext.x1 + 60), y: (bb.y1 + bb.y2) / 2 }
       }
+      if (box.nonempty() && !spots.has(box.id())) spots.set(box.id(), p)
       n.position({ x: p.x + (Math.random() - 0.5) * 60, y: p.y + (Math.random() - 0.5) * 60 })
     })
     const fixed = placed.map((n) => ({ nodeId: n.id(), position: { ...n.position() } }))
@@ -401,11 +427,45 @@ export default class extends Controller {
       this.cy.batch(() => {
         fresh.filter((n) => n.isChildless()).forEach((n) => { const p = n.position(); n.position({ x: p.x - dx, y: p.y - dy }) })
         for (const f of fixed) this.cy.getElementById(f.nodeId).position(f.position)
+        // fcose spreads the children of a new box apart (nothing holds
+        // them): keep the box where fcose put it, its children in the grid.
+        for (const members of grids.values()) {
+          const c = { x: 0, y: 0 }
+          for (const [m, off] of members) { c.x += m.position().x - off.x; c.y += m.position().y - off.y }
+          c.x /= members.length
+          c.y /= members.length
+          for (const [m, off] of members) m.position({ x: c.x + off.x, y: c.y + off.y })
+        }
       })
+      this.keepInView(fresh)
     } catch (e) {
       console.warn("layout", e)
     }
     fresh.forEach((n) => this.placed.add(n.id()))
+  }
+
+  // A new node (or box) that fcose pushed past the view is moved back
+  // into it: the view does not follow, so it would not be seen. (After the
+  // batch, where the boxes' bounds are up to date.)
+  keepInView(fresh) {
+    const e0 = this.cy.extent()
+    const ext = { x1: e0.x1 + 20, x2: e0.x2 - 20, y1: e0.y1 + 20, y2: e0.y2 - 20, w: e0.w - 40, h: e0.h - 40 }
+    const groups = new Map()
+    fresh.filter((n) => n.isChildless()).forEach((n) => {
+      const top = n.ancestors().last().nonempty() ? n.ancestors().last() : n
+      groups.set(top.id(), top)
+    })
+    for (const top of groups.values()) {
+      // Only what is new as a whole: a box with a placed node inside stays.
+      if (top.descendants().some((x) => this.placed.has(x.id())) || this.placed.has(top.id())) continue
+      const bb = top.boundingBox()
+      const mx = bb.w > ext.w ? 0 : Math.min(0, ext.x2 - bb.x2) + Math.max(0, ext.x1 - bb.x1)
+      const my = bb.h > ext.h ? 0 : Math.min(0, ext.y2 - bb.y2) + Math.max(0, ext.y1 - bb.y1)
+      if (mx || my) {
+        const kids = top.isChildless() ? top : top.descendants().filter((x) => x.isChildless())
+        kids.forEach((k) => { const q = k.position(); k.position({ x: q.x + mx, y: q.y + my }) })
+      }
+    }
   }
 
   toggleLayer(ev) {
@@ -517,7 +577,9 @@ export default class extends Controller {
     const el = this.selected && this.cy.getElementById(this.selected)
     if (!el || el.empty()) return []
     if (el.data("kind") === "r_topic") return [el.id()]
-    if (el.data("kind") === "topic_link") return el.data("topics")
+    // The debug topics only while they are shown: measuring a hidden
+    // topic costs its traffic for nothing.
+    if (el.data("kind") === "topic_link") return this.shownTopics(el.data("topics"))
     return []
   }
 
@@ -744,12 +806,21 @@ export default class extends Controller {
     const to = el.target().data("name")
     let html = `<h2><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>Topics</h2>`
     html += `<p class="name">${this.link(el.source().id(), from)} &rarr; ${this.link(el.target().id(), to)}</p>`
-    for (const tid of el.data("topics")) {
+    const shown = this.shownTopics(el.data("topics"))
+    for (const tid of shown) {
       const t = this.cy.getElementById(tid)
       const info = t.data("info") || {}
       html += `<h3>${this.link(tid, t.data("name") || tid)}</h3>`
       html += dl([["Type", info.type], ...this.rateRows(tid)])
+      const pubs = (info.publishers || []).length
+      // rmw_zenoh's data keys do not name the publisher, so a topic's rate
+      // is of all its publishers, not of this edge's alone.
+      if (pubs > 1) html += `<p class="hint">Rate and messages count all ${pubs} publishers of the topic.</p>`
       html += `<button type="button" class="small" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>`
+    }
+    const hidden = el.data("topics").filter((tid) => !shown.includes(tid))
+    if (hidden.length) {
+      html += `<p class="hint">Also ${hidden.map((tid) => this.link(tid, this.cy.getElementById(tid).data("name") || tid)).join(", ")} (debug topics, hidden).</p>`
     }
     this.renderDetails(html)
   }

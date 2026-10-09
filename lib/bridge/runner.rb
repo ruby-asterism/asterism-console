@@ -39,6 +39,13 @@ module Bridge
     # second: the bridge receives every message of every topic it measures.
     RATES_MAX_BPS = Integer(ENV.fetch("ASTERISM_RATES_MAX_BPS", 8_000_000))
     RATES_PAUSE = 60.0
+    # The liveliness watches' queues. A watch reports the tokens alive now
+    # in one burst when it is declared (an rclcpp node alone has some 25),
+    # and asterism-zenoh's default queue of 16 drops the oldest of a burst.
+    # 1024 is the binding's maximum; when a watch still drops, it is
+    # declared again (Runner#check_follows).
+    LIVELINESS_DEPTH = 1024
+    GET_TIMEOUT = 1.5
 
     attr_reader :locator, :node_id, :config
 
@@ -83,6 +90,7 @@ module Bridge
       @rate_subs = {} # key expression => Subscription
       @rates_paused_until = 0.0
       @rates_status = nil
+      @follows = {} # pattern => [set, Watch, dropped so far]
       @stop = false
     end
 
@@ -141,6 +149,7 @@ module Bridge
       @rate_subs = {}
       @rates.clear
       @rates_status = nil
+      @follows = {}
     end
 
     def stop
@@ -160,11 +169,29 @@ module Bridge
     end
 
     def follow(pattern, set)
-      @z.liveliness_watch(pattern) do |key, alive|
+      w = @z.liveliness_watch(pattern, depth: LIVELINESS_DEPTH) do |key, alive|
         @lock.synchronize do
           alive ? set[key] = true : set.delete(key)
           @dirty = true
         end
+      end
+      @follows[pattern] = [ set, w, 0 ]
+    end
+
+    # A watch that dropped changes (its queue was full) no longer knows
+    # which tokens are alive: forget them and declare it again, which
+    # reports the tokens alive now.
+    def check_follows
+      @follows.each do |pattern, (set, w, seen)|
+        dropped = w.watch.dropped
+        next if dropped == seen
+        say "bridge: liveliness #{pattern}: #{dropped - seen} changes dropped, following it again"
+        w.close
+        @lock.synchronize do
+          set.clear
+          @dirty = true
+        end
+        follow(pattern, set)
       end
     end
 
@@ -178,6 +205,7 @@ module Bridge
         end
         publish_graph if @lock.synchronize { @dirty }
         if now >= next_sync
+          check_follows
           sync_watches
           sync_rates
           expire_requests
@@ -231,6 +259,8 @@ module Bridge
           @dirty = true
         end
       end
+    rescue Asterism::Zenoh::ClosedError
+      raise # the main loop notices and connects again
     rescue Asterism::Zenoh::Error => e
       say "bridge: admin space: #{e.message}"
     end
@@ -265,8 +295,31 @@ module Bridge
       @self_cert = nil
     end
 
+    # The replies to a get on the admin space, as [key, text]. Through the
+    # session's Get rather than Connection#get, to see the replies that
+    # asterism-zenoh dropped: a get's queue holds 16 and cannot be made
+    # longer, and a router answers a wildcard in one burst. Logged, once
+    # per key, so a graph that misses parts of a busy network says why.
     def get_raw(key)
-      @z.get(key, timeout: 1.5).map { |r| [ r.key, r.payload.to_s.dup.force_encoding(Encoding::UTF_8) ] }
+      g = @z.session.get(key, timeout: GET_TIMEOUT)
+      out = []
+      loop do
+        done = g.done?
+        got = g.each_result
+        got.each { |r| out << [ r.key, r.payload.to_s.dup.force_encoding(Encoding::UTF_8) ] unless r.error? }
+        break if done && g.pending.zero?
+        sleep 0.002 if got.empty?
+      end
+      warn_dropped(key, g.dropped)
+      out
+    end
+
+    def warn_dropped(key, dropped)
+      @get_dropped ||= {}
+      return @get_dropped.delete(key) if dropped.zero?
+      return if @get_dropped[key]
+      @get_dropped[key] = true
+      say "bridge: #{key}: #{dropped} replies dropped (asterism-zenoh keeps 16 per get); the graph misses them"
     end
 
     def get_json(key)
