@@ -18,7 +18,8 @@ calls the methods that Asterism nodes expose.
 - **Topic rates** like rqt_topic: rate (Hz), bandwidth, the number of
   messages and the last one (time, size, a short preview: strings,
   numbers, `geometry_msgs` vectors and twists, `/rosout` lines, the header
-  of stamped messages), on the edges and in the details (below).
+  of stamped messages, the picture of a JPEG or PNG
+  `sensor_msgs/CompressedImage`), on the edges and in the details (below).
 - **Plots** like rqt_plot (`/plots`): numeric fields of ROS 2 topics
   (decoded with the real message types) and of Asterism keys (MessagePack)
   over time, several fields per plot and several plots, a 10 / 30 / 60 s
@@ -39,7 +40,8 @@ Asterism object to see its exposed methods and call them with JSON
 arguments (the return value, `RemoteError` or `TimeoutError`, and the time it
 took). Click a ROS 2 node for its topics and services (the parameter ones
 folded), a topic edge or a topic for its type, ends, rate and last value.
-The watch panel shows the values arriving on any key. A topic's details
+The watch panel shows the values arriving on any key (a camera's
+`sensor_msgs/CompressedImage` also as its latest picture). A topic's details
 have "Plot this topic", a ROS 2 node's "Show its logs" (see
 [Plots and logs](#plots-and-logs)).
 
@@ -151,8 +153,9 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   drag, or step to the previous / next message), the selected channel's
   message at the cursor decoded (V3's decoders: the bundled ROS 2 types,
   MessagePack, `/rosout` and the Asterism log key as log lines), every
-  channel's message at the cursor, and plots of numeric fields over the
-  whole recording (the cursor follows a click on the plot).
+  channel's message at the cursor (pictures of compressed images too), and
+  plots of numeric fields over the whole recording (the cursor follows a
+  click on the plot).
 - **The network at the cursor**: the graph page, read-only, as it was at
   a time; step from one change to the next (what appeared, what left).
 - **Playback**: "in the page only" moves the cursor at 0.25x / 1x / 4x and

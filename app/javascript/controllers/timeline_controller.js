@@ -227,6 +227,7 @@ export default class extends Controller {
       html += `<p><span class="level lv-${String(l.level).toLowerCase()}">${esc(l.level)}</span> <strong>${esc(l.name)}</strong> ${esc(l.msg)}` +
         (l.file ? ` <span class="hint">${esc(l.file)}:${esc(l.line)} ${esc(l.function)}</span>` : "") + `</p>`
     }
+    html += imageTag(m.image)
     if (m.value !== undefined) html += `<pre class="msg-value">${esc(JSON.stringify(m.value, null, 2))}</pre>`
     else if (m.text) html += `<pre class="msg-value">${esc(m.text)}</pre>`
     this.messageTarget.innerHTML = html
@@ -238,7 +239,7 @@ export default class extends Controller {
       const m = all.at?.[c.id]
       const text = !m ? "-" : m.error ? m.error : m.log ? `[${m.log.level}] ${m.log.name}: ${m.log.msg}` : m.text
       const old = m && m.log_time > this.cursor ? " (later)" : ""
-      return `<li><a href="#" data-ch="${c.id}">${esc(c.topic)}</a>${old} <code class="wrap">${esc(shorten(text, 160))}</code></li>`
+      return `<li><a href="#" data-ch="${c.id}">${esc(c.topic)}</a>${old} ${imageTag(m?.image, "msg-thumb")}<code class="wrap">${esc(shorten(text, 160))}</code></li>`
     })
     this.atListTarget.innerHTML = `<ul class="plain at-list">${rows.join("")}</ul>`
     this.atListTarget.querySelectorAll("[data-ch]").forEach((a) => a.addEventListener("click", (ev) => {
@@ -449,6 +450,14 @@ function fmtClock(ms) {
 
 function dl(rows) {
   return `<dl>${rows.filter(([, b]) => b !== null && b !== undefined).map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>`
+}
+
+// A picture from the bridge ({ mime, data (base64), bytes, width, height };
+// Bridge::Payload.image) as an <img>; "" without one.
+function imageTag(img, cls = "msg-image") {
+  if (!img?.data || !/^image\/(jpeg|png)$/.test(img.mime)) return ""
+  const size = img.width ? `${img.width}x${img.height}, ` : ""
+  return `<img class="${cls}" src="data:${img.mime};base64,${img.data}" alt="${esc(`${size}${img.bytes} bytes`)}" title="${esc(`${size}${img.bytes} bytes`)}">`
 }
 
 function shorten(text, n) {

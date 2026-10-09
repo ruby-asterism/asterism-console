@@ -5,9 +5,11 @@
 # The bridge feeds it every sample of the ROS 2 data keys it subscribes to
 # (rmw_zenoh: <domain>/<topic name>/<type>/<type hash>); record runs on the
 # receiving thread and only counts and keeps the first PREVIEW_BYTES of the
-# last message. The preview is decoded in snapshot, on the main thread,
-# and only when a new message came. Memory is bounded: at most MAX_TOPICS
-# topics, WINDOW + 1 one-second buckets each, PREVIEW_BYTES per topic.
+# last message (a compressed image: up to Payload::MAX_IMAGE, so the page
+# can show the picture). The preview is decoded in snapshot, on the main
+# thread, and only when a new message came. Memory is bounded: at most
+# MAX_TOPICS topics, WINDOW + 1 one-second buckets each, PREVIEW_BYTES per
+# topic (Payload::MAX_IMAGE + 4 KB for image topics).
 module Bridge
   class Rates
     WINDOW = 5 # seconds
@@ -82,7 +84,8 @@ module Bridge
         e.count += 1
         e.at = @wall.call
         e.size = n
-        e.last = n > PREVIEW_BYTES ? bytes.byteslice(0, PREVIEW_BYTES) : bytes
+        keep = type == Payload::IMAGE_TYPE ? Payload::MAX_IMAGE + PREVIEW_BYTES : PREVIEW_BYTES
+        e.last = n > keep ? bytes.byteslice(0, keep) : bytes
         e.fresh = true
       end
       true
@@ -106,7 +109,7 @@ module Bridge
     end
 
     # What changed since the last snapshot (all topics with full: true):
-    # { topic id => { "hz", "bps", "count", "size", "at", "type", "format", "text" } }.
+    # { topic id => { "hz", "bps", "count", "size", "at", "type", "format", "text", "image" (or not) } }.
     def snapshot(full: false)
       now = @clock.call
       out = {}
@@ -114,7 +117,7 @@ module Bridge
         @topics.each_value do |e|
           hz, bps = self.class.rate(e, now)
           if e.fresh
-            e.preview = Payload.describe(e.last.to_s, type: e.type).slice("format", "text")
+            e.preview = Payload.describe(e.last.to_s, type: e.type).slice("format", "text", "image")
             e.fresh = false
           end
           row = { "hz" => hz, "bps" => bps, "count" => e.count, "size" => e.size, "at" => e.at,

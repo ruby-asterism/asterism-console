@@ -637,7 +637,7 @@ export default class extends Controller {
       ["Rate", r.hz != null ? fmtHz(r.hz) : "..."],
       ["Bandwidth", r.bps != null ? `${fmtBytes(r.bps)}/s` : "..."],
       ["Messages", `${r.count}${r.size != null ? `, last ${fmtBytes(r.size)}` : ""}`],
-      ["Last", r.text != null ? `<span class="hint">${esc(ago)}</span><br><code class="wrap">${esc(shorten(r.text, 300))}</code>` : esc(ago), true],
+      ["Last", r.text != null ? `<span class="hint">${esc(ago)}</span><br>${imageTag(r.image)}<code class="wrap">${esc(shorten(r.text, 300))}</code>` : esc(ago), true],
     ]
   }
 
@@ -1016,7 +1016,7 @@ export default class extends Controller {
     div.innerHTML = `<div class="watch-head"><code>${esc(w.key)}</code>${dropped}
         <button type="button" class="small" aria-label="Stop watching ${esc(w.key)}">Stop</button></div>` +
       (w.error ? `<p class="error">${esc(w.error)}</p>` : "") +
-      (list.length ? `<ol class="samples">${list.map((s) =>
+      (list.length ? `${imageTag(list[0].image)}<ol class="samples">${list.map((s) =>
         `<li><span class="at">${esc(s.at)}</span> <code class="k" title="${esc(s.key)}">${esc(shorten(s.key, 48))}</code> <span class="fmt">${esc(s.format)}</span> <span class="v">${esc(s.text)}</span></li>`).join("")}</ol>`
         : `<p class="hint">Nothing yet.</p>`)
     div.querySelector("button").addEventListener("click", () => this.removeWatch(id))
@@ -1090,6 +1090,14 @@ function fmtAgo(ms) {
   if (s < 60) return `${s.toFixed(1)} s`
   if (s < 3600) return `${Math.round(s / 60)} min`
   return `${Math.round(s / 3600)} h`
+}
+
+// A picture from the bridge ({ mime, data (base64), bytes, width, height };
+// Bridge::Payload.image) as an <img>; "" without one.
+function imageTag(img, cls = "msg-image") {
+  if (!img?.data || !/^image\/(jpeg|png)$/.test(img.mime)) return ""
+  const size = img.width ? `${img.width}x${img.height}, ` : ""
+  return `<img class="${cls}" src="data:${img.mime};base64,${img.data}" alt="${esc(`${size}${img.bytes} bytes`)}" title="${esc(`${size}${img.bytes} bytes`)}">`
 }
 
 function shorten(text, n) {

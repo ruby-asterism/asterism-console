@@ -12,6 +12,8 @@ module Bridge
         @pos = 4
       end
 
+      attr_reader :pos
+
       def rest
         @b.bytesize - @pos
       end
@@ -109,6 +111,10 @@ module Bridge
           level = r.u8
           logger = r.string
           "[#{LEVELS.fetch(level, level)}] #{logger}: #{r.string}"
+        elsif type == "sensor_msgs/msg/CompressedImage"
+          stamp, frame = r.header
+          fmt = r.string
+          "stamp #{format('%.3f', stamp)}, frame_id #{frame.inspect}, #{fmt.inspect}, #{r.u32} bytes"
         elsif WITH_HEADER.include?(type)
           stamp, frame = r.header
           "stamp #{format('%.3f', stamp)}, frame_id #{frame.inspect}"

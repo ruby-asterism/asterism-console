@@ -113,11 +113,11 @@ module Bag
     end
 
     # The message of every channel at t (one line each, for the list beside
-    # the timeline).
+    # the timeline; a compressed image also as its picture).
     def at(t)
       channels.reject { _1["kind"] == "graph" }.to_h do |c|
         m = message(c["id"], t)
-        [ c["id"], m && m.slice("log_time", "index", "count", "text", "error", "format", "log") ]
+        [ c["id"], m && m.slice("log_time", "index", "count", "text", "error", "format", "log", "image") ]
       end
     end
 

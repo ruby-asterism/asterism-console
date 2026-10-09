@@ -3,7 +3,9 @@
 #   cdr       the generated type of the channel's schema name (asterism's
 #             bundled types and the console's vendor/msgs; Bridge::Types):
 #             a Hash; /rosout (rcl_interfaces/msg/Log) also as a log line
-#             (Bridge::Logs); the one-line preview of V2 (Bridge::Payload)
+#             (Bridge::Logs); the one-line preview of V2 (Bridge::Payload);
+#             a sensor_msgs/CompressedImage in JPEG / PNG also as its
+#             picture ("image", Bridge::Payload.image)
 #   msgpack   MessagePack (an Asterism key; its log keys also as log lines)
 #   json      JSON (the network structure)
 #   anything else, or what does not decode: hex
@@ -25,8 +27,12 @@ module Bag
       case enc
       when "cdr"
         out["text"] = Bridge::Payload.cdr_text(bytes.b, schema_name)
+        img = Bridge::Payload.image(bytes.b, schema_name)
+        out["image"] = img if img
         begin
           v = ros_value(schema_name, bytes)
+          # The picture is shown as one; its bytes are not repeated as hex.
+          v[:data] = "(#{img['bytes']} bytes, #{img['mime']})" if img && v.is_a?(Hash) && v.key?(:data)
           out["value"] = safe(v)
           if schema_name == Bridge::Logs::LOG_TYPE
             out["log"] = Bridge::Logs.ros_line("#{channel.dig('metadata', 'ros_domain') || 0}/rosout", bytes, at_ms)
