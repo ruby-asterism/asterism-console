@@ -1,0 +1,912 @@
+{
+  "about": "A busy network for the console's fixture mode and tests: two routers, Asterism boards, a sim, CRuby, and ROS 2 nodes with their parameter services. Made-up IDs and addresses.",
+  "admin": {
+    "d1c2b9d0c6a7dd04d9c967b753321283": {
+      "router": {
+        "locators": [
+          "tcp/192.0.2.2:7447"
+        ],
+        "metadata": {
+          "name": "zenohd-home"
+        },
+        "plugins": {
+          "rest": {},
+          "storage_manager": {}
+        },
+        "sessions": [
+          {
+            "links": [
+              {
+                "dst": "tls/192.0.2.20:7448",
+                "src": "tls/192.0.2.30:60652"
+              }
+            ],
+            "peer": "0cc0bb9e525fdfce0982e52abb9bc02c",
+            "region": "north",
+            "whatami": "router"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.15]:50007",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "bc58ee83430c2a6dfc8187e61f14baa9",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.16]:50014",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "82b6e93458483c05738044bd9c4c3792",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.40]:50021",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "fa0b3e2d39e1a6d290218d84f54e8fb4",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.40]:50028",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "14bca5fc6c4907d32a6bb6bd7d6cabb5",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50035",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "8717f7600c242ae4cb079e9b28d32a54",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50042",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "4b59a77b8a7bc8ccc242b73f33394b7a",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50049",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "1cb7d0efe6c4f86f8c088d7ab3942d3d",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50056",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "bb8261e8a3c5cdcc84f06055a5354b25",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50063",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "aedfb7ba06ed436437c5244239e8083c",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50070",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "6f3ac88f1de6ea5168edee24d7b10c03",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50077",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "961edd7e2e086cf943592f3603690054",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tcp/[::ffff:192.0.2.50]:50084",
+                "src": "tcp/[::ffff:192.0.2.2]:7447"
+              }
+            ],
+            "peer": "5362069720bd7ff5c046bee4d237e725",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          }
+        ],
+        "version": "v1.10.1-1211779c built with rustc 1.97.1",
+        "zid": "d1c2b9d0c6a7dd04d9c967b753321283"
+      },
+      "linkstate": {
+        "north": "graph {\n    0 [ label = \"d1c2b9d0c6a7dd04d9c967b753321283\" ]\n    1 [ label = \"0cc0bb9e525fdfce0982e52abb9bc02c\" ]\n    0 -- 1 [ label = \"100\" ]\n}\n"
+      },
+      "tokens": {
+        "asterism/fmruby-aaaaaa": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "bc58ee83430c2a6dfc8187e61f14baa9"
+          ]
+        },
+        "asterism/fmruby-aaaaaa/demo/apu": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "bc58ee83430c2a6dfc8187e61f14baa9"
+          ]
+        },
+        "asterism/fmruby-aaaaaa/demo/info": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "bc58ee83430c2a6dfc8187e61f14baa9"
+          ]
+        },
+        "asterism/fmruby-aaaaaa/demo/screen": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "bc58ee83430c2a6dfc8187e61f14baa9"
+          ]
+        },
+        "asterism/fmruby-bbbbbb": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "82b6e93458483c05738044bd9c4c3792"
+          ]
+        },
+        "asterism/fmruby-bbbbbb/demo/info": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "82b6e93458483c05738044bd9c4c3792"
+          ]
+        },
+        "asterism/fmruby-bbbbbb/demo/screen": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "82b6e93458483c05738044bd9c4c3792"
+          ]
+        },
+        "asterism/fmruby-bbbbbb/sensors/imu": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "82b6e93458483c05738044bd9c4c3792"
+          ]
+        },
+        "asterism/fmruby-bbbbbb/sensors/battery": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "82b6e93458483c05738044bd9c4c3792"
+          ]
+        },
+        "asterism/linux": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "fa0b3e2d39e1a6d290218d84f54e8fb4"
+          ]
+        },
+        "asterism/linux/demo/apu": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "fa0b3e2d39e1a6d290218d84f54e8fb4"
+          ]
+        },
+        "asterism/linux/demo/info": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "fa0b3e2d39e1a6d290218d84f54e8fb4"
+          ]
+        },
+        "asterism/linux/demo/screen": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": [
+            "fa0b3e2d39e1a6d290218d84f54e8fb4"
+          ]
+        },
+        "asterism/cruby": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/cruby/demo/info": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/cruby/demo/screen": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/cruby/planner/route": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/console": {
+          "routers": [
+            "0cc0bb9e525fdfce0982e52abb9bc02c"
+          ],
+          "peers": [],
+          "clients": []
+        }
+      }
+    },
+    "0cc0bb9e525fdfce0982e52abb9bc02c": {
+      "router": {
+        "locators": [
+          "tls/192.0.2.20:7448"
+        ],
+        "metadata": {
+          "name": "zenohd-cloud"
+        },
+        "plugins": {},
+        "sessions": [
+          {
+            "links": [
+              {
+                "dst": "tls/192.0.2.30:60652",
+                "src": "tls/192.0.2.20:7448"
+              }
+            ],
+            "peer": "d1c2b9d0c6a7dd04d9c967b753321283",
+            "region": "north",
+            "whatami": "router"
+          },
+          {
+            "links": [
+              {
+                "dst": "tls/[::ffff:192.0.2.1]:50091",
+                "src": "tls/[::ffff:192.0.2.20]:7448"
+              }
+            ],
+            "peer": "e8e14b9da2a64ab9922ecf3e8243b525",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tls/[::ffff:192.0.2.1]:50098",
+                "src": "tls/[::ffff:192.0.2.20]:7448"
+              }
+            ],
+            "peer": "a8d9a8df97b3c1142837e1b808fef40",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tls/[::ffff:192.0.2.1]:50105",
+                "src": "tls/[::ffff:192.0.2.20]:7448"
+              }
+            ],
+            "peer": "df13c20c4122fa46d33f9edacfc876d9",
+            "region": "south:0:client",
+            "shm": false,
+            "weight": null,
+            "whatami": "client"
+          },
+          {
+            "links": [
+              {
+                "dst": "tls/[::ffff:192.0.2.60]:50112",
+                "src": "tls/[::ffff:192.0.2.20]:7448"
+              }
+            ],
+            "peer": "4139aef7359d135748884dd6a993cc7c",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          },
+          {
+            "links": [
+              {
+                "dst": "tls/[::ffff:192.0.2.60]:50119",
+                "src": "tls/[::ffff:192.0.2.20]:7448"
+              }
+            ],
+            "peer": "f4ea402a8bf1f444ffc7795ab86a3f93",
+            "region": "south:0:peer",
+            "shm": false,
+            "weight": null,
+            "whatami": "peer"
+          }
+        ],
+        "version": "v1.10.1-1211779c built with rustc 1.97.1",
+        "zid": "0cc0bb9e525fdfce0982e52abb9bc02c"
+      },
+      "linkstate": {
+        "north": "graph {\n    0 [ label = \"0cc0bb9e525fdfce0982e52abb9bc02c\" ]\n    1 [ label = \"d1c2b9d0c6a7dd04d9c967b753321283\" ]\n    0 -- 1 [ label = \"100\" ]\n}\n"
+      },
+      "tokens": {
+        "asterism/fmruby-aaaaaa": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-aaaaaa/demo/apu": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-aaaaaa/demo/info": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-aaaaaa/demo/screen": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-bbbbbb": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-bbbbbb/demo/info": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-bbbbbb/demo/screen": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-bbbbbb/sensors/imu": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/fmruby-bbbbbb/sensors/battery": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/linux": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/linux/demo/apu": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/linux/demo/info": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/linux/demo/screen": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": []
+        },
+        "asterism/cruby": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": [
+            "df13c20c4122fa46d33f9edacfc876d9"
+          ]
+        },
+        "asterism/cruby/demo/info": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": [
+            "df13c20c4122fa46d33f9edacfc876d9"
+          ]
+        },
+        "asterism/cruby/demo/screen": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": [
+            "df13c20c4122fa46d33f9edacfc876d9"
+          ]
+        },
+        "asterism/cruby/planner/route": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": [
+            "df13c20c4122fa46d33f9edacfc876d9"
+          ]
+        },
+        "asterism/console": {
+          "routers": [
+            "d1c2b9d0c6a7dd04d9c967b753321283"
+          ],
+          "peers": [],
+          "clients": [
+            "e8e14b9da2a64ab9922ecf3e8243b525"
+          ]
+        }
+      }
+    }
+  },
+  "asterism": [
+    "asterism/fmruby-aaaaaa",
+    "asterism/fmruby-aaaaaa/demo/apu",
+    "asterism/fmruby-aaaaaa/demo/info",
+    "asterism/fmruby-aaaaaa/demo/screen",
+    "asterism/fmruby-bbbbbb",
+    "asterism/fmruby-bbbbbb/demo/info",
+    "asterism/fmruby-bbbbbb/demo/screen",
+    "asterism/fmruby-bbbbbb/sensors/imu",
+    "asterism/fmruby-bbbbbb/sensors/battery",
+    "asterism/linux",
+    "asterism/linux/demo/apu",
+    "asterism/linux/demo/info",
+    "asterism/linux/demo/screen",
+    "asterism/cruby",
+    "asterism/cruby/demo/info",
+    "asterism/cruby/demo/screen",
+    "asterism/cruby/planner/route",
+    "asterism/console"
+  ],
+  "ros": [
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/0/NN/%/%/talker",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/1/SS/%/%/talker/%talker%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/2/SS/%/%/talker/%talker%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/3/SS/%/%/talker/%talker%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/4/SS/%/%/talker/%talker%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/5/SS/%/%/talker/%talker%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/6/SS/%/%/talker/%talker%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/7/SS/%/%/talker/%talker%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/8/MP/%/%/talker/%chatter/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/9/MP/%/%/talker/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/10/MP/%/%/talker/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/0/NN/%/%/listener",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/1/SS/%/%/listener/%listener%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/2/SS/%/%/listener/%listener%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/3/SS/%/%/listener/%listener%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/4/SS/%/%/listener/%listener%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/5/SS/%/%/listener/%listener%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/6/SS/%/%/listener/%listener%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/7/SS/%/%/listener/%listener%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/8/MP/%/%/listener/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/9/MP/%/%/listener/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4b59a77b8a7bc8ccc242b73f33394b7a/0/10/MS/%/%/listener/%chatter/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/0/NN/%/%/teleop_keyboard",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/1/SS/%/%/teleop_keyboard/%teleop_keyboard%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/2/SS/%/%/teleop_keyboard/%teleop_keyboard%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/3/SS/%/%/teleop_keyboard/%teleop_keyboard%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/4/SS/%/%/teleop_keyboard/%teleop_keyboard%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/5/SS/%/%/teleop_keyboard/%teleop_keyboard%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/6/SS/%/%/teleop_keyboard/%teleop_keyboard%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/7/SS/%/%/teleop_keyboard/%teleop_keyboard%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/8/MP/%/%/teleop_keyboard/%cmd_vel/geometry_msgs::msg::dds_::Twist_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/9/MP/%/%/teleop_keyboard/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/1cb7d0efe6c4f86f8c088d7ab3942d3d/0/10/MP/%/%/teleop_keyboard/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/0/NN/%/%/base_controller",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/1/SS/%/%/base_controller/%base_controller%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/2/SS/%/%/base_controller/%base_controller%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/3/SS/%/%/base_controller/%base_controller%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/4/SS/%/%/base_controller/%base_controller%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/5/SS/%/%/base_controller/%base_controller%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/6/SS/%/%/base_controller/%base_controller%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/7/SS/%/%/base_controller/%base_controller%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/8/MP/%/%/base_controller/%odom/nav_msgs::msg::dds_::Odometry_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/9/MP/%/%/base_controller/%joint_states/sensor_msgs::msg::dds_::JointState_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/10/MP/%/%/base_controller/%tf/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/11/MP/%/%/base_controller/%battery/sensor_msgs::msg::dds_::BatteryState_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/12/MP/%/%/base_controller/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/13/MP/%/%/base_controller/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/14/MS/%/%/base_controller/%cmd_vel/geometry_msgs::msg::dds_::Twist_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/0/15/SS/%/%/base_controller/%base_controller%reset_odometry/std_srvs::srv::dds_::Trigger_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/0/NN/%/%/robot_state_publisher",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/1/SS/%/%/robot_state_publisher/%robot_state_publisher%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/2/SS/%/%/robot_state_publisher/%robot_state_publisher%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/3/SS/%/%/robot_state_publisher/%robot_state_publisher%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/4/SS/%/%/robot_state_publisher/%robot_state_publisher%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/5/SS/%/%/robot_state_publisher/%robot_state_publisher%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/6/SS/%/%/robot_state_publisher/%robot_state_publisher%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/7/SS/%/%/robot_state_publisher/%robot_state_publisher%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/8/MP/%/%/robot_state_publisher/%tf/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/9/MP/%/%/robot_state_publisher/%tf_static/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/10/MP/%/%/robot_state_publisher/%robot_description/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/11/MP/%/%/robot_state_publisher/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/12/MP/%/%/robot_state_publisher/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/bb8261e8a3c5cdcc84f06055a5354b25/1/13/MS/%/%/robot_state_publisher/%joint_states/sensor_msgs::msg::dds_::JointState_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/0/NN/%/%/camera",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/1/SS/%/%/camera/%camera%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/2/SS/%/%/camera/%camera%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/3/SS/%/%/camera/%camera%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/4/SS/%/%/camera/%camera%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/5/SS/%/%/camera/%camera%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/6/SS/%/%/camera/%camera%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/7/SS/%/%/camera/%camera%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/8/MP/%/%/camera/%camera%image_raw/sensor_msgs::msg::dds_::Image_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/9/MP/%/%/camera/%camera%camera_info/sensor_msgs::msg::dds_::CameraInfo_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/10/MP/%/%/camera/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/aedfb7ba06ed436437c5244239e8083c/0/11/MP/%/%/camera/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/0/NN/%/%/lidar",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/1/SS/%/%/lidar/%lidar%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/2/SS/%/%/lidar/%lidar%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/3/SS/%/%/lidar/%lidar%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/4/SS/%/%/lidar/%lidar%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/5/SS/%/%/lidar/%lidar%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/6/SS/%/%/lidar/%lidar%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/7/SS/%/%/lidar/%lidar%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/8/MP/%/%/lidar/%scan/sensor_msgs::msg::dds_::LaserScan_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/9/MP/%/%/lidar/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/6f3ac88f1de6ea5168edee24d7b10c03/0/10/MP/%/%/lidar/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/0/NN/%/%/slam_toolbox",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/1/SS/%/%/slam_toolbox/%slam_toolbox%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/2/SS/%/%/slam_toolbox/%slam_toolbox%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/3/SS/%/%/slam_toolbox/%slam_toolbox%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/4/SS/%/%/slam_toolbox/%slam_toolbox%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/5/SS/%/%/slam_toolbox/%slam_toolbox%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/6/SS/%/%/slam_toolbox/%slam_toolbox%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/7/SS/%/%/slam_toolbox/%slam_toolbox%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/8/MP/%/%/slam_toolbox/%map/nav_msgs::msg::dds_::OccupancyGrid_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/9/MP/%/%/slam_toolbox/%map_metadata/nav_msgs::msg::dds_::MapMetaData_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/10/MP/%/%/slam_toolbox/%tf/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/11/MP/%/%/slam_toolbox/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/12/MP/%/%/slam_toolbox/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/13/MS/%/%/slam_toolbox/%scan/sensor_msgs::msg::dds_::LaserScan_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/14/MS/%/%/slam_toolbox/%tf/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/15/MS/%/%/slam_toolbox/%tf_static/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/16/MS/%/%/slam_toolbox/%odom/nav_msgs::msg::dds_::Odometry_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/17/SS/%/%/slam_toolbox/%slam_toolbox%save_map/std_srvs::srv::dds_::Trigger_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/961edd7e2e086cf943592f3603690054/0/18/SS/%/%/slam_toolbox/%slam_toolbox%clear_queue/std_srvs::srv::dds_::Empty_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/0/NN/%/%/navigator",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/1/SS/%/%/navigator/%navigator%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/2/SS/%/%/navigator/%navigator%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/3/SS/%/%/navigator/%navigator%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/4/SS/%/%/navigator/%navigator%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/5/SS/%/%/navigator/%navigator%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/6/SS/%/%/navigator/%navigator%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/7/SS/%/%/navigator/%navigator%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/8/MP/%/%/navigator/%cmd_vel/geometry_msgs::msg::dds_::Twist_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/9/MP/%/%/navigator/%plan/nav_msgs::msg::dds_::Path_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/10/MP/%/%/navigator/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/11/MP/%/%/navigator/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/12/MS/%/%/navigator/%map/nav_msgs::msg::dds_::OccupancyGrid_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/13/MS/%/%/navigator/%odom/nav_msgs::msg::dds_::Odometry_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/14/MS/%/%/navigator/%scan/sensor_msgs::msg::dds_::LaserScan_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/15/MS/%/%/navigator/%tf/tf2_msgs::msg::dds_::TFMessage_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/5362069720bd7ff5c046bee4d237e725/0/16/SC/%/%/navigator/%slam_toolbox%save_map/std_srvs::srv::dds_::Trigger_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/14bca5fc6c4907d32a6bb6bd7d6cabb5/0/0/NN/%/%/fmruby_talker_linux",
+    "@ros2_lv/0/14bca5fc6c4907d32a6bb6bd7d6cabb5/0/1/MP/%/%/fmruby_talker_linux/%chatter/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/14bca5fc6c4907d32a6bb6bd7d6cabb5/0/2/MS/%/%/fmruby_talker_linux/%chatter_back/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/14bca5fc6c4907d32a6bb6bd7d6cabb5/0/3/MS/%/%/fmruby_talker_linux/%cmd_vel_in/geometry_msgs::msg::dds_::Twist_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/0/NN/%/%/listener",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/1/SS/%/%/listener/%listener%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/2/SS/%/%/listener/%listener%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/3/SS/%/%/listener/%listener%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/4/SS/%/%/listener/%listener%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/5/SS/%/%/listener/%listener%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/6/SS/%/%/listener/%listener%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/7/SS/%/%/listener/%listener%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/8/MP/%/%/listener/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/9/MP/%/%/listener/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/4139aef7359d135748884dd6a993cc7c/0/10/MS/%/%/listener/%chatter/std_msgs::msg::dds_::String_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/0/NN/%/%/dashboard",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/1/SS/%/%/dashboard/%dashboard%describe_parameters/rcl_interfaces::srv::dds_::DescribeParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/2/SS/%/%/dashboard/%dashboard%get_parameter_types/rcl_interfaces::srv::dds_::GetParameterTypes_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/3/SS/%/%/dashboard/%dashboard%get_parameters/rcl_interfaces::srv::dds_::GetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/4/SS/%/%/dashboard/%dashboard%list_parameters/rcl_interfaces::srv::dds_::ListParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/5/SS/%/%/dashboard/%dashboard%set_parameters/rcl_interfaces::srv::dds_::SetParameters_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/6/SS/%/%/dashboard/%dashboard%set_parameters_atomically/rcl_interfaces::srv::dds_::SetParametersAtomically_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/7/SS/%/%/dashboard/%dashboard%get_type_description/type_description_interfaces::srv::dds_::GetTypeDescription_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/8/MP/%/%/dashboard/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/9/MP/%/%/dashboard/%parameter_events/rcl_interfaces::msg::dds_::ParameterEvent_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/10/MS/%/%/dashboard/%odom/nav_msgs::msg::dds_::Odometry_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/11/MS/%/%/dashboard/%battery/sensor_msgs::msg::dds_::BatteryState_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/12/MS/%/%/dashboard/%map/nav_msgs::msg::dds_::OccupancyGrid_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/13/MS/%/%/dashboard/%rosout/rcl_interfaces::msg::dds_::Log_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,",
+    "@ros2_lv/0/f4ea402a8bf1f444ffc7795ab86a3f93/0/14/SC/%/%/dashboard/%base_controller%reset_odometry/std_srvs::srv::dds_::Trigger_/RIHS01_0000000000000000000000000000000000000000000000000000000000000000/::,10:,:,:,,"
+  ],
+  "self_node": "console",
+  "self_zids": [
+    "0a8d9a8df97b3c1142837e1b808fef40"
+  ],
+  "own_links": {
+    "0cc0bb9e525fdfce0982e52abb9bc02c": {
+      "protocol": "tls",
+      "cert_name": "zenohd-cloud"
+    }
+  },
+  "self_cert": "console",
+  "registry": [
+    {
+      "name": "console",
+      "kind": "client",
+      "enabled": true,
+      "in_acl": true,
+      "expires": "2027-01-07T00:00:00Z"
+    },
+    {
+      "name": "cruby",
+      "kind": "client",
+      "enabled": true,
+      "in_acl": true,
+      "expires": "2027-01-07T00:00:00Z"
+    },
+    {
+      "name": "sparebot",
+      "kind": "client",
+      "enabled": true,
+      "in_acl": true,
+      "expires": "2027-01-07T00:00:00Z",
+      "description": "spare robot, switched off"
+    },
+    {
+      "name": "zenohd-cloud",
+      "kind": "router",
+      "enabled": true,
+      "in_acl": false
+    },
+    {
+      "name": "zenohd-home",
+      "kind": "router",
+      "enabled": true,
+      "in_acl": true,
+      "expires": "2027-01-07T00:00:00Z"
+    }
+  ],
+  "recorded_at": 1791590400000,
+  "rates": {
+    "r_topic:0/chatter": {
+      "hz": 2.0,
+      "bps": 64,
+      "count": 120,
+      "size": 32,
+      "at": 1791590399750,
+      "format": "cdr",
+      "text": "\"Hello World: 391\" (CDR string)"
+    },
+    "r_topic:0/cmd_vel": {
+      "hz": 10.0,
+      "bps": 520,
+      "count": 600,
+      "size": 52,
+      "at": 1791590399950,
+      "format": "cdr",
+      "text": "linear (0.2, 0, 0) angular (0, 0, 0.35)"
+    },
+    "r_topic:0/odom": {
+      "hz": 30.0,
+      "bps": 21720,
+      "count": 1800,
+      "size": 724,
+      "at": 1791590399984,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/joint_states": {
+      "hz": 50.0,
+      "bps": 6600,
+      "count": 3000,
+      "size": 132,
+      "at": 1791590399990,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/tf": {
+      "hz": 80.0,
+      "bps": 18880,
+      "count": 4800,
+      "size": 236,
+      "at": 1791590399994,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/tf_static": {
+      "hz": 0.0,
+      "bps": 0,
+      "count": 0,
+      "size": 412,
+      "at": 1791590396000,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/scan": {
+      "hz": 10.0,
+      "bps": 29280,
+      "count": 600,
+      "size": 2928,
+      "at": 1791590399950,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/map": {
+      "hz": 0.2,
+      "bps": 32054,
+      "count": 12,
+      "size": 160268,
+      "at": 1791590397500,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/battery": {
+      "hz": 1.0,
+      "bps": 88,
+      "count": 60,
+      "size": 88,
+      "at": 1791590399500,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/camera/image_raw": {
+      "hz": 15.0,
+      "bps": 13824960,
+      "count": 900,
+      "size": 921664,
+      "at": 1791590399967,
+      "format": "cdr",
+      "text": "CDR 00 01 00 00 ..."
+    },
+    "r_topic:0/rosout": {
+      "hz": 0.5,
+      "bps": 60,
+      "count": 30,
+      "size": 120,
+      "at": 1791590399000,
+      "format": "cdr",
+      "text": "[INFO] /navigator: goal reached"
+    },
+    "r_topic:0/cmd_vel_in": {
+      "hz": 0.0,
+      "bps": 0,
+      "count": 0,
+      "size": 52,
+      "at": 1791590396000,
+      "format": "cdr",
+      "text": "linear (0, 0, 0) angular (0, 0, 0)"
+    }
+  }
+}

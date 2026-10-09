@@ -284,6 +284,15 @@ writes answers back; `test/controllers/` the page, the graph JSON,
 requests, watches, sign-in (with TOTP), that every route needs it, the call
 permissions and the call log; `test/channels/` that the WebSocket needs it.
 
+**Fixture mode** (development only): `CONSOLE_FIXTURE=1 bin/rails server`
+shows a recorded network instead of the bridge's
+(`test/fixtures/files/busy_network.json`: two routers, Asterism boards,
+a sim, CRuby and a dozen ROS 2 nodes; or `CONSOLE_FIXTURE=<file>`). The file
+holds the inputs of `Bridge::Graph.build`, so the page shows them through
+the current code. It uses its own databases (`storage/fixture*.sqlite3`;
+`CONSOLE_FIXTURE=1 bin/rails db:prepare` and `console:user` once), and
+`bin/bridge` refuses to run in it.
+
 `script/headless/run out.png` takes a screenshot with a headless Chromium
 in a container (Playwright's image; nothing installed on the host);
 `CONSOLE_EMAIL` / `CONSOLE_PASSWORD` make it sign in first.

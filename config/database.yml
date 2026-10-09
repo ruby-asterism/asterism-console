@@ -9,13 +9,16 @@ default: &default
   max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
   timeout: 5000
 
+# Fixture mode (CONSOLE_FIXTURE, lib/bridge/fixture.rb) keeps its own
+# databases, so its users and requests stay apart from the real ones.
+<% dev = ENV["CONSOLE_FIXTURE"].to_s.then { _1.empty? || _1 == "0" } ? "development" : "fixture" %>
 development:
   primary:
     <<: *default
-    database: storage/development.sqlite3
+    database: storage/<%= dev %>.sqlite3
   cable:
     <<: *default
-    database: storage/development_cable.sqlite3
+    database: storage/<%= dev %>_cable.sqlite3
     migrations_paths: db/cable_migrate
 
 # Warning: The database defined as "test" will be erased and

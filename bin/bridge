@@ -9,4 +9,6 @@
 ENV["RAILS_MAX_THREADS"] ||= "12" # main, two receiving threads, the request workers
 require_relative "../config/environment"
 $stdout.sync = true
+abort "bin/bridge: CONSOLE_FIXTURE is set (fixture mode shows a recorded network; unset it)" if
+  Rails.application.config.x.console_fixture
 Bridge::Runner.new.run
