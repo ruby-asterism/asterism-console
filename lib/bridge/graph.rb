@@ -26,6 +26,8 @@
 #             node of its own ("absent", kind "registered").
 #   peer_links: [zid, zid] pairs of sessions connected to each other without
 #             a router (the bridge's own: Session#peer_zids)
+#   cloud:    the cloud router's name (Relay::Settings.cloud_name), for the
+#             routers the registry's names are expected at (Bridge::Marks)
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -49,6 +51,9 @@
 #     "others" node per router, "peer_link" edges between nodes of sessions
 #     connected directly, and each node's sessions as its data
 #     "connections". Sessions stay, for the page's "Sessions as points".
+#   - The marks (V2.2, Bridge::Marks): what each Asterism node runs on (data
+#     "machine"), the registered names not here in one box ("reg_box") with
+#     "expect" edges to the router the registry says they connect to.
 module Bridge
   class Graph
     LAYERS = {
@@ -70,10 +75,14 @@ module Bridge
     }.freeze
 
     attr_reader :nodes, :edges
+    # The cloud router's name (Relay::Settings.cloud_name): the router the
+    # registry's entries are expected at (Bridge::Marks).
+    attr_accessor :cloud
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil, peer_links: [])
+                   registry: nil, peer_links: [], cloud: nil)
       g = new
+      g.cloud = cloud
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
@@ -442,9 +451,11 @@ module Bridge
 
     # ---------------------------------------------------------------- output
 
-    # With the default drawing's parts (Bridge::Connections) added.
+    # With the default drawing's parts (Bridge::Connections) and the marks
+    # and registry box (Bridge::Marks) added.
     def to_h
-      Connections.apply("nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] })
+      g = Connections.apply("nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] })
+      Marks.apply(g, cloud: @cloud)
     end
 
     # What changed from old to new (both to_h): added / removed / changed.

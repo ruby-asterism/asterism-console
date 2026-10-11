@@ -27,6 +27,7 @@
     <label title="Draw each Zenoh session as a point between the router and the nodes (for finding out why something does not connect)"><input type="checkbox" name="session_points" data-action="console#toggleSessionPoints"> Sessions as points</label>
     <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
     <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
+    <label title="Marks the nodes and routers by the relay registry as it was recorded, and shows its names that were not connected (remembered by this browser)"><input type="checkbox" data-layer="registry" data-action="console#toggleLayer"> Relay registry</label>
     <label><input type="checkbox" name="hide_debug" data-action="console#toggleDebug" checked> Hide /rosout, /parameter_events</label>
     <button type="button" data-action="console#relayout">Lay out again</button>
     <span class="counts" data-console-target="counts"></span>

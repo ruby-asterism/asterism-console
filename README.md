@@ -12,7 +12,12 @@ calls the methods that Asterism nodes expose.
   "Sessions as points" draws each session as a point between router and
   nodes instead (docs/v2_1.md).
 - **Asterism** nodes from their liveliness tokens (`asterism/**`), each a
-  box holding its apps, each app a box holding its exposed objects.
+  box holding its apps, each app a box holding its exposed objects. A
+  colour says only which family something is (blue routers, purple ROS 2,
+  orange topics, teal Asterism); the Asterism levels differ by shape: a
+  node is a white box with a teal border and a mark before its name for
+  what it runs on (board, CRuby, this console), an app a grey dashed box,
+  an object a small teal dot (docs/v2_2.md).
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name
@@ -306,11 +311,15 @@ applies it.
   closes it), but the ACL denies it everything. A second valid certificate
   with the same name is not told apart: the ACL matches the name. Keep
   lifetimes short.
-- **The graph**: the "Relay registry" layer puts a halo on Asterism nodes and
-  routers: green (registered), orange (here but disabled), red (not in the
-  registry), and adds a grey node for each registered name that is not here.
-  Names that are neither node IDs nor router names (a ROS 2 peer's
-  certificate) cannot be matched and show as not here.
+- **The graph**: the "Relay registry" layer (off by default, remembered by
+  the browser) puts a mark in the corner of Asterism nodes and routers: a
+  check (registered), a bar (here but disabled), a question mark (not in
+  the registry), and puts the registered names that are not here in one
+  "Not connected (registry)" box. A name the cloud router's ACL lets in
+  gets a dashed line to the cloud router (the registry is its list; the
+  others only sit in the box, docs/v2_2.md). Names that are neither node
+  IDs nor router names (a ROS 2 peer's certificate) cannot be matched and
+  show as not here.
 
 ## Security
 

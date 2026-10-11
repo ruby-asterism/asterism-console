@@ -390,7 +390,8 @@ module Bridge
         @dirty = false
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
-                    self_cert: self_cert, registry: @registry, peer_links: @peer_links).to_h
+                    self_cert: self_cert, registry: @registry, peer_links: @peer_links,
+                    cloud: Relay::Settings.cloud_name).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"

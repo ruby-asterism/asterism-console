@@ -152,6 +152,35 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "x" ], response.parsed_body["graph"]["nodes"].map { _1["id"] }
   end
 
+  test "a structure recorded before V2.2 gets the marks and the registry box" do
+    r = Recording.new(user: users(:user), name: "old registry", status: "done")
+    r.selection_value = { "structure" => true }
+    r.save!
+    old = {
+      "nodes" => [
+        { "id" => "router:r1", "kind" => "router", "layer" => "infra", "label" => "router zenohd-cloud",
+          "data" => { "name" => "zenohd-cloud" } },
+        { "id" => "a_node:linux", "kind" => "a_node", "layer" => "asterism", "label" => "linux", "data" => { "node" => "linux" } },
+        { "id" => "reg:w2bot", "kind" => "registered", "layer" => "infra", "label" => "w2bot",
+          "data" => { "registry" => "absent", "peer" => { "name" => "w2bot", "kind" => "client", "enabled" => true, "in_acl" => true } } }
+      ],
+      "edges" => []
+    }
+    File.open(r.path, "wb") do |f|
+      w = MCAP::Writer.new(f)
+      g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+                        schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
+      w.add_message(channel_id: g, log_time: 10, data: JSON.generate("kind" => "snapshot", "version" => 1, "graph" => old))
+      w.finish
+    end
+    get graph_recording_path(r, t: 5), as: :json
+    graph = response.parsed_body["graph"]
+    assert_equal "board", graph["nodes"].find { _1["id"] == "a_node:linux" }["data"]["machine"]
+    assert_equal "reg_box", graph["nodes"].find { _1["id"] == "reg:w2bot" }["parent"]
+    assert graph["nodes"].any? { _1["kind"] == "reg_box" }
+    assert graph["edges"].any? { _1["kind"] == "expect" && _1["source"] == "reg:w2bot" && _1["target"] == "router:r1" }
+  end
+
   test "a structure recorded before V2.1 is drawn the default way too" do
     r = Recording.new(user: users(:user), name: "old net", status: "done")
     r.selection_value = { "structure" => true }

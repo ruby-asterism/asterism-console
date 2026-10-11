@@ -237,7 +237,7 @@ class Bridge::GraphTest < ActiveSupport::TestCase
       { "name" => "w2bot", "kind" => "client", "enabled" => true, "in_acl" => true, "description" => "not running" }
     ]
     g = Bridge::Graph.build(admin: adm, asterism: asterism + %w[asterism/stranger], ros: ros, self_node: "console",
-                            self_zids: [ READER ], registry: registry).to_h
+                            self_zids: [ READER ], registry: registry, cloud: "zenohd-cloud").to_h
     c = node(g, "a_node:console")["data"]
     assert_equal "registered", c["registry"]
     assert_equal({ "name" => "console", "kind" => "client", "enabled" => true, "in_acl" => true,
@@ -249,6 +249,11 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     ghost = node(g, "reg:w2bot")
     assert_equal [ "registered", "infra", "absent" ], [ ghost["kind"], ghost["layer"], ghost["data"]["registry"] ]
     assert_equal "not running", ghost["data"]["peer"]["description"]
+    # V2.2 (Bridge::Marks): in the box, with a line to the cloud router.
+    assert_equal "reg_box", ghost["parent"]
+    assert edge?(g, "expect", "reg:w2bot", "router:#{ROUTER}")
+    assert_equal "console", c["machine"]
+    assert_equal "board", node(g, "a_node:fmruby-aaaaaa")["data"]["machine"]
     refute g["nodes"].any? { _1["id"] == "reg:console" }
     # Sessions and ROS 2 nodes are not names of the registry: left as they are.
     assert_nil node(g, "session:#{BOARD}")["data"]["registry"]

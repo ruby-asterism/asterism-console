@@ -25,39 +25,69 @@ cytoscape.use(fcose)
 // (next to their neighbours, the others held fixed), and "Lay out again"
 // lays out everything.
 //
+// Colour says which family a thing belongs to, shape says what it is
+// (V2.2): blue the routers, purple ROS 2, orange the topics, teal Asterism.
+// The three levels of Asterism differ by shape: a node is a white box with
+// a teal border and a mark before its name for what it runs on (data
+// "machine", lib/bridge/marks.rb), an app a grey dashed box, an object a
+// small teal dot. The relay registry ("Relay registry", off by default and
+// remembered by this browser) adds a mark in the corner of the nodes and
+// routers it knows of, and puts the names it has that are not here in one
+// "Not connected (registry)" box, with a dashed line to the router the
+// registry says they connect to when it tells.
+//
 // Replay mode (replay: true, the graph rewind of a recording): no
 // connection to the bridge, no leases, no watches, no calls; the rewind
 // controller hands it graphs (showRecorded) and the differences are applied
 // as the live diffs are, so what stays keeps its place.
 
+// The one colour of each family, and the neutral grey of the rest.
+const ROUTER_BLUE = "#1f4e99"
+const TEAL = "#00897b"
+const GREY = "#8a8f98"
+
 const KINDS = {
-  router:    { label: "Router",          shape: "diamond",         color: "#1f4e99", size: 46 },
-  session:   { label: "Session",         shape: "ellipse",         color: "#8a8f98", size: 22 },
-  a_node:    { label: "Asterism node",   shape: "round-rectangle", color: "#2e7d32", size: 38 },
-  a_app:     { label: "Asterism app",    shape: "hexagon",         color: "#00897b", size: 30 },
-  a_object:  { label: "Asterism object", shape: "ellipse",         color: "#7cb342", size: 24 },
+  router:    { label: "Router",          shape: "diamond",         color: ROUTER_BLUE, size: 46 },
+  session:   { label: "Session",         shape: "ellipse",         color: GREY, size: 22 },
+  a_node:    { label: "Asterism node",   shape: "round-rectangle", color: "#ffffff", border: TEAL, size: 38 },
+  a_app:     { label: "Asterism app",    shape: "round-rectangle", color: "#ffffff", border: GREY, dashed: true, size: 30 },
+  a_object:  { label: "Asterism object", shape: "ellipse",         color: TEAL, size: 14 },
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 28 },
-  registered: { label: "Registered, not here", shape: "round-rectangle", color: "#c9ced6", size: 30 },
-  others:    { label: "Other connections", shape: "round-rectangle", color: "#8a8f98", size: 20 },
+  others:    { label: "Other connections", shape: "round-rectangle", color: GREY, size: 20 },
+  reg_box:   { label: "Not connected (registry)", shape: "round-rectangle", color: "#f1f3f4", border: "#c4c7cc", size: 30 },
+  registered: { label: "Registered, not connected", shape: "round-rectangle", color: "#e8eaed", border: "#9aa0a6", size: 22 },
+}
+
+// What an Asterism node runs on (data "machine"): the mark before its name.
+// Plain characters of the Geometric Shapes block (no emoji).
+const MACHINES = {
+  board:   { mark: "\u25A3", label: "board (Family mruby, its sim or browser build)" },
+  ruby:    { mark: "\u25C8", label: "CRuby (any other Ruby process)" },
+  console: { mark: "\u25CE", label: "this console" },
 }
 
 // Shown only with "Sessions as points" / only without it.
 const POINT_KINDS = ["session", "carries", "peer_session"]
 const DIRECT_KINDS = ["others", "attach", "peer_link"]
+// Shown only with the "Relay registry" layer.
+const REGISTRY_KINDS = ["reg_box", "registered", "expect"]
 const STORE_POINTS = "asterism.console.sessionPoints"
+const STORE_REGISTRY = "asterism.console.registry"
 
-// The relay registry over the graph (W2): a halo by how a node matches it.
+// The relay registry over the graph (W2): a mark in the corner of a node or
+// router by how it matches the registry (V2.2; before, a coloured halo).
 const REGISTRY = {
-  registered:   { label: "registered, here",          color: "#2e7d32" },
-  disabled:     { label: "here, disabled in registry", color: "#ef6c00" },
-  unregistered: { label: "not in the registry",       color: "#d32f2f" },
-  absent:       { label: "registered, not here",      color: "#8a8f98" },
+  registered:   { label: "registered", glyph: "check" },
+  disabled:     { label: "disabled in the registry", glyph: "bar" },
+  unregistered: { label: "not in the registry", glyph: "?" },
+  absent:       { label: "registered, not connected" },
 }
+const MARK_SIZE = 14
 
 const EDGE_COLORS = {
-  session: "#9aa0a6", router_link: "#1f4e99", carries: "#c0c4ca", attach: "#9aa0a6", peer_link: "#5c6bc0",
-  peer_session: "#5c6bc0",
+  session: "#9aa0a6", router_link: ROUTER_BLUE, carries: "#c0c4ca", attach: "#9aa0a6", peer_link: "#5c6bc0",
+  peer_session: "#5c6bc0", expect: ROUTER_BLUE,
   publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00",
 }
 
@@ -93,7 +123,7 @@ export default class extends Controller {
 
   connect() {
     this.version = this.stateValue.version || 0
-    this.layers = { infra: true, asterism: true, ros: true, registry: true }
+    this.layers = { infra: true, asterism: true, ros: true, registry: loadFlag(STORE_REGISTRY) }
     this.topicsAsNodes = false
     this.showHz = true
     this.hideDebug = true
@@ -101,6 +131,8 @@ export default class extends Controller {
     this.sessionPoints = loadFlag(STORE_POINTS)
     const box = this.element.querySelector("input[name=session_points]")
     if (box) box.checked = this.sessionPoints
+    const reg = this.element.querySelector("input[data-layer=registry]")
+    if (reg) reg.checked = this.layers.registry
     this.rates = new Map(Object.entries(this.stateValue.rates || {}))
     this.rateState = null
     this.placed = new Set()      // node ids that have a position of their own
@@ -162,16 +194,20 @@ export default class extends Controller {
           "text-wrap": "ellipsis", "text-max-width": 150, "border-width": 1, "border-color": "#fff" } },
       { selector: ".off", style: { display: "none" } },
       // Compound nodes: an Asterism node holds its apps, an app its objects.
+      // An Asterism node: white, a teal border, its name (after the mark of
+      // what it runs on) in bold; with apps it holds them.
+      { selector: "node[kind = 'a_node']", style: { "font-size": 12, "font-weight": "bold" } },
       { selector: "node[kind = 'a_node']:parent", style: {
-          "background-color": KINDS.a_node.color, "background-opacity": 0.07, "border-width": 2,
-          "border-color": KINDS.a_node.color, padding: 14, "text-valign": "top", "text-margin-y": -4,
-          "font-weight": "bold", color: "#1b5e20" } },
+          "background-color": "#fff", "background-opacity": 1, padding: 14, "text-valign": "top", "text-margin-y": -4 } },
+      // An app: a grey dashed box, no colour; it holds its objects.
       { selector: "node[kind = 'a_app']:parent", style: {
-          "background-color": KINDS.a_app.color, "background-opacity": 0.1, "border-width": 1.5,
-          "border-style": "dashed", "border-color": KINDS.a_app.color, padding: 8, "text-valign": "top",
-          "text-margin-y": -3, color: "#00695c", shape: "round-rectangle" } },
-      { selector: "node[kind = 'a_object']", style: { "font-size": 9 } },
-      { selector: "node[?self]", style: { "border-width": 3, "border-style": "dashed", "border-color": "#333" } },
+          "background-opacity": 0, padding: 8, "text-valign": "top", "text-margin-y": -3, color: "#5f6368" } },
+      { selector: "node[kind = 'a_object']", style: { "font-size": 9, "border-width": 0 } },
+      // The registry's names that are not here, in one box.
+      { selector: "node[kind = 'reg_box']", style: {
+          padding: 12, "text-valign": "top", "text-margin-y": -3, color: "#5f6368", "font-style": "italic" } },
+      { selector: "node[kind = 'registered']", style: { color: "#5f6368", "font-size": 9 } },
+      { selector: "node[kind = 'registered'][regkind = 'router']", style: { shape: "diamond" } },
       // A ROS 2 node's badge: its services, and its topics with no counterpart.
       { selector: "node[badge]", style: {
           "background-image": "data(badge)", "background-width": "data(badgeW)", "background-height": 14,
@@ -203,27 +239,21 @@ export default class extends Controller {
           "text-background-color": "#fff", "text-background-opacity": 0.85, "text-background-padding": 1,
           "control-point-step-size": 50, "arrow-scale": 1 } },
       { selector: "edge[kind = 'topic_link']:selected", style: { width: 4, "line-color": "#ffb300", "target-arrow-color": "#ffb300" } },
-      { selector: "node[registry = 'registered'], node[registry = 'disabled'], node[registry = 'unregistered']",
-        style: { "underlay-opacity": 0.8, "underlay-padding": 8, "underlay-shape": "ellipse" } },
-      { selector: "node[registry = 'registered']", style: { "underlay-color": REGISTRY.registered.color } },
-      { selector: "node[registry = 'disabled']", style: { "underlay-color": REGISTRY.disabled.color } },
-      { selector: "node[registry = 'unregistered']", style: { "underlay-color": REGISTRY.unregistered.color } },
-      // A compound node shows its registry mark as its border (the halo would
-      // cover its contents).
-      { selector: "node:parent[registry = 'registered'], node:parent[registry = 'disabled'], node:parent[registry = 'unregistered']",
-        style: { "underlay-opacity": 0, "border-width": 4 } },
-      { selector: "node:parent[registry = 'registered']", style: { "border-color": REGISTRY.registered.color } },
-      { selector: "node:parent[registry = 'disabled']", style: { "border-color": REGISTRY.disabled.color } },
-      { selector: "node:parent[registry = 'unregistered']", style: { "border-color": REGISTRY.unregistered.color } },
-      { selector: "node[kind = 'registered']", style: {
-          "border-width": 2, "border-style": "dashed", "border-color": "#6b7280", "background-opacity": 0.5, color: "#555" } },
-      { selector: "node.reg-off", style: { "underlay-opacity": 0 } },
-      { selector: "node:parent.reg-off", style: { "border-width": 2, "border-color": KINDS.a_node.color } },
+      // The registry's mark, in the top right corner (with the layer on).
+      { selector: "node.reg-on[regmark]", style: {
+          "background-image": "data(regmark)", "background-width": MARK_SIZE, "background-height": MARK_SIZE,
+          "background-fit": "none", "background-clip": "none", "background-image-containment": "over",
+          "background-position-x": "100%", "background-position-y": "0%", "background-offset-x": MARK_SIZE / 2,
+          "background-offset-y": -MARK_SIZE / 2, "bounds-expansion": MARK_SIZE, "background-image-smoothing": "yes" } },
+      // Where the registry expects a name that is not here to connect.
+      { selector: "edge[kind = 'expect']", style: {
+          "line-style": "dashed", width: 1.2, "line-opacity": 0.6, "target-arrow-shape": "triangle", "arrow-scale": 0.7 } },
       { selector: ".flash", style: { "overlay-color": "#ffb300", "overlay-opacity": 0.35, "overlay-padding": 6 } },
     ]
     for (const [kind, k] of Object.entries(KINDS)) {
-      s.splice(1, 0, { selector: `node[kind = '${kind}']`,
-                       style: { shape: k.shape, "background-color": k.color, width: k.size, height: k.size } })
+      const style = { shape: k.shape, "background-color": k.color, width: k.size, height: k.size }
+      if (k.border) Object.assign(style, { "border-width": k.dashed ? 1.5 : 2, "border-color": k.border, "border-style": k.dashed ? "dashed" : "solid" })
+      s.splice(1, 0, { selector: `node[kind = '${kind}']`, style })
     }
     for (const [kind, c] of Object.entries(EDGE_COLORS)) {
       s.push({ selector: `edge[kind = '${kind}']`, style: { "line-color": c, "target-arrow-color": c } })
@@ -235,7 +265,7 @@ export default class extends Controller {
 
   // Parents before their children (cytoscape needs the parent to exist).
   elementsOf(graph) {
-    const depth = (n) => n.kind === "a_object" ? 2 : n.kind === "a_app" ? 1 : 0
+    const depth = (n) => n.kind === "a_object" ? 2 : n.kind === "a_app" || n.kind === "registered" ? 1 : 0
     const nodes = [...(graph.nodes || [])].sort((a, b) => depth(a) - depth(b)).map((n) => this.nodeElement(n))
     const edges = (graph.edges || []).map((e) => this.edgeElement(e))
     return nodes.concat(edges)
@@ -243,10 +273,13 @@ export default class extends Controller {
 
   nodeElement(n) {
     let label = n.data?.self ? `${n.label} (this console)` : n.label
-    if (n.kind === "registered") label = `${n.label} (registered, not here)`
+    const machine = n.kind === "a_node" && MACHINES[n.data?.machine]
+    if (machine) label = `${machine.mark} ${label}`
     const data = { id: n.id, kind: n.kind, layer: n.layer, label, name: n.label, self: !!n.data?.self, info: n.data }
     if (n.parent) data.parent = n.parent
     if (n.data?.registry) data.registry = n.data.registry
+    if (REGISTRY[n.data?.registry]?.glyph) data.regmark = registryMark(n.data.registry)
+    if (n.kind === "registered") data.regkind = n.data?.peer?.kind
     if (n.kind === "r_node") Object.assign(data, badgeOf(n.data, this.hideDebug))
     if (n.kind === "r_topic") data.label = this.topicNodeLabel(n.id, n.label)
     return { group: "nodes", data, classes: `layer-${n.layer}` }
@@ -307,7 +340,15 @@ export default class extends Controller {
         const el = cy.getElementById(n.id)
         if (el.empty()) continue
         const fresh = this.nodeElement(n).data
-        el.data({ label: fresh.label, name: fresh.name, info: fresh.info, self: fresh.self, registry: fresh.registry })
+        el.data({ label: fresh.label, name: fresh.name, info: fresh.info, self: fresh.self })
+        for (const key of ["registry", "regmark", "regkind"]) {
+          if (fresh[key] === undefined) el.removeData(key)
+          else el.data(key, fresh[key])
+        }
+        const parent = el.parent().nonempty() ? el.parent().id() : null
+        if ((fresh.parent || null) !== parent && (!fresh.parent || cy.getElementById(fresh.parent).nonempty())) {
+          el.move({ parent: fresh.parent || null })
+        }
         if (fresh.kind === "r_node") this.setBadge(el)
       }
       for (const e of diff.add_edges) {
@@ -519,10 +560,16 @@ export default class extends Controller {
   }
 
   toggleLayer(ev) {
-    this.layers[ev.target.dataset.layer] = ev.target.checked
+    const layer = ev.target.dataset.layer
+    this.layers[layer] = ev.target.checked
     this.applyView()
     this.settle()
     this.updateCounts()
+    if (layer === "registry") {
+      saveFlag(STORE_REGISTRY, this.layers.registry)
+      this.renderLegend()
+      if (this.selected) this.refreshDetails()
+    }
   }
 
   // "Sessions as points": each Zenoh session as a point (V2's drawing), or
@@ -579,12 +626,12 @@ export default class extends Controller {
     this.cy.batch(() => {
       this.cy.nodes().forEach((n) => {
         let shown = this.layers[n.data("layer")]
-        if (n.data("kind") === "registered") shown = shown && this.layers.registry
+        if (REGISTRY_KINDS.includes(n.data("kind"))) shown = shown && this.layers.registry
         if (n.data("kind") === "r_topic") shown = shown && this.topicsAsNodes && !(this.hideDebug && isDebugTopic(n.id()))
         if (POINT_KINDS.includes(n.data("kind"))) shown = shown && this.sessionPoints
         if (DIRECT_KINDS.includes(n.data("kind"))) shown = shown && !this.sessionPoints
         n.toggleClass("off", !shown)
-        n.toggleClass("reg-off", !this.layers.registry)
+        n.toggleClass("reg-on", this.layers.registry)
       })
       this.cy.edges().forEach((e) => {
         const k = e.data("kind")
@@ -593,6 +640,7 @@ export default class extends Controller {
         if (k === "publishes" || k === "subscribes") shown = ros && this.topicsAsNodes
         if (POINT_KINDS.includes(k)) shown = this.sessionPoints
         if (DIRECT_KINDS.includes(k)) shown = !this.sessionPoints
+        if (REGISTRY_KINDS.includes(k)) shown = this.layers.registry
         if (e.source().hasClass("off") || e.target().hasClass("off")) shown = false
         e.toggleClass("off", !shown)
       })
@@ -603,7 +651,8 @@ export default class extends Controller {
     const by = {}
     let services = 0
     this.cy.nodes().forEach((n) => {
-      if (n.data("kind") === "others") return
+      if (["others", "reg_box"].includes(n.data("kind"))) return
+      if (n.data("kind") === "registered" && !this.layers.registry) return
       by[n.data("kind")] = (by[n.data("kind")] || 0) + 1
       if (n.data("kind") === "r_node") services += (n.data("info").services || []).length
     })
@@ -614,21 +663,27 @@ export default class extends Controller {
 
   renderLegend() {
     const badge = (c, t) => `<span class="pill" style="background:${c}">${t}</span>`
-    const kinds = Object.entries(KINDS).filter(([kind]) => kind !== (this.sessionPoints ? "others" : "session")).map(([, k]) => k)
+    const kinds = Object.entries(KINDS).filter(([kind]) => kind !== (this.sessionPoints ? "others" : "session") &&
+                                                (this.layers.registry || !REGISTRY_KINDS.includes(kind))).map(([, k]) => k)
     const lines = this.sessionPoints
       ? `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.session}"></span>session at a router</span>` +
         `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.carries}"></span>what a session carries</span>`
       : `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.attach}"></span>connection to the router (client / peer)</span>` +
         `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.peer_link}"></span>peer to peer, no router</span>`
+    const registry = this.layers.registry
+      ? `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.expect}"></span>expected router (from the registry)</span>` +
+        Object.entries(REGISTRY).filter(([, r]) => r.glyph).map(([key, r]) =>
+          `<span class="key"><img class="mark" src="${registryMark(key)}" alt="">${r.label}</span>`).join("")
+      : ""
     this.legendTarget.innerHTML = kinds.map((k) =>
-      `<span class="key"><span class="swatch shape-${k.shape}" style="background:${k.color}"></span>${k.label}</span>`
-    ).join("") + lines +
+      `<span class="key">${swatch(k)}${k.label}</span>`
+    ).join("") +
+      Object.values(MACHINES).map((m) => `<span class="key"><span class="mark-text">${m.mark}</span>${m.label}</span>`).join("") +
+      lines +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
       `<span class="key">${badge(BADGE.unmatched, "2")} topics with no counterpart</span>` +
-      `<span class="key"><span class="swatch dashed"></span>this console</span>` +
-      Object.values(REGISTRY).filter((r) => r !== REGISTRY.absent).map((r) =>
-        `<span class="key"><span class="swatch halo" style="box-shadow: 0 0 0 3px ${r.color}"></span>${r.label}</span>`).join("")
+      registry
   }
 
   // ----------------------------------------------------------------- rates
@@ -762,7 +817,7 @@ export default class extends Controller {
     const kind = el.data("kind")
     const info = el.data("info") || {}
     const k = KINDS[kind]
-    let html = `<h2><span class="swatch" style="background:${k.color}"></span>${esc(k.label)}</h2>`
+    let html = `<h2>${swatch(k)}${esc(k.label)}</h2>`
     html += `<p class="name">${esc(el.data("name") || el.data("label"))}</p>`
     const rows = []
     const names = (sel) => el.connectedEdges(sel).map((e) => e.source().id() === id ? e.target() : e.source())
@@ -789,6 +844,8 @@ export default class extends Controller {
         break
       case "a_node":
         rows.push(["ID", info.node],
+                  ["Runs on", MACHINES[info.machine] ? `${MACHINES[info.machine].mark} ${MACHINES[info.machine].label}` +
+                    (info.machine === "console" ? "" : " (told by its name)") : null],
                   ["Apps", el.children().map((a) =>
                     `${this.link(a.id(), a.data("name"))}: ${a.children().map((o) => this.link(o.id(), o.data("name"))).join(", ")}`
                   ).join("<br>") || "none", true],
@@ -798,6 +855,19 @@ export default class extends Controller {
         rows.push(["Router", this.link(info.router, this.cy.getElementById(info.router).data("label") || info.router), true],
                   ["Sessions", this.sessionListHtml(info.sessions), true])
         break
+      case "reg_box": {
+        const entries = el.children().map((c) => {
+          const to = c.data("info")?.expect
+          return `${this.link(c.id(), c.data("name"))} <span class="hint">${esc(c.data("info")?.peer?.kind || "")}` +
+            `${to ? `, expected at router ${esc(to)}` : ""}</span>`
+        })
+        rows.push(["Entries", entries.join("<br>") || "none", true],
+                  ["Cloud router", info.cloud])
+        html += `<p class="hint">Names in the relay registry that are not on the network now. A dashed line goes to the
+          router the registry says one connects to: the cloud router, for an enabled router or client with a valid
+          certificate (the registry is the cloud router's list). The others only sit here.</p>`
+        break
+      }
       case "a_app":
         rows.push(["Node", info.node],
                   ["Objects", el.children().map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
@@ -827,17 +897,21 @@ export default class extends Controller {
         break
       }
     }
-    if (["a_node", "router", "registered"].includes(kind) && info.registry) {
+    if (["a_node", "router", "registered"].includes(kind) && info.registry && this.layers.registry) {
       const p = info.peer || {}
       const r = REGISTRY[info.registry]
       const parts = [r ? r.label : info.registry]
       if (p.kind) parts.push(p.kind)
       if (p.name) parts.push(p.in_acl ? "in the ACL" : "not in the ACL")
       if (p.expires) parts.push(`certificate until ${p.expires.slice(0, 10)}`)
-      rows.push(["Registry", `<span class="swatch halo" style="box-shadow: 0 0 0 3px ${r ? r.color : "#999"}"></span> ` +
+      rows.push(["Registry", (r?.glyph ? `<img class="mark" src="${registryMark(info.registry)}" alt=""> ` : "") +
                  esc(parts.join(", ")) + (p.name ? ` <a href="/relay/peers">registry</a>` : ""), true])
-      if (info.via) rows.push(["Through", `router ${info.via}`])
-      if (kind === "registered" && p.description) rows.push(["Description", p.description])
+      if (info.via) rows.push(["Through", String(info.via).startsWith("router ") ? info.via : `router ${info.via}`])
+      if (kind === "registered") {
+        rows.push(["Expected at", info.expect ? `router ${info.expect}`
+          : "the registry does not tell (the cloud router itself, or left out of its ACL: disabled or no valid certificate)"])
+        if (p.description) rows.push(["Description", p.description])
+      }
     }
     html += dl(rows)
     if (kind === "r_node") html += `<p class="actions"><a class="button" href="/logs?node=${encodeURIComponent(loggerName(info.name))}" target="_blank" rel="noopener">Show its logs</a></p>`
@@ -1150,6 +1224,27 @@ function badgeOf(info, hideDebug) {
   const width = x - 2
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="14" viewBox="0 0 ${width} 14">${parts.join("")}</svg>`
   return { badge: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, badgeW: width }
+}
+
+// The legend's and the details' sample of a kind: its shape, fill and border.
+function swatch(k) {
+  const border = k.border ? `;border:${k.dashed ? "1.5px dashed" : "2px solid"} ${k.border}` : ""
+  return `<span class="swatch shape-${k.shape}" style="background:${k.color}${border}"></span>`
+}
+
+// The registry's corner mark (an SVG image): a dark grey disc with a white
+// check (registered), bar (disabled) or question mark (not in the registry).
+function registryMark(state) {
+  const glyph = REGISTRY[state]?.glyph
+  if (!glyph) return null
+  const inner = glyph === "check"
+    ? `<path d="M4 7.3 L6.1 9.4 L10.2 4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
+    : glyph === "bar"
+      ? `<path d="M4 7 L10 7" stroke="#fff" stroke-width="2" stroke-linecap="round"/>`
+      : `<text x="7" y="10.6" font-family="sans-serif" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">?</text>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14">` +
+    `<circle cx="7" cy="7" r="6.3" fill="#455a64" stroke="#fff" stroke-width="1"/>${inner}</svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
 // "Plot this topic": the plot page, in a tab of its own (the graph keeps its layout).

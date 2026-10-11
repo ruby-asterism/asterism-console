@@ -151,11 +151,12 @@ class RecordingsController < ApplicationController
   end
 
   # The network structure at ?t=<ns> (JSON), with the default drawing's
-  # parts (Bridge::Connections; recordings made before V2.1 lack them).
+  # parts (Bridge::Connections; recordings made before V2.1 lack them) and
+  # the marks and registry box (Bridge::Marks; before V2.2).
   def graph
     view_json do |v|
       g = v.graph_at(abs_time(v))
-      g = g.merge("graph" => Bridge::Connections.apply(g["graph"])) if g
+      g = g.merge("graph" => Bridge::Marks.apply(Bridge::Connections.apply(g["graph"]), cloud: Relay::Settings.cloud_name)) if g
       g ? relative(v, g, %w[at prev next]) : { "error" => "this recording has no network structure" }
     end
   end

@@ -104,8 +104,9 @@ details { margin-top: 8px; font-size: 12px; }
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
 .swatch.shape-ellipse { border-radius: 50%; }
 .swatch.shape-diamond { transform: rotate(45deg) scale(0.8); border-radius: 0; }
-.swatch.halo { width: 10px; height: 10px; border-radius: 50%; background: var(--panel); margin: 0 3px; vertical-align: middle; }
-.swatch.dashed { border: 2px dashed var(--text); background: transparent; }
+.swatch { box-sizing: border-box; }
+img.mark { width: 14px; height: 14px; vertical-align: middle; }
+.mark-text { font-weight: 700; font-size: 13px; color: var(--text); }
 .swatch.line { width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; }
 .swatch.dashed-line { height: 0; border-top: 2px dashed; border-radius: 0; background: transparent; }
 table.sessions { border-collapse: collapse; font-size: 12px; }
