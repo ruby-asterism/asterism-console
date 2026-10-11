@@ -14,10 +14,10 @@ calls the methods that Asterism nodes expose.
 - **Asterism** nodes from their liveliness tokens (`asterism/**`), each a
   box holding its apps, each app a box holding its exposed objects. A
   colour says only which family something is (blue routers, purple ROS 2,
-  orange topics, teal Asterism); the Asterism levels differ by shape: a
-  node is a white box with a teal border and a mark before its name for
+  orange topics, Ruby red Asterism); the Asterism levels differ by shape: a
+  node is a white box with a Ruby red border and a mark before its name for
   what it runs on (board, CRuby, this console), an app a grey dashed box,
-  an object a small teal dot (docs/v2_2.md).
+  an object a small Ruby red dot (docs/v2_2.md).
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name

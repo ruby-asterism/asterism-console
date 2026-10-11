@@ -43,15 +43,15 @@ cytoscape.use(fcose)
 
 // The one colour of each family, and the neutral grey of the rest.
 const ROUTER_BLUE = "#1f4e99"
-const TEAL = "#00897b"
+const RUBY = "#cc342d"
 const GREY = "#8a8f98"
 
 const KINDS = {
   router:    { label: "Router",          shape: "diamond",         color: ROUTER_BLUE, size: 46 },
   session:   { label: "Session",         shape: "ellipse",         color: GREY, size: 22 },
-  a_node:    { label: "Asterism node",   shape: "round-rectangle", color: "#ffffff", border: TEAL, size: 38 },
+  a_node:    { label: "Asterism node",   shape: "round-rectangle", color: "#ffffff", border: RUBY, size: 38 },
   a_app:     { label: "Asterism app",    shape: "round-rectangle", color: "#ffffff", border: GREY, dashed: true, size: 30 },
-  a_object:  { label: "Asterism object", shape: "ellipse",         color: TEAL, size: 14 },
+  a_object:  { label: "Asterism object", shape: "ellipse",         color: RUBY, size: 14 },
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 28 },
   others:    { label: "Other connections", shape: "round-rectangle", color: GREY, size: 20 },
@@ -91,7 +91,7 @@ const EDGE_COLORS = {
   publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00",
 }
 
-const BADGE = { services: "#c2185b", unmatched: "#ef6c00" }
+const BADGE = { services: "#455a64", unmatched: "#ef6c00" }
 
 const STATUS_TEXT = {
   ok: "ok", remote_error: "RemoteError", timeout: "TimeoutError", error: "error",
