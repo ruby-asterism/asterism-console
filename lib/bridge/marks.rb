@@ -30,8 +30,8 @@ module Bridge
     BOX = "reg_box".freeze
     BOX_LABEL = "Not connected (registry)".freeze
     # A board's node name: its mDNS name, or the fallback of the simulation
-    # and the browser build (fmruby-core's flash/app/test/asterism_demo).
-    BOARD_NAME = /\A(fmruby-[0-9a-f]{6}|linux)\z/
+    # (linux) and of the browser build (wasm), fmruby-core's asterism_demo.
+    BOARD_NAME = /\A(fmruby-[0-9a-f]{6}|linux|wasm)\z/
 
     module_function
 
