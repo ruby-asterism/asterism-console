@@ -11,7 +11,13 @@ cytoscape.use(fcose)
 // rates arrive on ConsoleChannel. Requests (meta, call), rate leases and
 // watches go out over HTTP.
 //
-// The graph (lib/bridge/graph.rb): Asterism apps and objects nest in their
+// The graph (lib/bridge/graph.rb): by default each node (Asterism, ROS 2,
+// this console) is joined to its router by a line that names its role
+// (client / peer), and the sessions that carry no node are one "other
+// connections" node per router (lib/bridge/connections.rb). "Sessions as
+// points" draws each Zenoh session as a point between router and nodes
+// instead, for finding out why something does not connect.
+// Asterism apps and objects nest in their
 // node (compound nodes); ROS 2 services are attributes of their node (a
 // badge and the details); ROS 2 topics are edges from publisher to
 // subscriber ("topic_link"), or, with "Topics as nodes", nodes between them
@@ -33,7 +39,13 @@ const KINDS = {
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 28 },
   registered: { label: "Registered, not here", shape: "round-rectangle", color: "#c9ced6", size: 30 },
+  others:    { label: "Other connections", shape: "round-rectangle", color: "#8a8f98", size: 20 },
 }
+
+// Shown only with "Sessions as points" / only without it.
+const POINT_KINDS = ["session", "carries", "peer_session"]
+const DIRECT_KINDS = ["others", "attach", "peer_link"]
+const STORE_POINTS = "asterism.console.sessionPoints"
 
 // The relay registry over the graph (W2): a halo by how a node matches it.
 const REGISTRY = {
@@ -44,7 +56,8 @@ const REGISTRY = {
 }
 
 const EDGE_COLORS = {
-  session: "#9aa0a6", router_link: "#1f4e99", carries: "#c0c4ca",
+  session: "#9aa0a6", router_link: "#1f4e99", carries: "#c0c4ca", attach: "#9aa0a6", peer_link: "#5c6bc0",
+  peer_session: "#5c6bc0",
   publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00",
 }
 
@@ -58,7 +71,7 @@ const STATUS_TEXT = {
 const LAYOUT = {
   name: "fcose", nodeDimensionsIncludeLabels: true, padding: 30,
   nodeRepulsion: () => 7000, edgeElasticity: () => 0.45, nestingFactor: 0.1, gravity: 0.25,
-  idealEdgeLength: (e) => e.data("kind") === "topic_link" ? 150 : e.data("kind") === "carries" ? 90 : 70,
+  idealEdgeLength: (e) => e.data("kind") === "topic_link" ? 150 : ["carries", "attach"].includes(e.data("kind")) ? 90 : 70,
   nodeSeparation: 60, numIter: 2500, tilingPaddingVertical: 20, tilingPaddingHorizontal: 20,
 }
 
@@ -85,6 +98,9 @@ export default class extends Controller {
     this.showHz = true
     this.hideDebug = true
     this.measureAll = false
+    this.sessionPoints = loadFlag(STORE_POINTS)
+    const box = this.element.querySelector("input[name=session_points]")
+    if (box) box.checked = this.sessionPoints
     this.rates = new Map(Object.entries(this.stateValue.rates || {}))
     this.rateState = null
     this.placed = new Set()      // node ids that have a position of their own
@@ -130,7 +146,7 @@ export default class extends Controller {
     })
     this.cy.add(this.elementsOf(graph))
     this.cy.on("tap", "node", (ev) => this.select(ev.target.id()))
-    this.cy.on("tap", "edge[kind = 'topic_link']", (ev) => this.select(ev.target.id()))
+    this.cy.on("tap", "edge[kind = 'topic_link'], edge[kind = 'attach'], edge[kind = 'peer_link']", (ev) => this.select(ev.target.id()))
     this.cy.on("tap", (ev) => { if (ev.target === this.cy) this.select(null) })
     this.applyView()
     this.layoutAll()
@@ -167,7 +183,17 @@ export default class extends Controller {
           width: 1.5, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": 0.8,
           "line-color": "#bbb", "target-arrow-color": "#bbb" } },
       { selector: "edge[kind = 'carries']", style: { "line-style": "dashed", width: 1 } },
-      { selector: "edge[kind = 'session'], edge[kind = 'router_link']", style: { "target-arrow-shape": "none" } },
+      { selector: "edge[kind = 'session'], edge[kind = 'router_link'], edge[kind = 'attach'], edge[kind = 'peer_link'], edge[kind = 'peer_session']",
+        style: { "target-arrow-shape": "none" } },
+      // A node's line to its router, with the role of its session(s).
+      { selector: "edge[kind = 'attach'][label], edge[kind = 'peer_link'], edge[kind = 'peer_session']", style: {
+          label: "data(label)", "font-size": 8, color: "#5f6368", "text-background-color": "#fff",
+          "text-background-opacity": 0.85, "text-background-padding": 1 } },
+      { selector: "edge[kind = 'peer_link'], edge[kind = 'peer_session']", style: { "line-style": "dashed", width: 2, color: "#3949ab" } },
+      // Lighter than the topic edges: the topics are what the graph is about.
+      { selector: "edge[kind = 'attach']", style: { width: 1.2, "line-opacity": 0.7 } },
+      { selector: "edge[kind = 'attach']:selected, edge[kind = 'peer_link']:selected", style: { width: 3 } },
+      { selector: "node[kind = 'others']", style: { "font-size": 9, color: "#555" } },
       { selector: "edge[kind = 'router_link']", style: { width: 3 } },
       { selector: "edge[kind = 'router_link'][label]", style: {
           label: "data(label)", "font-size": 9, color: "#1f4e99", "text-background-color": "#fff",
@@ -229,6 +255,7 @@ export default class extends Controller {
   edgeElement(e) {
     const data = { id: e.id, kind: e.kind, layer: e.layer, source: e.source, target: e.target }
     if (e.label) data.label = e.label
+    if (e.sessions) Object.assign(data, { sessions: e.sessions, roles: e.roles, shared: e.shared })
     if (e.topics) {
       data.topics = e.topics
       data.label = this.topicEdgeLabel(e.topics)
@@ -290,7 +317,7 @@ export default class extends Controller {
         const el = cy.getElementById(e.id)
         if (el.empty()) continue
         const fresh = this.edgeElement(e).data
-        el.data({ label: fresh.label, topics: fresh.topics })
+        el.data({ label: fresh.label, topics: fresh.topics, sessions: fresh.sessions, roles: fresh.roles, shared: fresh.shared })
       }
     })
     this.applyView()
@@ -498,6 +525,19 @@ export default class extends Controller {
     this.updateCounts()
   }
 
+  // "Sessions as points": each Zenoh session as a point (V2's drawing), or
+  // the nodes joined to their router directly (the default). Remembered by
+  // this browser.
+  toggleSessionPoints(ev) {
+    this.sessionPoints = ev.target.checked
+    saveFlag(STORE_POINTS, this.sessionPoints)
+    this.applyView()
+    this.settle()
+    this.updateCounts()
+    this.renderLegend()
+    if (this.selected) this.refreshDetails()
+  }
+
   toggleTopicNodes(ev) {
     this.topicsAsNodes = ev.target.checked
     this.applyView()
@@ -541,6 +581,8 @@ export default class extends Controller {
         let shown = this.layers[n.data("layer")]
         if (n.data("kind") === "registered") shown = shown && this.layers.registry
         if (n.data("kind") === "r_topic") shown = shown && this.topicsAsNodes && !(this.hideDebug && isDebugTopic(n.id()))
+        if (POINT_KINDS.includes(n.data("kind"))) shown = shown && this.sessionPoints
+        if (DIRECT_KINDS.includes(n.data("kind"))) shown = shown && !this.sessionPoints
         n.toggleClass("off", !shown)
         n.toggleClass("reg-off", !this.layers.registry)
       })
@@ -549,6 +591,8 @@ export default class extends Controller {
         let shown = true
         if (k === "topic_link") shown = ros && !this.topicsAsNodes && this.shownTopics(e.data("topics")).length > 0
         if (k === "publishes" || k === "subscribes") shown = ros && this.topicsAsNodes
+        if (POINT_KINDS.includes(k)) shown = this.sessionPoints
+        if (DIRECT_KINDS.includes(k)) shown = !this.sessionPoints
         if (e.source().hasClass("off") || e.target().hasClass("off")) shown = false
         e.toggleClass("off", !shown)
       })
@@ -559,6 +603,7 @@ export default class extends Controller {
     const by = {}
     let services = 0
     this.cy.nodes().forEach((n) => {
+      if (n.data("kind") === "others") return
       by[n.data("kind")] = (by[n.data("kind")] || 0) + 1
       if (n.data("kind") === "r_node") services += (n.data("info").services || []).length
     })
@@ -569,9 +614,15 @@ export default class extends Controller {
 
   renderLegend() {
     const badge = (c, t) => `<span class="pill" style="background:${c}">${t}</span>`
-    this.legendTarget.innerHTML = Object.values(KINDS).map((k) =>
+    const kinds = Object.entries(KINDS).filter(([kind]) => kind !== (this.sessionPoints ? "others" : "session")).map(([, k]) => k)
+    const lines = this.sessionPoints
+      ? `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.session}"></span>session at a router</span>` +
+        `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.carries}"></span>what a session carries</span>`
+      : `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.attach}"></span>connection to the router (client / peer)</span>` +
+        `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.peer_link}"></span>peer to peer, no router</span>`
+    this.legendTarget.innerHTML = kinds.map((k) =>
       `<span class="key"><span class="swatch shape-${k.shape}" style="background:${k.color}"></span>${k.label}</span>`
-    ).join("") +
+    ).join("") + lines +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
       `<span class="key">${badge(BADGE.unmatched, "2")} topics with no counterpart</span>` +
@@ -741,7 +792,11 @@ export default class extends Controller {
                   ["Apps", el.children().map((a) =>
                     `${this.link(a.id(), a.data("name"))}: ${a.children().map((o) => this.link(o.id(), o.data("name"))).join(", ")}`
                   ).join("<br>") || "none", true],
-                  ["Session", names("[kind = 'carries']").map((n) => esc(n.data("label"))).join(", "), true])
+                  ["Connection", this.connectionsHtml(info.connections, id), true])
+        break
+      case "others":
+        rows.push(["Router", this.link(info.router, this.cy.getElementById(info.router).data("label") || info.router), true],
+                  ["Sessions", this.sessionListHtml(info.sessions), true])
         break
       case "a_app":
         rows.push(["Node", info.node],
@@ -758,8 +813,8 @@ export default class extends Controller {
             (peers.length ? ` <span class="hint">${role === "publishers" ? "to" : "from"} ${esc(peers.join(", "))}</span>`
                           : ` <span class="hint">(no ${role === "publishers" ? "subscriber" : "publisher"})</span>`)
         }).join("<br>") || "none"
-        rows.push(["Name", info.name], ["Session ID", info.zid], ["Domain", info.domain],
-                  ["Session", names("[kind = 'carries']").map((n) => esc(n.data("label"))).join(", "), true],
+        rows.push(["Name", info.name], ["Domain", info.domain],
+                  ["Connection", this.connectionsHtml(info.connections, id, info.zid), true],
                   ["Publishes", topicList("publishers", "subscribers"), true],
                   ["Subscribes", topicList("subscribers", "publishers"), true])
         break
@@ -825,9 +880,47 @@ export default class extends Controller {
     return html
   }
 
+  // A node's sessions (data "connections", lib/bridge/connections.rb): Zenoh
+  // ID, role, address, link and router, and the other nodes on the same one.
+  connectionsHtml(list, id, zid = null) {
+    if (!list) return zid ? `${esc(zid)}<br><span class="hint">(this recording has no connection details)</span>` : ""
+    if (!list.length) return `<span class="hint">not seen at a router${zid ? ` (Zenoh ID ${esc(zid)})` : ""}</span>`
+    return list.map((c) => {
+      const router = c.router ? this.link(c.router, c.router_label || c.router) : "no router"
+      const others = (c.nodes || []).filter((n) => n !== id)
+      return dl([["Zenoh ID", c.zid], ["Role", c.role], ["Address", c.address], ["Link", c.protocol],
+                 ["Certificate", c.protocol === "tls" ? (c.cert_name || "(the router does not show it)") : null],
+                 ["Router", router, true],
+                 ["Also on it", others.length ? others.map((n) => this.link(n, this.cy.getElementById(n).data("name") || n)).join(", ") : null, true]]) +
+        (c.self ? `<p class="hint">a session of this console</p>` : "")
+    }).join("")
+  }
+
+  // The sessions of an "other connections" node.
+  sessionListHtml(list) {
+    if (!list?.length) return "none"
+    return `<table class="sessions"><tr><th>Role</th><th>Zenoh ID</th><th>Address</th></tr>${list.map((c) =>
+      `<tr><td>${esc(c.role)}${c.self ? " (this console)" : ""}</td><td><code title="${esc(c.zid)}">${esc(String(c.zid).slice(0, 8))}</code></td>` +
+      `<td>${esc(c.address || "")}${c.protocol ? ` <span class="hint">${esc(c.protocol)}</span>` : ""}</td></tr>`).join("")}</table>`
+  }
+
+  // A node's line to its router (or to a peer): the sessions behind it.
+  connectionDetails(el) {
+    const a = el.source(), b = el.target()
+    let html = `<h2><span class="swatch line" style="background:${EDGE_COLORS[el.data("kind")]}"></span>${el.data("kind") === "peer_link" ? "Peer to peer" : "Connection"}</h2>`
+    html += `<p class="name">${this.link(a.id(), a.data("name"))} &ndash; ${this.link(b.id(), b.data("name"))}</p>`
+    const zids = new Set(el.data("sessions") || [])
+    const source = a.data("kind") === "others" ? a.data("info").sessions : (a.data("info").connections || [])
+    const list = source.filter((c) => el.data("kind") === "peer_link" || zids.has(c.zid))
+    html += a.data("kind") === "others" ? this.sessionListHtml(list) : this.connectionsHtml(list, a.id())
+    if (el.data("shared") > 1) html += `<p class="hint">One session carries ${el.data("shared")} nodes (one process): each has its own line.</p>`
+    this.renderDetails(html)
+  }
+
   // A topic edge: the topics from one node to the other, each with its
   // rate and last value (like rqt_topic).
   edgeDetails(el) {
+    if (el.data("kind") !== "topic_link") return this.connectionDetails(el)
     const from = el.source().data("name")
     const to = el.target().data("name")
     let html = `<h2><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>Topics</h2>`
@@ -1067,6 +1160,15 @@ function plotLink(tid, small = false) {
 // The logger name rclcpp gives a node: /ns/talker -> ns.talker.
 function loggerName(node) {
   return String(node || "").replace(/^\//, "").replace(/\//g, ".")
+}
+
+// A remembered setting of this browser (storage may be refused: then the default).
+function loadFlag(key) {
+  try { return localStorage.getItem(key) === "1" } catch (_e) { return false }
+}
+
+function saveFlag(key, on) {
+  try { localStorage.setItem(key, on ? "1" : "0") } catch (_e) { /* not remembered */ }
 }
 
 function dl(rows) {

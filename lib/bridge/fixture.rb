@@ -4,7 +4,7 @@
 # CONSOLE_FIXTURE=<path of such a file> (config/initializers/fixture.rb).
 #
 # The file holds the inputs of Bridge::Graph.build (admin, asterism, ros,
-# self_node, self_zids, own_links, self_cert, registry), so the page shows
+# self_node, self_zids, own_links, self_cert, registry, peer_links), so the page shows
 # them through the current graph code, and the topic rates as the bridge
 # would measure them ("rates", with "recorded_at" in ms: their times are
 # moved to now when loaded).
@@ -20,7 +20,8 @@ module Bridge
       Graph.build(
         admin: inputs["admin"] || {}, asterism: inputs["asterism"] || [], ros: inputs["ros"] || [],
         self_node: inputs["self_node"], self_zids: inputs["self_zids"] || [],
-        own_links: inputs["own_links"] || {}, self_cert: inputs["self_cert"], registry: inputs["registry"]
+        own_links: inputs["own_links"] || {}, self_cert: inputs["self_cert"], registry: inputs["registry"],
+        peer_links: inputs["peer_links"] || []
       ).to_h
     end
 

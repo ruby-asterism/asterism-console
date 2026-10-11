@@ -3,8 +3,14 @@
 A Rails app that shows a Zenoh network as a live graph in the browser and
 calls the methods that Asterism nodes expose.
 
-- **Routers and sessions** from the router's admin space (`@/<zid>/router`,
-  its linkstate and token table).
+- **Routers** and the Zenoh sessions at them, from the router's admin
+  space (`@/<zid>/router`, its linkstate and token table). By default each
+  node (Asterism, ROS 2, this console) is joined to its router by a line
+  labelled with its role (`client` / `peer`), the sessions that carry no
+  node are one "N other connections" node per router, and a node's
+  sessions (Zenoh ID, role, address, link, router) are in its details.
+  "Sessions as points" draws each session as a point between router and
+  nodes instead (docs/v2_1.md).
 - **Asterism** nodes from their liveliness tokens (`asterism/**`), each a
   box holding its apps, each app a box holding its exposed objects.
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like

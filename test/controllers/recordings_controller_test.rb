@@ -152,6 +152,37 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "x" ], response.parsed_body["graph"]["nodes"].map { _1["id"] }
   end
 
+  test "a structure recorded before V2.1 is drawn the default way too" do
+    r = Recording.new(user: users(:user), name: "old net", status: "done")
+    r.selection_value = { "structure" => true }
+    r.save!
+    old = {
+      "nodes" => [
+        { "id" => "router:r1", "kind" => "router", "layer" => "infra", "label" => "router r1", "data" => {} },
+        { "id" => "session:s1", "kind" => "session", "layer" => "infra", "label" => "peer s1",
+          "data" => { "zid" => "s1", "whatami" => "peer", "address" => "tcp/192.0.2.5:1", "protocol" => "tcp" } },
+        { "id" => "r_node:s1/0", "kind" => "r_node", "layer" => "ros", "label" => "/x", "data" => { "zid" => "s1" } }
+      ],
+      "edges" => [
+        { "id" => "session:router:r1->session:s1", "kind" => "session", "source" => "router:r1", "target" => "session:s1" },
+        { "id" => "carries:session:s1->r_node:s1/0", "kind" => "carries", "source" => "session:s1", "target" => "r_node:s1/0" }
+      ]
+    }
+    File.open(r.path, "wb") do |f|
+      w = MCAP::Writer.new(f)
+      g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+                        schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
+      w.add_message(channel_id: g, log_time: 10, data: JSON.generate("kind" => "snapshot", "version" => 1, "graph" => old))
+      w.finish
+    end
+    get graph_recording_path(r, t: 5), as: :json
+    graph = response.parsed_body["graph"]
+    attach = graph["edges"].find { _1["kind"] == "attach" }
+    assert_equal [ "r_node:s1/0", "router:r1", "peer" ], attach.values_at("source", "target", "label")
+    assert_equal [ "s1" ], graph["nodes"].find { _1["id"] == "r_node:s1/0" }["data"]["connections"].map { _1["zid"] }
+    assert graph["edges"].any? { _1["kind"] == "carries" }, "the sessions stay, for Sessions as points"
+  end
+
   test "an unfinished recording has no timeline yet" do
     post recordings_path, params: { recording: { structure: "1" } }
     r = Recording.last

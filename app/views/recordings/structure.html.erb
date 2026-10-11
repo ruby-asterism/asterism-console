@@ -23,7 +23,8 @@
            data-rewind-target="slider" data-action="input->rewind#slide change->rewind#settle" aria-label="Time in the recording" class="rewind-slider">
     <span class="tl-time" data-rewind-target="time"></span>
     <span class="sep" aria-hidden="true"></span>
-    <label><input type="checkbox" data-layer="infra" data-action="console#toggleLayer" checked> Routers and sessions</label>
+    <label><input type="checkbox" data-layer="infra" data-action="console#toggleLayer" checked> Routers</label>
+    <label title="Draw each Zenoh session as a point between the router and the nodes (for finding out why something does not connect)"><input type="checkbox" name="session_points" data-action="console#toggleSessionPoints"> Sessions as points</label>
     <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
     <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
     <label><input type="checkbox" name="hide_debug" data-action="console#toggleDebug" checked> Hide /rosout, /parameter_events</label>

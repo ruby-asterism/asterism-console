@@ -24,6 +24,8 @@
 #             "disabled" (here, but disabled in the registry), "unregistered"
 #             (here, not in the registry); a registered name not seen gets a
 #             node of its own ("absent", kind "registered").
+#   peer_links: [zid, zid] pairs of sessions connected to each other without
+#             a router (the bridge's own: Session#peer_zids)
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -42,12 +44,17 @@
 #     topics-as-nodes view; data "matched" says whether a topic has a
 #     publisher and a subscriber on different nodes. A node's topics with
 #     no counterpart are its data "unmatched".
+#   - The default drawing (V2.1, Bridge::Connections): nodes joined to their
+#     router by "attach" edges, the sessions that carry no node in one
+#     "others" node per router, "peer_link" edges between nodes of sessions
+#     connected directly, and each node's sessions as its data
+#     "connections". Sessions stay, for the page's "Sessions as points".
 module Bridge
   class Graph
     LAYERS = {
       "router" => "infra", "session" => "infra", "registered" => "infra",
       "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism",
-      "r_node" => "ros", "r_topic" => "ros"
+      "r_node" => "ros", "r_topic" => "ros", "others" => "infra"
     }.freeze
 
     # The services every rclcpp node serves for its parameters (and its
@@ -65,10 +72,11 @@ module Bridge
     attr_reader :nodes, :edges
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil)
+                   registry: nil, peer_links: [])
       g = new
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
+      g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
       g.add_ros(ros)
       g.finish_ros
@@ -246,6 +254,25 @@ module Bridge
       edge(rid, id, "session")
     end
 
+    # Sessions connected to each other directly, not through a router
+    # ([zid, zid] pairs; the bridge knows its own: Session#peer_zids). The
+    # routers' admin space does not show these links. A session no router
+    # has is added here (whatami "peer", no router).
+    def add_peer_links(pairs, self_zids)
+      pairs.each do |a, b|
+        ids = [ a, b ].map do |z|
+          nz = self.class.norm_zid(z)
+          next nil if @session_of[nz]&.start_with?("router:")
+          @session_of[nz] ||= node("session:#{nz}", "session", "peer #{self.class.short(z)}",
+                                   "zid" => z.to_s, "whatami" => "peer", "links" => [],
+                                   "self" => self_zids.include?(nz))["id"]
+        end
+        next if ids.include?(nil) || ids.uniq.size < 2
+        x, y = ids.sort
+        edge(x, y, "peer_session", "peer")
+      end
+    end
+
     # --------------------------------------------------------------- asterism
 
     def add_asterism(keys, self_node)
@@ -415,8 +442,9 @@ module Bridge
 
     # ---------------------------------------------------------------- output
 
+    # With the default drawing's parts (Bridge::Connections) added.
     def to_h
-      { "nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] } }
+      Connections.apply("nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] })
     end
 
     # What changed from old to new (both to_h): added / removed / changed.

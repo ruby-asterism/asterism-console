@@ -95,6 +95,7 @@ module Bridge
       @ros_keys = {}
       @admin = {}
       @own_links = {}
+      @peer_links = []
       @registry = []
       @dirty = true
       @subs = {} # watch id => [key, Subscription]
@@ -167,6 +168,7 @@ module Bridge
         @ros_keys.clear
         @admin = {}
         @own_links = {}
+        @peer_links = []
         @dirty = true
       end
       @subs = {}
@@ -291,11 +293,13 @@ module Bridge
         (admin[rz] ||= { "tokens" => {}, "linkstate" => {} })["tokens"][key.split("/token/", 2)[1]] = v
       end
       own = own_links
+      peers = peer_links
       reg = registry
       @lock.synchronize do
-        if admin != @admin || own != @own_links || reg != @registry
+        if admin != @admin || own != @own_links || reg != @registry || peers != @peer_links
           @admin = admin
           @own_links = own
+          @peer_links = peers
           @registry = reg
           @dirty = true
         end
@@ -323,6 +327,14 @@ module Bridge
       end
     rescue Asterism::Zenoh::Error, NoMethodError
       {}
+    end
+
+    # The peers this bridge's session is connected to directly (in peer
+    # mode; a client has none): [own zid, peer zid] pairs for the graph.
+    def peer_links
+      @z.peer_zids.sort.map { [ @z.zid, _1 ] }
+    rescue Asterism::Zenoh::Error, NoMethodError
+      []
     end
 
     # The common name of this bridge's certificate (mutual TLS), or nil.
@@ -378,7 +390,7 @@ module Bridge
         @dirty = false
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
-                    self_cert: self_cert, registry: @registry).to_h
+                    self_cert: self_cert, registry: @registry, peer_links: @peer_links).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"

@@ -167,7 +167,9 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     b = Bridge::Graph.build(admin: adm, asterism: asterism, ros: ros, self_node: "console", self_zids: [ READER ]).to_h
     d = Bridge::Graph.diff(a, b)
     assert_includes d["remove_nodes"], "session:#{ROS}"
-    assert_equal [ "router:#{ROUTER}" ], d["change_nodes"].map { _1["id"] }
+    # The ROS 2 node changes too: its session (data "connections") is gone.
+    assert_equal [ "r_node:#{ROS}/0", "router:#{ROUTER}" ], d["change_nodes"].map { _1["id"] }
+    assert_empty d["change_nodes"].find { _1["kind"] == "r_node" }["data"]["connections"]
   end
 
   # Two routers joined by mutual TLS, as zenohd 1.10.1 tells it from each

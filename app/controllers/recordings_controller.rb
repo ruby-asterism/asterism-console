@@ -150,10 +150,12 @@ class RecordingsController < ApplicationController
     view_json { |v| v.series(params[:channel], paths) }
   end
 
-  # The network structure at ?t=<ns> (JSON).
+  # The network structure at ?t=<ns> (JSON), with the default drawing's
+  # parts (Bridge::Connections; recordings made before V2.1 lack them).
   def graph
     view_json do |v|
       g = v.graph_at(abs_time(v))
+      g = g.merge("graph" => Bridge::Connections.apply(g["graph"])) if g
       g ? relative(v, g, %w[at prev next]) : { "error" => "this recording has no network structure" }
     end
   end
