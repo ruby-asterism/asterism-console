@@ -7,9 +7,10 @@
 #     (any other Ruby process, CRuby in practice). The network does not say
 #     what a node runs on (an Asterism node is a liveliness token with its
 #     name, nothing more), so this goes by the boards' naming: a board
-#     calls itself by its mDNS name fmruby-<6 hex digits>, and the
-#     simulation and the browser build fall back to "linux". A board given
-#     another name in its node file shows as "ruby".
+#     calls itself by its mDNS name fmruby-<6 hex digits>, a browser build
+#     by the ID its page made, wasm-<6 hex digits>, and the simulation falls
+#     back to "linux" (a browser build without its page, "wasm"). A board
+#     given another name in its node file shows as "ruby".
 #   - the relay registry's names that are not here (kind "registered") in
 #     one box, "reg_box" (label "Not connected (registry)"), instead of
 #     each on its own.
@@ -29,9 +30,10 @@ module Bridge
   module Marks
     BOX = "reg_box".freeze
     BOX_LABEL = "Not connected (registry)".freeze
-    # A board's node name: its mDNS name, or the fallback of the simulation
-    # (linux) and of the browser build (wasm), fmruby-core's asterism_demo.
-    BOARD_NAME = /\A(fmruby-[0-9a-f]{6}|linux|wasm)\z/
+    # A board's node name: its mDNS name, the browser build's own ID
+    # (wasm-<6 hex>, kept by its page since fmruby-core's B2), or the
+    # fallback of the simulation (linux) and of the browser build (wasm).
+    BOARD_NAME = /\A(fmruby-[0-9a-f]{6}|wasm-[0-9a-f]{6}|linux|wasm)\z/
 
     module_function
 

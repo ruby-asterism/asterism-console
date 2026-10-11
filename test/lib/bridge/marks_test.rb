@@ -31,10 +31,10 @@ class Bridge::MarksTest < ActiveSupport::TestCase
 
   test "what an Asterism node runs on, by its name" do
     g = Bridge::Marks.apply({ "nodes" => [ a_node("console", true), a_node("fmruby-aaaaaa"), a_node("linux"), a_node("wasm"),
-                                           a_node("cruby"), a_node("fmruby-board"), a_node("mujoco") ],
+                                           a_node("wasm-0a1b2c"), a_node("wasm-board"), a_node("cruby"), a_node("fmruby-board"), a_node("mujoco") ],
                               "edges" => [] })
-    assert_equal({ "console" => "console", "fmruby-aaaaaa" => "board", "linux" => "board", "wasm" => "board", "cruby" => "ruby",
-                   "fmruby-board" => "ruby", "mujoco" => "ruby" },
+    assert_equal({ "console" => "console", "fmruby-aaaaaa" => "board", "linux" => "board", "wasm" => "board", "wasm-0a1b2c" => "board",
+                   "wasm-board" => "ruby", "cruby" => "ruby", "fmruby-board" => "ruby", "mujoco" => "ruby" },
                  g["nodes"].to_h { [ _1["label"], _1["data"]["machine"] ] })
   end
 
