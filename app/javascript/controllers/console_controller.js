@@ -26,11 +26,18 @@ cytoscape.use(fcose)
 // lays out everything.
 //
 // Colour says which family a thing belongs to, shape says what it is
-// (V2.2): blue the routers, purple ROS 2, orange the topics, teal Asterism.
-// The three levels of Asterism differ by shape: a node is a white box with
-// a teal border and a mark before its name for what it runs on (data
-// "machine", lib/bridge/marks.rb), an app a grey dashed box, an object a
-// small teal dot. The relay registry ("Relay registry", off by default and
+// (V2.2): blue the routers, purple ROS 2, orange the topics, Ruby red
+// Asterism. The three levels of Asterism differ by shape: a node is a white
+// box with a red border and a mark before its name for what it runs on
+// (data "machine", lib/bridge/marks.rb), an app a grey dashed box, an
+// object a small red dot.
+//
+// Machines (V2.3, lib/bridge/groups.rb): the ROS 2 nodes that come from the
+// same IP address (two or more) are one "r_group" node, folded by default,
+// named by its IP or by the machine name an admin gave it. Opening it (its
+// details) shows its nodes instead, with no box around them; the bridge
+// sends folded copies of the edges, and an edge shows when both its ends
+// show. Which groups are open this browser remembers. The relay registry ("Relay registry", off by default and
 // remembered by this browser) adds a mark in the corner of the nodes and
 // routers it knows of, and puts the names it has that are not here in one
 // "Not connected (registry)" box, with a dashed line to the router the
@@ -53,6 +60,7 @@ const KINDS = {
   a_app:     { label: "Asterism app",    shape: "round-rectangle", color: "#ffffff", border: GREY, dashed: true, size: 30 },
   a_object:  { label: "Asterism object", shape: "ellipse",         color: RUBY, size: 14 },
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
+  r_group:   { label: "ROS 2 machine (folded)", shape: "round-rectangle", color: "#6a1b9a", border: "#6a1b9a", double: true, size: 50 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 28 },
   others:    { label: "Other connections", shape: "round-rectangle", color: GREY, size: 20 },
   reg_box:   { label: "Not connected (registry)", shape: "round-rectangle", color: "#f1f3f4", border: "#c4c7cc", size: 30 },
@@ -74,6 +82,7 @@ const DIRECT_KINDS = ["others", "attach", "peer_link"]
 const REGISTRY_KINDS = ["reg_box", "registered", "expect"]
 const STORE_POINTS = "asterism.console.sessionPoints"
 const STORE_REGISTRY = "asterism.console.registry"
+const STORE_OPEN = "asterism.console.openGroups"
 
 // The relay registry over the graph (W2): a mark in the corner of a node or
 // router by how it matches the registry (V2.2; before, a coloured halo).
@@ -119,7 +128,7 @@ function globMatch(pattern, value) {
 
 export default class extends Controller {
   static targets = ["graph", "details", "bridge", "counts", "watchList", "watchError", "legend", "rateStatus"]
-  static values = { state: Object, watches: Array, replay: Boolean }
+  static values = { state: Object, watches: Array, replay: Boolean, admin: Boolean }
 
   connect() {
     this.version = this.stateValue.version || 0
@@ -129,6 +138,7 @@ export default class extends Controller {
     this.hideDebug = true
     this.measureAll = false
     this.sessionPoints = loadFlag(STORE_POINTS)
+    this.openGroups = loadList(STORE_OPEN) // keys of the open groups (groupKey)
     const box = this.element.querySelector("input[name=session_points]")
     if (box) box.checked = this.sessionPoints
     const reg = this.element.querySelector("input[data-layer=registry]")
@@ -203,6 +213,11 @@ export default class extends Controller {
       { selector: "node[kind = 'a_app']:parent", style: {
           "background-opacity": 0, padding: 8, "text-valign": "top", "text-margin-y": -3, color: "#5f6368" } },
       { selector: "node[kind = 'a_object']", style: { "font-size": 9, "border-width": 0 } },
+      // A machine of ROS 2 nodes, folded: a larger purple box with a second
+      // outline around it (several nodes in one), its name in bold.
+      { selector: "node[kind = 'r_group']", style: {
+          "font-size": 11, "font-weight": "bold", "border-width": 0,
+          "outline-width": 2, "outline-color": "#6a1b9a", "outline-offset": 3, "outline-style": "solid" } },
       // The registry's names that are not here, in one box.
       { selector: "node[kind = 'reg_box']", style: {
           padding: 12, "text-valign": "top", "text-margin-y": -3, color: "#5f6368", "font-style": "italic" } },
@@ -252,7 +267,7 @@ export default class extends Controller {
     ]
     for (const [kind, k] of Object.entries(KINDS)) {
       const style = { shape: k.shape, "background-color": k.color, width: k.size, height: k.size }
-      if (k.border) Object.assign(style, { "border-width": k.dashed ? 1.5 : 2, "border-color": k.border, "border-style": k.dashed ? "dashed" : "solid" })
+      if (k.border && !k.double) Object.assign(style, { "border-width": k.dashed ? 1.5 : 2, "border-color": k.border, "border-style": k.dashed ? "dashed" : "solid" })
       s.splice(1, 0, { selector: `node[kind = '${kind}']`, style })
     }
     for (const [kind, c] of Object.entries(EDGE_COLORS)) {
@@ -280,7 +295,8 @@ export default class extends Controller {
     if (n.data?.registry) data.registry = n.data.registry
     if (REGISTRY[n.data?.registry]?.glyph) data.regmark = registryMark(n.data.registry)
     if (n.kind === "registered") data.regkind = n.data?.peer?.kind
-    if (n.kind === "r_node") Object.assign(data, badgeOf(n.data, this.hideDebug))
+    if (n.kind === "r_node" || n.kind === "r_group") Object.assign(data, badgeOf(n.data, this.hideDebug))
+    if (n.data?.group) data.group = n.data.group
     if (n.kind === "r_topic") data.label = this.topicNodeLabel(n.id, n.label)
     return { group: "nodes", data, classes: `layer-${n.layer}` }
   }
@@ -341,7 +357,7 @@ export default class extends Controller {
         if (el.empty()) continue
         const fresh = this.nodeElement(n).data
         el.data({ label: fresh.label, name: fresh.name, info: fresh.info, self: fresh.self })
-        for (const key of ["registry", "regmark", "regkind"]) {
+        for (const key of ["registry", "regmark", "regkind", "group"]) {
           if (fresh[key] === undefined) el.removeData(key)
           else el.data(key, fresh[key])
         }
@@ -349,7 +365,7 @@ export default class extends Controller {
         if ((fresh.parent || null) !== parent && (!fresh.parent || cy.getElementById(fresh.parent).nonempty())) {
           el.move({ parent: fresh.parent || null })
         }
-        if (fresh.kind === "r_node") this.setBadge(el)
+        if (fresh.kind === "r_node" || fresh.kind === "r_group") this.setBadge(el)
       }
       for (const e of diff.add_edges) {
         if (cy.getElementById(e.source).nonempty() && cy.getElementById(e.target).nonempty()) cy.add(this.edgeElement(e))
@@ -595,7 +611,7 @@ export default class extends Controller {
 
   toggleDebug(ev) {
     this.hideDebug = ev.target.checked
-    this.cy.batch(() => this.cy.nodes("[kind = 'r_node']").forEach((n) => this.setBadge(n)))
+    this.cy.batch(() => this.cy.nodes("[kind = 'r_node'], [kind = 'r_group']").forEach((n) => this.setBadge(n)))
     this.refreshRateLabels()
     this.applyView()
     this.settle()
@@ -623,9 +639,13 @@ export default class extends Controller {
   // edges (between nodes) or as nodes.
   applyView() {
     const ros = this.layers.ros
+    const folded = (gid) => !this.isOpen(gid)
     this.cy.batch(() => {
       this.cy.nodes().forEach((n) => {
         let shown = this.layers[n.data("layer")]
+        if (n.data("kind") === "r_group") shown = shown && folded(n.id())
+        if (n.data("group")) shown = shown && !folded(n.data("group"))
+        if (n.data("kind") === "r_topic" && shown) shown = !this.insideFolded(n)
         if (REGISTRY_KINDS.includes(n.data("kind"))) shown = shown && this.layers.registry
         if (n.data("kind") === "r_topic") shown = shown && this.topicsAsNodes && !(this.hideDebug && isDebugTopic(n.id()))
         if (POINT_KINDS.includes(n.data("kind"))) shown = shown && this.sessionPoints
@@ -647,11 +667,143 @@ export default class extends Controller {
     })
   }
 
+  // ---------------------------------------------------------------- machines
+
+  // What the open state of a group is remembered by: its machine name when
+  // it has one (the IP may change), else its IP.
+  groupKey(group) {
+    const info = group.data("info") || {}
+    return info.name_id ? `name:${info.name_id}` : `ip:${info.ip}`
+  }
+
+  // Whether a group is open (its nodes shown). A member whose group is not
+  // in the graph shows.
+  isOpen(gid) {
+    const g = this.cy.getElementById(gid)
+    if (g.empty()) return true
+    return this.openGroups.includes(this.groupKey(g))
+  }
+
+  // A topic (as a node) whose publishers and subscribers are all in one
+  // folded group: inside it, so not drawn (as the topic edges inside).
+  insideFolded(topic) {
+    const info = topic.data("info") || {}
+    const ends = [...(info.publishers || []), ...(info.subscribers || [])]
+    if (!ends.length) return false
+    const groups = new Set(ends.map((id) => this.cy.getElementById(id).data("group") || id))
+    if (groups.size !== 1) return false
+    const gid = [...groups][0]
+    return gid.startsWith("r_group:") && !this.isOpen(gid)
+  }
+
+  // Opens or folds a group (from its details, or a member's).
+  toggleGroup(gid, open) {
+    const g = this.cy.getElementById(gid)
+    if (g.empty()) return
+    const key = this.groupKey(g)
+    this.openGroups = this.openGroups.filter((k) => k !== key)
+    if (open) this.openGroups.push(key)
+    saveList(STORE_OPEN, this.openGroups)
+    const members = this.cy.nodes().filter((n) => n.data("group") === gid)
+    if (open) this.placeAround(members.filter((n) => !this.placed.has(n.id())), g)
+    else if (!this.placed.has(gid) && members.some((n) => this.placed.has(n.id()))) {
+      // Folded for the first time here: where its nodes were.
+      const ps = members.filter((n) => this.placed.has(n.id())).map((n) => n.position())
+      g.position({ x: ps.reduce((a, p) => a + p.x, 0) / ps.length, y: ps.reduce((a, p) => a + p.y, 0) / ps.length })
+      this.placed.add(gid)
+    }
+    this.applyView()
+    this.settle()
+    this.updateCounts()
+    // The view follows when the nodes now shown go past it (the nodes
+    // themselves stay where they are).
+    const bb = this.visible().boundingBox()
+    const ext = this.cy.extent()
+    if (bb.x1 < ext.x1 || bb.x2 > ext.x2 || bb.y1 < ext.y1 || bb.y2 > ext.y2) this.cy.fit(this.visible(), 30)
+    this.select(gid)
+  }
+
+  // A group's nodes, opened for the first time: in a ring where the group
+  // was, then a short layout that moves only them.
+  placeAround(nodes, group) {
+    if (nodes.empty()) return
+    const c = this.placed.has(group.id()) ? { ...group.position() } : null
+    if (!c) return // nothing to go by: settle places them
+    const r = Math.max(90, nodes.length * 22)
+    nodes.forEach((n, i) => {
+      const a = (2 * Math.PI * i) / nodes.length
+      n.position({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) })
+    })
+    const ids = new Set(nodes.map((n) => n.id()))
+    group.removeClass("off") // to count it out below
+    const eles = this.cy.elements().not(".off").filter((x) => x.id() !== group.id() && !(x.isEdge() && (x.source().id() === group.id() || x.target().id() === group.id())))
+    nodes.removeClass("off")
+    const all = eles.union(nodes).union(nodes.connectedEdges().filter((e) => !e.source().hasClass("off") && !e.target().hasClass("off") && e.source().id() !== group.id() && e.target().id() !== group.id()))
+    const fixed = all.nodes().filter((n) => !ids.has(n.id()) && this.placed.has(n.id()) && n.isChildless())
+      .map((n) => ({ nodeId: n.id(), position: { ...n.position() } }))
+    try {
+      all.layout({ ...LAYOUT, quality: "proof", randomize: false, animate: false, fit: false,
+                   fixedNodeConstraint: fixed, initialEnergyOnIncremental: 0.3 }).run()
+      for (const f of fixed) this.cy.getElementById(f.nodeId).position(f.position)
+    } catch (e) {
+      console.warn("layout", e)
+    }
+    nodes.forEach((n) => this.placed.add(n.id()))
+  }
+
+  // The name of a group (admins): a new one, or a new name for the one it
+  // has (its node names taken again). Empty: the name is removed.
+  async saveName(gid, name) {
+    const g = this.cy.getElementById(gid)
+    if (g.empty()) return
+    const info = g.data("info") || {}
+    const status = this.detailsTarget.querySelector("[data-role=name-status]")
+    const say = (t) => { if (status) status.textContent = t }
+    name = String(name || "").trim()
+    if (!name) return info.name_id ? this.removeName(gid) : null
+    const body = JSON.stringify({ name, members: info.member_names || [] })
+    const url = info.name_id ? `/machine_names/${info.name_id}` : "/machine_names"
+    say("saving...")
+    try {
+      const res = await fetch(url, {
+        method: info.name_id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf() },
+        body,
+      })
+      const out = await res.json().catch(() => ({}))
+      if (!res.ok) return say((out.errors || [`not saved (${res.status})`]).join(", "))
+      // The open state goes with the name from now on.
+      this.rekeyOpen(g, `name:${out.id}`)
+      say("saved: the graph shows it within a few seconds")
+    } catch (e) {
+      say(String(e))
+    }
+  }
+
+  async removeName(gid) {
+    const g = this.cy.getElementById(gid)
+    const info = g.data("info") || {}
+    if (!info.name_id) return
+    const status = this.detailsTarget.querySelector("[data-role=name-status]")
+    const res = await fetch(`/machine_names/${info.name_id}`, { method: "DELETE", headers: { "X-CSRF-Token": csrf() } })
+    if (res.ok) this.rekeyOpen(g, `ip:${info.ip}`)
+    if (status) status.textContent = res.ok ? "removed: the graph shows the IP within a few seconds" : `not removed (${res.status})`
+  }
+
+  // Keeps a group open (or folded) when the key it is remembered by changes.
+  rekeyOpen(group, key) {
+    const was = this.groupKey(group)
+    if (!this.openGroups.includes(was)) return
+    this.openGroups = this.openGroups.filter((k) => k !== was).concat([key])
+    saveList(STORE_OPEN, this.openGroups)
+  }
+
   updateCounts() {
     const by = {}
     let services = 0
     this.cy.nodes().forEach((n) => {
       if (["others", "reg_box"].includes(n.data("kind"))) return
+      if (n.data("kind") === "r_group" && !this.layers.ros) return
       if (n.data("kind") === "registered" && !this.layers.registry) return
       by[n.data("kind")] = (by[n.data("kind")] || 0) + 1
       if (n.data("kind") === "r_node") services += (n.data("info").services || []).length
@@ -817,7 +969,7 @@ export default class extends Controller {
     const kind = el.data("kind")
     const info = el.data("info") || {}
     const k = KINDS[kind]
-    let html = `<h2>${swatch(k)}${esc(k.label)}</h2>`
+    let html = `<h2>${swatch(k)}${esc(kind === "r_group" ? "ROS 2 machine" : k.label)}</h2>`
     html += `<p class="name">${esc(el.data("name") || el.data("label"))}</p>`
     const rows = []
     const names = (sel) => el.connectedEdges(sel).map((e) => e.source().id() === id ? e.target() : e.source())
@@ -883,10 +1035,28 @@ export default class extends Controller {
             (peers.length ? ` <span class="hint">${role === "publishers" ? "to" : "from"} ${esc(peers.join(", "))}</span>`
                           : ` <span class="hint">(no ${role === "publishers" ? "subscriber" : "publisher"})</span>`)
         }).join("<br>") || "none"
+        const group = info.group && this.cy.getElementById(info.group)
         rows.push(["Name", info.name], ["Domain", info.domain],
+                  ["Machine", group?.nonempty() ? `${this.link(info.group, group.data("name"))} ` +
+                    `<button type="button" class="small" data-group-toggle="${esc(info.group)}" data-open="0">Fold</button>` : null, true],
                   ["Connection", this.connectionsHtml(info.connections, id, info.zid), true],
                   ["Publishes", topicList("publishers", "subscribers"), true],
                   ["Subscribes", topicList("subscribers", "publishers"), true])
+        break
+      }
+      case "r_group": {
+        const open = this.isOpen(id)
+        const n = (info.members || []).length
+        rows.push(["IP address", info.ip],
+                  ["Name", info.name ? esc(info.name) + this.nameMatchHtml(info) : `<span class="hint">none (shown by its IP)</span>`, true],
+                  ["Nodes", (info.members || []).map((m) => this.link(m, nodeLabel(m))).join("<br>"), true],
+                  ["Sessions", this.sessionListHtml(info.connections), true],
+                  ["Topics inside", (info.internal_topics || []).filter((t) => !(this.hideDebug && isDebugTopic(t)))
+                    .map((t) => this.link(t, this.cy.getElementById(t).data("name") || t)).join(", ") || null, true])
+        html += `<p class="hint">${n} ROS 2 nodes whose sessions come from ${esc(info.ip)}: one machine, as far as the
+          network tells (ROS 2 does not say which machine a node runs on). ${open ? "Open: its nodes are drawn." :
+          "Folded: one box; topics among its own nodes are not drawn."}</p>`
+        html += `<p class="actions"><button type="button" data-group-toggle="${esc(id)}" data-open="${open ? "0" : "1"}">${open ? "Fold" : "Open"}</button></p>`
         break
       }
       case "r_topic": {
@@ -914,6 +1084,8 @@ export default class extends Controller {
       }
     }
     html += dl(rows)
+    if (kind === "r_group") html += this.nameFormHtml(info)
+    if (kind === "r_group") html += this.rosNodeExtras(info)
     if (kind === "r_node") html += `<p class="actions"><a class="button" href="/logs?node=${encodeURIComponent(loggerName(info.name))}" target="_blank" rel="noopener">Show its logs</a></p>`
     if (kind === "r_node") html += this.rosNodeExtras(info)
     if (kind === "a_object") html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
@@ -921,6 +1093,30 @@ export default class extends Controller {
       `${plotLink(id)}</div>`
     this.renderDetails(html)
     if (kind === "a_object") this.loadMeta(info.path)
+  }
+
+  // How a group's name was matched: the node names it was given for.
+  nameMatchHtml(info) {
+    const now = new Set(info.member_names || [])
+    const then = info.named_members || []
+    const same = then.filter((m) => now.has(m)).length
+    return ` <span class="hint">(given for ${then.length} node names, ${same} of them here now)</span>`
+  }
+
+  // The name form of a group: admins give, change or remove the name.
+  nameFormHtml(info) {
+    if (this.replayValue) {
+      return `<p class="hint">Names are given on the live graph; the rewind shows today's names.</p>`
+    }
+    if (!this.adminValue) {
+      return `<p class="hint">An admin can give this machine a name (shared by every user).</p>`
+    }
+    return `<form class="name-form" data-role="name-form">
+      <label for="machine-name">Name this machine</label>
+      <div class="row"><input id="machine-name" type="text" name="name" maxlength="64" value="${esc(info.name || "")}" placeholder="${esc(info.ip)}">
+      <button type="submit">Save</button>${info.name_id ? `<button type="button" data-role="name-remove">Remove</button>` : ""}</div>
+      <p class="hint" data-role="name-status">Kept with the names of its ${(info.member_names || []).length} nodes, not the IP:
+        the machine keeps it when its address changes, while at least half of the nodes are the same.</p></form>`
   }
 
   // A ROS 2 node's attributes: topics nobody is at the other end of, the
@@ -1029,6 +1225,14 @@ export default class extends Controller {
       this.select(a.dataset.select)
     }))
     this.detailsTarget.querySelectorAll("[data-watch]").forEach((b) => b.addEventListener("click", () => this.watchKey(b.dataset.watch)))
+    this.detailsTarget.querySelectorAll("[data-group-toggle]").forEach((b) => b.addEventListener("click", () =>
+      this.toggleGroup(b.dataset.groupToggle, b.dataset.open === "1")))
+    const form = this.detailsTarget.querySelector("[data-role=name-form]")
+    if (form) {
+      const gid = this.selected
+      form.addEventListener("submit", (ev) => { ev.preventDefault(); this.saveName(gid, form.querySelector("[name=name]").value) })
+      form.querySelector("[data-role=name-remove]")?.addEventListener("click", () => this.removeName(gid))
+    }
   }
 
   async loadMeta(path) {
@@ -1228,7 +1432,8 @@ function badgeOf(info, hideDebug) {
 
 // The legend's and the details' sample of a kind: its shape, fill and border.
 function swatch(k) {
-  const border = k.border ? `;border:${k.dashed ? "1.5px dashed" : "2px solid"} ${k.border}` : ""
+  const border = k.double ? `;outline:1.5px solid ${k.border};outline-offset:1.5px`
+    : k.border ? `;border:${k.dashed ? "1.5px dashed" : "2px solid"} ${k.border}` : ""
   return `<span class="swatch shape-${k.shape}" style="background:${k.color}${border}"></span>`
 }
 
@@ -1260,6 +1465,17 @@ function loggerName(node) {
 // A remembered setting of this browser (storage may be refused: then the default).
 function loadFlag(key) {
   try { return localStorage.getItem(key) === "1" } catch (_e) { return false }
+}
+
+function loadList(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || "[]")
+    return Array.isArray(v) ? v.map(String) : []
+  } catch (_e) { return [] }
+}
+
+function saveList(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)) } catch (_e) { /* not remembered */ }
 }
 
 function saveFlag(key, on) {

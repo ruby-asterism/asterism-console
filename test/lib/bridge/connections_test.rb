@@ -89,7 +89,8 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
 
   test "a session with several nodes: a line from each, marked shared" do
     g = graph
-    lines = g["edges"].select { _1["kind"] == "attach" && _1["sessions"] == [ ROS ] }
+    # (The folded copy from the group of the two, Bridge::Groups, aside.)
+    lines = g["edges"].select { _1["kind"] == "attach" && _1["sessions"] == [ ROS ] && !_1["folded"] }
     assert_equal [ "r_node:#{ROS}/0", "r_node:#{ROS}/1" ], lines.map { _1["source"] }.sort
     assert(lines.all? { _1["shared"] == 2 })
     assert_equal [ "r_node:#{ROS}/0", "r_node:#{ROS}/1" ], node(g, "r_node:#{ROS}/1")["data"]["connections"][0]["nodes"]
@@ -124,8 +125,9 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
   test "apply is idempotent, and rebuilds a graph recorded without its parts" do
     g = graph(extra: [ session(BARE, "client", 5) ])
     assert_equal g, Bridge::Connections.apply(g)
-    old = { "nodes" => g["nodes"].reject { _1["kind"] == "others" }.map { |n| n.merge("data" => n["data"].except("connections")) },
-            "edges" => g["edges"].reject { %w[attach peer_link].include?(_1["kind"]) } }
+    old = { "nodes" => g["nodes"].reject { _1["kind"] == "others" }.map { |n|
+              %w[a_node r_node].include?(n["kind"]) ? n.merge("data" => n["data"].except("connections")) : n },
+            "edges" => g["edges"].reject { %w[attach peer_link].include?(_1["kind"]) && !_1["folded"] } }
     assert_equal g, Bridge::Connections.apply(old)
   end
 

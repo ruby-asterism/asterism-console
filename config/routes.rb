@@ -42,6 +42,8 @@ Rails.application.routes.draw do
     post :stop, on: :member
   end
   resources :call_permissions, only: %i[index create destroy]
+  # Names of machines of ROS 2 nodes (V2.3), from the graph's details.
+  resources :machine_names, only: %i[index create update destroy]
   resources :calls, only: :index
 
   # The relay: registry, certificates (through the signer), apply.

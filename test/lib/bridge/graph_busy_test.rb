@@ -18,8 +18,9 @@ class Bridge::GraphBusyTest < ActiveSupport::TestCase
     g["nodes"].find { _1["kind"] == "r_node" && _1["data"]["name"] == name } || flunk("no ROS 2 node #{name}")
   end
 
+  # Between nodes (not the folded copies of the machines, Bridge::Groups).
   def links
-    g["edges"].select { _1["kind"] == "topic_link" }
+    g["edges"].select { _1["kind"] == "topic_link" && !_1["folded"] }
   end
 
   def link(from, to)

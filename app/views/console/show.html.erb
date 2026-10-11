@@ -1,7 +1,8 @@
 <% content_for(:title, "Asterism Console") %>
 <div class="console" data-controller="console"
      data-console-state-value="<%= @state.as_payload.to_json %>"
-     data-console-watches-value="<%= @watches.map(&:as_payload).to_json %>">
+     data-console-watches-value="<%= @watches.map(&:as_payload).to_json %>"
+     data-console-admin-value="<%= current_user&.admin? ? "true" : "false" %>">
   <header class="bar">
     <h1>Asterism Console</h1>
     <div class="bridge" data-console-target="bridge">bridge: waiting</div>

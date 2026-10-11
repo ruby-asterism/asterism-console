@@ -35,13 +35,15 @@ module Bridge
         end
         [ n["id"], n ]
       end
-      edges = graph["edges"].to_a.reject { DERIVED_EDGES.include?(_1["kind"]) }.to_h { [ _1["id"], _1 ] }
+      # The folded copies (Bridge::Groups) stay: that step makes them again.
+      edges = graph["edges"].to_a.reject { DERIVED_EDGES.include?(_1["kind"]) && !_1["folded"] }.to_h { [ _1["id"], _1 ] }
       router_of = {}
       carried = Hash.new { |h, k| h[k] = [] }
       edges.each_value do |e|
         case e["kind"]
         when "session" then router_of[e["target"]] = e["source"]
-        when "carries" then carried[e["source"]] << e["target"] if nodes[e["target"]]
+        # (Not the folded copies of Bridge::Groups, on a graph derived before.)
+        when "carries" then carried[e["source"]] << e["target"] if nodes[e["target"]] && !e["folded"]
         end
       end
       # The console's sessions that carry no token of their own (the bridge's

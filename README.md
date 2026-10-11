@@ -22,10 +22,17 @@ calls the methods that Asterism nodes expose.
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name
   (and rate). A node's services, and its topics nobody is at the other end
-  of, are its attributes: a badge (services in red, unmatched topics in
+  of, are its attributes: a badge (services in slate, unmatched topics in
   orange) and the details. "Topics as nodes" draws the topics as nodes
   between their ends instead; "Hide /rosout, /parameter_events" (on by
   default) leaves out the topics every rclcpp node has.
+- **Machines**: the ROS 2 nodes whose sessions come from the same IP
+  address (two or more) are folded into one box, "192.0.2.5 (10 ROS 2
+  nodes)", with the topic edges going in and out of it and its nodes'
+  badges added up. Its details open it (its nodes drawn again, no box
+  around them) and fold it back; the browser remembers which are open. An
+  admin can give a machine a name, kept with its nodes' names rather than
+  its IP, so it survives an address change (docs/v2_3.md).
 - **Topic rates** like rqt_topic: rate (Hz), bandwidth, the number of
   messages and the last one (time, size, a short preview: strings,
   numbers, `geometry_msgs` vectors and twists, `/rosout` lines, the header
@@ -353,6 +360,8 @@ even on a LAN. What it does, and what it assumes:
   characters within one part. No rows (the default): nothing can be called.
   Only admins add or remove rows. Rails checks before a request reaches
   the bridge, and the bridge checks again before it calls.
+- **Machine names** (the names of folded ROS 2 machines in the graph) are
+  shared by every user; only admins give, change or remove one.
 - **Call log.** Every request is kept: who, when, the path, method and
   arguments, and the answer (`ok`, `remote_error`, `timeout`, ...), refused
   ones as `denied`. "Call log" shows the last 200.

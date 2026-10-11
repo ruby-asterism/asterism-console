@@ -97,6 +97,7 @@ module Bridge
       @own_links = {}
       @peer_links = []
       @registry = []
+      @names = []
       @dirty = true
       @subs = {} # watch id => [key, Subscription]
       @rate = {} # watch id => [second, count, dropped]
@@ -295,12 +296,14 @@ module Bridge
       own = own_links
       peers = peer_links
       reg = registry
+      names = machine_names
       @lock.synchronize do
-        if admin != @admin || own != @own_links || reg != @registry || peers != @peer_links
+        if admin != @admin || own != @own_links || reg != @registry || peers != @peer_links || names != @names
           @admin = admin
           @own_links = own
           @peer_links = peers
           @registry = reg
+          @names = names
           @dirty = true
         end
       end
@@ -313,6 +316,14 @@ module Bridge
     # The relay registry (W2), to mark the graph's nodes by it.
     def registry
       RelayPeer.registry
+    rescue ActiveRecord::ActiveRecordError
+      []
+    end
+
+    # The machine names (V2.3), for the groups of ROS 2 nodes. Read with the
+    # admin space, so a name given on the page shows within ADMIN_EVERY.
+    def machine_names
+      MachineName.for_graph
     rescue ActiveRecord::ActiveRecordError
       []
     end
@@ -391,7 +402,7 @@ module Bridge
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
-                    cloud: Relay::Settings.cloud_name).to_h
+                    cloud: Relay::Settings.cloud_name, names: @names).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"

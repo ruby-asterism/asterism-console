@@ -77,6 +77,8 @@ input[type=text] {
 
 form.call { margin: 6px 0; }
 form.call label { display: block; margin-bottom: 2px; }
+form.name-form { margin: 10px 0 4px; }
+form.name-form label { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; }
 .row { display: flex; gap: 6px; }
 .row input { flex: 1; }
 details { margin-top: 8px; font-size: 12px; }

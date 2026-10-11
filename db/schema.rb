@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_09_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_11_120000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -51,6 +51,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_200000) do
     t.text "bridge_info"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "machine_names", force: :cascade do |t|
+    t.string "name", null: false
+    t.text "members", null: false
+    t.integer "created_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_machine_names_on_created_by_id"
   end
 
   create_table "playbacks", force: :cascade do |t|
@@ -202,6 +211,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_09_200000) do
 
   add_foreign_key "bridge_requests", "users"
   add_foreign_key "call_permissions", "users", column: "created_by_id"
+  add_foreign_key "machine_names", "users", column: "created_by_id", on_delete: :nullify
   add_foreign_key "playbacks", "recordings", on_delete: :nullify
   add_foreign_key "playbacks", "users"
   add_foreign_key "recordings", "users"

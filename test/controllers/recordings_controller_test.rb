@@ -181,6 +181,36 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     assert graph["edges"].any? { _1["kind"] == "expect" && _1["source"] == "reg:w2bot" && _1["target"] == "router:r1" }
   end
 
+  test "the rewind folds the ROS 2 nodes of one machine, with today's names" do
+    r = Recording.new(user: users(:user), name: "old rover", status: "done")
+    r.selection_value = { "structure" => true }
+    r.save!
+    session = ->(z) { { "id" => "session:#{z}", "kind" => "session", "layer" => "infra", "label" => "peer #{z}",
+                        "data" => { "zid" => z, "whatami" => "peer", "address" => "tcp/[::ffff:192.0.2.5]:4000#{z[-1]}" } } }
+    ros = ->(z, name) { { "id" => "r_node:#{z}/0", "kind" => "r_node", "layer" => "ros", "label" => name, "data" => { "zid" => z } } }
+    old = {
+      "nodes" => [ { "id" => "router:r1", "kind" => "router", "layer" => "infra", "label" => "router r1", "data" => {} },
+                   session.("s1"), session.("s2"), ros.("s1", "/controller_manager"), ros.("s2", "/camera_jpeg") ],
+      "edges" => %w[s1 s2].flat_map do |z|
+        [ { "id" => "session:router:r1->session:#{z}", "kind" => "session", "source" => "router:r1", "target" => "session:#{z}" },
+          { "id" => "carries:session:#{z}->r_node:#{z}/0", "kind" => "carries", "source" => "session:#{z}", "target" => "r_node:#{z}/0" } ]
+      end
+    }
+    File.open(r.path, "wb") do |f|
+      w = MCAP::Writer.new(f)
+      g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+                        schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
+      w.add_message(channel_id: g, log_time: 10, data: JSON.generate("kind" => "snapshot", "version" => 1, "graph" => old))
+      w.finish
+    end
+    MachineName.create!(name: "mujoco", member_list: %w[/controller_manager /camera_jpeg /twist_stamper])
+    get graph_recording_path(r, t: 5), as: :json
+    graph = response.parsed_body["graph"]
+    group = graph["nodes"].find { _1["kind"] == "r_group" }
+    assert_equal [ "r_group:192.0.2.5", "mujoco (2 ROS 2 nodes)" ], group.values_at("id", "label")
+    assert graph["edges"].any? { _1["kind"] == "attach" && _1["folded"] && _1["source"] == group["id"] }
+  end
+
   test "a structure recorded before V2.1 is drawn the default way too" do
     r = Recording.new(user: users(:user), name: "old net", status: "done")
     r.selection_value = { "structure" => true }

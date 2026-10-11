@@ -28,6 +28,8 @@
 #             a router (the bridge's own: Session#peer_zids)
 #   cloud:    the cloud router's name (Relay::Settings.cloud_name), for the
 #             routers the registry's names are expected at (Bridge::Marks)
+#   names:    the machine names (MachineName.for_graph: "id", "name",
+#             "members"), for the groups of ROS 2 nodes (Bridge::Groups)
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -51,6 +53,10 @@
 #     "others" node per router, "peer_link" edges between nodes of sessions
 #     connected directly, and each node's sessions as its data
 #     "connections". Sessions stay, for the page's "Sessions as points".
+#   - The groups (V2.3, Bridge::Groups): the ROS 2 nodes that come from the
+#     same IP address (two or more) folded into one "r_group" node, with
+#     folded copies of their edges; a group takes the machine name whose
+#     node names match its own.
 #   - The marks (V2.2, Bridge::Marks): what each Asterism node runs on (data
 #     "machine"), the registered names not here in one box ("reg_box") with
 #     "expect" edges to the router the registry says they connect to.
@@ -78,11 +84,14 @@ module Bridge
     # The cloud router's name (Relay::Settings.cloud_name): the router the
     # registry's entries are expected at (Bridge::Marks).
     attr_accessor :cloud
+    # The machine names (Bridge::Groups).
+    attr_accessor :names
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil, peer_links: [], cloud: nil)
+                   registry: nil, peer_links: [], cloud: nil, names: [])
       g = new
       g.cloud = cloud
+      g.names = names
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
@@ -451,11 +460,18 @@ module Bridge
 
     # ---------------------------------------------------------------- output
 
-    # With the default drawing's parts (Bridge::Connections) and the marks
-    # and registry box (Bridge::Marks) added.
+    # With the default drawing's parts (Bridge::Connections), the groups of
+    # ROS 2 nodes (Bridge::Groups) and the marks and registry box
+    # (Bridge::Marks) added.
     def to_h
-      g = Connections.apply("nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] })
-      Marks.apply(g, cloud: @cloud)
+      self.class.derive({ "nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] } },
+                        cloud: @cloud, names: @names)
+    end
+
+    # The derived parts on a graph in to_h form (live, or recorded: the
+    # rewind runs it again on recorded graphs, with today's names).
+    def self.derive(graph, cloud: nil, names: [])
+      Marks.apply(Groups.apply(Connections.apply(graph), names: names || []), cloud: cloud)
     end
 
     # What changed from old to new (both to_h): added / removed / changed.
