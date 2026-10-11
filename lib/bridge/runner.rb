@@ -329,12 +329,14 @@ module Bridge
     end
 
     # This bridge's links (to the router it is connected to): the link's
-    # protocol and the certificate name the router showed (TLS). zenohd
+    # protocol, the certificate name the router showed (TLS) and the
+    # bridge's own end of the link ("local", for Bridge::Gateways: the
+    # router sees the bridge from another address when a NAT is between). zenohd
     # keeps the certificate names of its other links in the session part of
     # its admin space (@/<zid>/session/**), which answers local queries only.
     def own_links
       @z.links.to_h do |l|
-        [ l.zid, { "protocol" => Graph.protocol(l.dst), "cert_name" => l.auth_identifier }.compact ]
+        [ l.zid, { "protocol" => Graph.protocol(l.dst), "cert_name" => l.auth_identifier, "local" => l.src }.compact ]
       end
     rescue Asterism::Zenoh::Error, NoMethodError
       {}
@@ -402,7 +404,7 @@ module Bridge
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
-                    cloud: Relay::Settings.cloud_name, names: @names).to_h
+                    cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"

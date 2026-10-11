@@ -8,6 +8,13 @@
 # comes from the same IP address, two or more of them, make one group.
 # Asterism nodes are left out (they have their own nesting).
 #
+# Gateways (V2.4, Bridge::Gateways): a ROS 2 node whose session comes from
+# a gateway's address (seen in the graph at its router, or configured) is
+# not folded, whatever else comes from there: the machine behind a gateway
+# is not known. It gets data "gateway" ({ "ip", "how" => "detected" or
+# "given": configured, or today's for an older recording }) for its
+# details.
+#
 # Added:
 #   - an "r_group" node per group ("r_group:<ip>", layer "ros"), labelled
 #     "<name or ip> (N ROS 2 nodes)". Data: "ip", "members" (node ids),
@@ -56,10 +63,25 @@ module Bridge
 
     # The IP a ROS 2 node comes from (its first session with an address).
     def node_ip(node)
+      node_link(node)&.first
+    end
+
+    # [ip, router id] of a node's first session with an address.
+    def node_link(node)
       Array(node.dig("data", "connections")).each do |c|
         ip = ip_of(c["address"])
-        return ip if ip
+        return [ ip, c["router"] ] if ip
       end
+      nil
+    end
+
+    # Whether a node comes from a gateway: { "ip", "how" } or nil.
+    # detected: { router id => [ip] } (Gateways.detect), configured: [ip].
+    def gateway_of(node, detected, configured)
+      ip, rid = node_link(node)
+      return nil unless ip
+      return { "ip" => ip, "how" => "detected" } if Array(detected[rid]).include?(ip)
+      return { "ip" => ip, "how" => "given" } if configured.include?(ip)
       nil
     end
 
@@ -98,17 +120,25 @@ module Bridge
       out
     end
 
-    def apply(graph, names: [])
+    # gateways: addresses to take as gateways at every router, besides the
+    # ones the graph shows (Bridge::Gateways).
+    def apply(graph, names: [], gateways: [])
       nodes = graph["nodes"].to_a.reject { _1["kind"] == KIND }.map do |n|
-        n["kind"] == "r_node" && n["data"].is_a?(Hash) && n["data"].key?("group") ? n.merge("data" => n["data"].except("group")) : n
+        next n unless n["kind"] == "r_node" && n["data"].is_a?(Hash) && (n["data"].key?("group") || n["data"].key?("gateway"))
+        n.merge("data" => n["data"].except("group", "gateway"))
       end
       edges = graph["edges"].to_a.reject { _1["folded"] }
+      detected = Gateways.detect(graph)
+      configured = Array(gateways).filter_map { Gateways.normalize(_1) }
 
       by_ip = Hash.new { |h, k| h[k] = [] }
-      nodes.each do |n|
-        next unless n["kind"] == "r_node"
+      nodes = nodes.map do |n|
+        next n unless n["kind"] == "r_node"
+        gw = gateway_of(n, detected, configured)
+        next n.merge("data" => (n["data"] || {}).merge("gateway" => gw)) if gw
         ip = node_ip(n)
         by_ip[ip] << n if ip
+        n
       end
       by_ip.select! { |_, list| list.size >= 2 }
 

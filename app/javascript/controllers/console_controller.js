@@ -35,9 +35,20 @@ cytoscape.use(fcose)
 // Machines (V2.3, lib/bridge/groups.rb): the ROS 2 nodes that come from the
 // same IP address (two or more) are one "r_group" node, folded by default,
 // named by its IP or by the machine name an admin gave it. Opening it (its
-// details) shows its nodes instead, with no box around them; the bridge
+// details) shows its nodes instead (in a frame, below, not a compound box); the bridge
 // sends folded copies of the edges, and an edge shows when both its ends
-// show. Which groups are open this browser remembers. The relay registry ("Relay registry", off by default and
+// show. Which groups are open this browser remembers.
+//
+// The frame of an open machine (V2.4): a rectangle around its nodes, with
+// its name. Not a compound node (V2.1: a box let fcose swallow the
+// drawing): a node of its own ("frame" class, kind "frame") that no layout
+// sees, drawn under everything, sized and moved here to the bounds of the
+// machine's nodes whenever one of them moves (syncFrames). Clicking it
+// selects the machine. When a machine opens, and on "Lay out again", its
+// nodes are laid out on their own first and kept together (layoutAll,
+// openGroup).
+//
+// The relay registry ("Relay registry", off by default and
 // remembered by this browser) adds a mark in the corner of the nodes and
 // routers it knows of, and puts the names it has that are not here in one
 // "Not connected (registry)" box, with a dashed line to the router the
@@ -116,6 +127,12 @@ const LAYOUT = {
 
 const LEASE_EVERY = 10000
 
+// The frame of an open machine: the room around its nodes (their labels
+// and badges included), and how far other nodes are kept from it.
+const FRAME_PAD = 14
+const FRAME_CLEAR = 24
+const FRAME_COLOR = "#6a1b9a"
+
 // Topics every rclcpp node has, hidden by default (rqt_graph's "Hide debug").
 const DEBUG_TOPICS = ["/rosout", "/parameter_events"]
 const isDebugTopic = (tid) => DEBUG_TOPICS.includes(String(tid).replace(/^r_topic:\d+/, ""))
@@ -187,7 +204,9 @@ export default class extends Controller {
       layout: { name: "preset" },
     })
     this.cy.add(this.elementsOf(graph))
-    this.cy.on("tap", "node", (ev) => this.select(ev.target.id()))
+    this.cy.on("tap", "node", (ev) => this.select(ev.target.hasClass("frame") ? ev.target.data("machine") : ev.target.id()))
+    // A machine's frame follows its nodes (dragged, laid out, added).
+    this.cy.on("position", "node", (ev) => { if (ev.target.data("group")) this.queueFrames() })
     this.cy.on("tap", "edge[kind = 'topic_link'], edge[kind = 'attach'], edge[kind = 'peer_link']", (ev) => this.select(ev.target.id()))
     this.cy.on("tap", (ev) => { if (ev.target === this.cy) this.select(null) })
     this.applyView()
@@ -264,6 +283,16 @@ export default class extends Controller {
       { selector: "edge[kind = 'expect']", style: {
           "line-style": "dashed", width: 1.2, "line-opacity": 0.6, "target-arrow-shape": "triangle", "arrow-scale": 0.7 } },
       { selector: ".flash", style: { "overlay-color": "#ffb300", "overlay-opacity": 0.35, "overlay-padding": 6 } },
+      // The frame of an open machine: under everything (edges too), its
+      // name above its top left corner.
+      { selector: "node.frame", style: {
+          shape: "round-rectangle", width: "data(fw)", height: "data(fh)", "corner-radius": 10,
+          "background-color": FRAME_COLOR, "background-opacity": 0.04,
+          "border-width": 1.5, "border-color": FRAME_COLOR, "border-style": "solid", "border-opacity": 0.8,
+          label: "data(label)", color: FRAME_COLOR, "font-size": 12, "font-weight": "bold",
+          "text-valign": "top", "text-halign": "right", "text-margin-x": "data(lx)", "text-margin-y": -3,
+          "text-max-width": 400, "text-events": "yes", "z-compound-depth": "bottom", "z-index": 0, "overlay-opacity": 0 } },
+      { selector: "node.frame.chosen", style: { "border-width": 3, "border-color": "#ffb300", "border-opacity": 1 } },
     ]
     for (const [kind, k] of Object.entries(KINDS)) {
       const style = { shape: k.shape, "background-color": k.color, width: k.size, height: k.size }
@@ -440,26 +469,188 @@ export default class extends Controller {
     } catch (_e) { /* the next diff tries again */ }
   }
 
+  // What is drawn and laid out (the machines' frames are not laid out).
   visible() {
-    return this.cy.elements().not(".off")
+    return this.cy.elements().not(".off").not(".frame")
   }
 
-  // Everything from scratch ("Lay out again", the first graph).
+  // Everything from scratch ("Lay out again", the first graph). An open
+  // machine is kept together: its nodes are laid out on their own first;
+  // then the whole graph is laid out with the machine folded, its box as
+  // large as its nodes need (so the layout keeps the others out of that
+  // room); then its nodes go where the box went.
   layoutAll() {
+    const open = this.openMembers()
+    const shapes = new Map()
+    for (const [gid, members] of open) shapes.set(gid, this.layoutMembers(members))
+    const keys = [...open.keys()].map((gid) => this.groupKey(this.cy.getElementById(gid)))
+    if (keys.length) {
+      this.openGroups = this.openGroups.filter((k) => !keys.includes(k))
+      this.applyView()
+      this.cy.batch(() => {
+        for (const [gid, sh] of shapes) this.cy.getElementById(gid).style({ width: sh.w, height: sh.h, label: "" })
+      })
+    }
     const eles = this.visible()
-    if (eles.empty()) return
+    if (!eles.empty()) {
+      try {
+        eles.layout({ ...LAYOUT, quality: "default", randomize: true, animate: false, fit: !keys.length }).run()
+      } catch (e) {
+        console.warn("layout", e)
+        eles.layout({ name: "cose", animate: false, fit: !keys.length, nodeDimensionsIncludeLabels: true }).run()
+      }
+      eles.nodes().forEach((n) => this.placed.add(n.id()))
+    }
+    if (!keys.length) return
+    this.openGroups = [...new Set(this.openGroups.concat(keys))]
+    this.cy.batch(() => {
+      for (const [gid, sh] of shapes) {
+        const g = this.cy.getElementById(gid)
+        g.removeStyle("width height label")
+        const c = g.position()
+        for (const [m, off] of sh.offsets) { m.position({ x: c.x + off.x, y: c.y + off.y }); this.placed.add(m.id()) }
+      }
+    })
+    this.applyView()
+    for (const gid of open.keys()) this.clearFrame(gid)
+    this.settle()
+    this.cy.fit(this.visible(), 30)
+  }
+
+  // The nodes shown of each open machine: Map(group id => nodes).
+  openMembers() {
+    const out = new Map()
+    if (!this.layers.ros) return out
+    this.cy.nodes("[kind = 'r_group']").forEach((g) => {
+      if (!this.isOpen(g.id())) return
+      const members = this.cy.nodes().filter((n) => n.data("group") === g.id() && !n.hasClass("off"))
+      if (members.nonempty()) out.set(g.id(), members)
+    })
+    return out
+  }
+
+  // A machine's nodes laid out on their own (the edges among them only),
+  // around (0, 0): { w, h, offsets: [[node, offset from the middle]] }.
+  layoutMembers(members) {
+    const r = Math.max(90, members.length * 22)
+    members.forEach((n, i) => {
+      const a = (2 * Math.PI * i) / members.length
+      n.position({ x: r * Math.cos(a), y: r * Math.sin(a) })
+    })
+    const inner = members.union(members.edgesWith(members).not(".off"))
     try {
-      eles.layout({ ...LAYOUT, quality: "default", randomize: true, animate: false, fit: true }).run()
+      inner.layout({ ...LAYOUT, quality: "default", randomize: false, animate: false, fit: false,
+                     idealEdgeLength: (e) => e.data("kind") === "topic_link" ? 110 : 70 }).run()
     } catch (e) {
       console.warn("layout", e)
-      eles.layout({ name: "cose", animate: false, fit: true, nodeDimensionsIncludeLabels: true }).run()
     }
-    eles.nodes().forEach((n) => this.placed.add(n.id()))
+    const bb = this.frameBounds(members)
+    const c = { x: (bb.x1 + bb.x2) / 2, y: (bb.y1 + bb.y2) / 2 }
+    return { w: bb.x2 - bb.x1, h: bb.y2 - bb.y1,
+             offsets: members.map((n) => [n, { x: n.position().x - c.x, y: n.position().y - c.y }]) }
+  }
+
+  // ------------------------------------------------------- machine frames
+
+  // The bounds a frame draws around: each node's shape and label, its
+  // badge, and FRAME_PAD of room (not the badge's bounds-expansion, which is
+  // there for the renderer only).
+  frameBounds(members) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
+    members.forEach((n) => {
+      const p = n.position()
+      const w = n.outerWidth() / 2
+      const h = n.outerHeight() / 2
+      const lb = n.boundingBox({ includeNodes: false, includeEdges: false, includeLabels: true, includeOverlays: false })
+      const badge = n.data("badge") ? Number(n.data("badgeW") || 0) : 0
+      x1 = Math.min(x1, p.x - w, Number.isFinite(lb.x1) ? lb.x1 : Infinity)
+      x2 = Math.max(x2, p.x + w, p.x - w + 24 + badge, Number.isFinite(lb.x2) ? lb.x2 : -Infinity)
+      y1 = Math.min(y1, p.y - h - (badge ? 9 : 0), Number.isFinite(lb.y1) ? lb.y1 : Infinity)
+      y2 = Math.max(y2, p.y + h, Number.isFinite(lb.y2) ? lb.y2 : -Infinity)
+    })
+    return { x1: x1 - FRAME_PAD, y1: y1 - FRAME_PAD, x2: x2 + FRAME_PAD, y2: y2 + FRAME_PAD }
+  }
+
+  // Redraws the frames on the next frame of the browser (a drag moves a
+  // node many times).
+  queueFrames() {
+    if (this.framesQueued) return
+    this.framesQueued = true
+    requestAnimationFrame(() => { this.framesQueued = false; this.syncFrames() })
+  }
+
+  // A frame for each open machine with nodes shown, around them; the
+  // others' frames removed.
+  syncFrames() {
+    if (!this.cy || this.cy.destroyed()) return
+    const open = this.openMembers()
+    this.cy.batch(() => {
+      this.cy.nodes(".frame").forEach((f) => { if (!open.has(f.data("machine"))) f.remove() })
+      for (const [gid, members] of open) {
+        const g = this.cy.getElementById(gid)
+        const bb = this.frameBounds(members)
+        const fw = bb.x2 - bb.x1
+        const fh = bb.y2 - bb.y1
+        const info = g.data("info") || {}
+        const label = `${info.name || info.ip} (${members.length} ROS 2 nodes)`
+        let f = this.cy.getElementById(`frame:${gid}`)
+        if (f.empty()) {
+          f = this.cy.add({ group: "nodes", data: { id: `frame:${gid}`, kind: "frame", machine: gid },
+                            classes: "frame", selectable: false, grabbable: false })
+        }
+        f.data({ fw, fh, lx: 6 - fw, label })
+        f.position({ x: (bb.x1 + bb.x2) / 2, y: (bb.y1 + bb.y2) / 2 })
+        f.toggleClass("chosen", this.selected === gid)
+      }
+    })
+  }
+
+  // Moves the nodes that sit in a machine's frame (with FRAME_CLEAR of
+  // room) out of it, each the shorter way out from the middle, and on in
+  // that direction until it overlaps nothing else. Asterism nodes move with
+  // their apps and objects; the machine's nodes and other machines' nodes
+  // stay. only: move these (top-level) nodes only.
+  clearFrame(gid, only = null) {
+    const members = this.cy.nodes().filter((n) => n.data("group") === gid && !n.hasClass("off"))
+    if (members.empty()) return
+    const b0 = this.frameBounds(members)
+    const R = { x1: b0.x1 - FRAME_CLEAR, y1: b0.y1 - FRAME_CLEAR - 16, x2: b0.x2 + FRAME_CLEAR, y2: b0.y2 + FRAME_CLEAR }
+    const c = { x: (R.x1 + R.x2) / 2, y: (R.y1 + R.y2) / 2 }
+    const hit = (a, b) => a.x2 > b.x1 && a.x1 < b.x2 && a.y2 > b.y1 && a.y1 < b.y2
+    const tops = this.visible().nodes().filter((n) => n.parent().empty())
+    const boxOf = (top) => {
+      const b = top.boundingBox({ includeLabels: true, includeOverlays: false })
+      return { x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2 }
+    }
+    const boxes = new Map(tops.map((t) => [t.id(), boxOf(t)]))
+    tops.filter((n) => !n.data("group") && (!only || only.contains(n))).forEach((top) => {
+      const b = boxes.get(top.id())
+      if (!hit(b, R)) return
+      const dx = (b.x1 + b.x2) / 2 - c.x
+      const dy = (b.y1 + b.y2) / 2 - c.y
+      const mx = dx >= 0 ? R.x2 - b.x1 : R.x1 - b.x2
+      const my = dy >= 0 ? R.y2 - b.y1 : R.y1 - b.y2
+      const horizontal = Math.abs(mx) <= Math.abs(my)
+      const move = horizontal ? { x: mx, y: 0 } : { x: 0, y: my }
+      const step = horizontal ? { x: Math.sign(mx) * 20, y: 0 } : { x: 0, y: Math.sign(my) * 20 }
+      const at = () => ({ x1: b.x1 + move.x, y1: b.y1 + move.y, x2: b.x2 + move.x, y2: b.y2 + move.y })
+      for (let i = 0; i < 60; i++) {
+        const nb = at()
+        const clash = [...boxes].some(([id, o]) => id !== top.id() && hit(nb, o))
+        if (!clash) break
+        move.x += step.x
+        move.y += step.y
+      }
+      const leaves = top.isChildless() ? top : top.descendants().filter((x) => x.isChildless())
+      this.cy.batch(() => leaves.forEach((k) => { const q = k.position(); k.position({ x: q.x + move.x, y: q.y + move.y }) }))
+      boxes.set(top.id(), at())
+    })
   }
 
   relayout() {
     this.layoutAll()
   }
+
 
   // Places the visible nodes that have no place yet: next to the placed
   // nodes they connect to (or their parent's other children), then a short
@@ -545,6 +736,10 @@ export default class extends Controller {
         }
       })
       this.keepInView(fresh)
+      // A new node is not put in an open machine's frame (it is not one of
+      // its nodes): moved out of it.
+      const tops = fresh.map((n) => n.ancestors().last().nonempty() ? n.ancestors().last() : n)
+      for (const gid of this.openMembers().keys()) this.clearFrame(gid, this.cy.collection(tops))
     } catch (e) {
       console.warn("layout", e)
     }
@@ -642,6 +837,7 @@ export default class extends Controller {
     const folded = (gid) => !this.isOpen(gid)
     this.cy.batch(() => {
       this.cy.nodes().forEach((n) => {
+        if (n.hasClass("frame")) return
         let shown = this.layers[n.data("layer")]
         if (n.data("kind") === "r_group") shown = shown && folded(n.id())
         if (n.data("group")) shown = shown && !folded(n.data("group"))
@@ -665,6 +861,7 @@ export default class extends Controller {
         e.toggleClass("off", !shown)
       })
     })
+    this.syncFrames()
   }
 
   // ---------------------------------------------------------------- machines
@@ -705,7 +902,7 @@ export default class extends Controller {
     if (open) this.openGroups.push(key)
     saveList(STORE_OPEN, this.openGroups)
     const members = this.cy.nodes().filter((n) => n.data("group") === gid)
-    if (open) this.placeAround(members.filter((n) => !this.placed.has(n.id())), g)
+    if (open) this.openGroup(members.filter((n) => !this.placed.has(n.id())), g)
     else if (!this.placed.has(gid) && members.some((n) => this.placed.has(n.id()))) {
       // Folded for the first time here: where its nodes were.
       const ps = members.filter((n) => this.placed.has(n.id())).map((n) => n.position())
@@ -723,32 +920,22 @@ export default class extends Controller {
     this.select(gid)
   }
 
-  // A group's nodes, opened for the first time: in a ring where the group
-  // was, then a short layout that moves only them.
-  placeAround(nodes, group) {
+  // A group's nodes, opened for the first time: laid out on their own
+  // (kept together) where the group was, and what else sits there moved
+  // out of their frame. The other nodes keep their places.
+  openGroup(nodes, group) {
     if (nodes.empty()) return
     const c = this.placed.has(group.id()) ? { ...group.position() } : null
     if (!c) return // nothing to go by: settle places them
-    const r = Math.max(90, nodes.length * 22)
-    nodes.forEach((n, i) => {
-      const a = (2 * Math.PI * i) / nodes.length
-      n.position({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) })
-    })
-    const ids = new Set(nodes.map((n) => n.id()))
-    group.removeClass("off") // to count it out below
-    const eles = this.cy.elements().not(".off").filter((x) => x.id() !== group.id() && !(x.isEdge() && (x.source().id() === group.id() || x.target().id() === group.id())))
     nodes.removeClass("off")
-    const all = eles.union(nodes).union(nodes.connectedEdges().filter((e) => !e.source().hasClass("off") && !e.target().hasClass("off") && e.source().id() !== group.id() && e.target().id() !== group.id()))
-    const fixed = all.nodes().filter((n) => !ids.has(n.id()) && this.placed.has(n.id()) && n.isChildless())
-      .map((n) => ({ nodeId: n.id(), position: { ...n.position() } }))
-    try {
-      all.layout({ ...LAYOUT, quality: "proof", randomize: false, animate: false, fit: false,
-                   fixedNodeConstraint: fixed, initialEnergyOnIncremental: 0.3 }).run()
-      for (const f of fixed) this.cy.getElementById(f.nodeId).position(f.position)
-    } catch (e) {
-      console.warn("layout", e)
-    }
+    nodes.connectedEdges().forEach((e) => { if (nodes.contains(e.source()) && nodes.contains(e.target())) e.removeClass("off") })
+    const sh = this.layoutMembers(nodes)
+    this.cy.batch(() => {
+      for (const [m, off] of sh.offsets) m.position({ x: c.x + off.x, y: c.y + off.y })
+    })
     nodes.forEach((n) => this.placed.add(n.id()))
+    this.applyView()
+    this.clearFrame(group.id())
   }
 
   // The name of a group (admins): a new one, or a new name for the one it
@@ -802,7 +989,7 @@ export default class extends Controller {
     const by = {}
     let services = 0
     this.cy.nodes().forEach((n) => {
-      if (["others", "reg_box"].includes(n.data("kind"))) return
+      if (["others", "reg_box", "frame"].includes(n.data("kind"))) return
       if (n.data("kind") === "r_group" && !this.layers.ros) return
       if (n.data("kind") === "registered" && !this.layers.registry) return
       by[n.data("kind")] = (by[n.data("kind")] || 0) + 1
@@ -940,6 +1127,7 @@ export default class extends Controller {
 
   select(id) {
     this.selected = id
+    this.cy.nodes(".frame").forEach((f) => f.toggleClass("chosen", f.data("machine") === id))
     this.refreshDetails()
     if (this.selectedTopics().length) this.renewLeases()
   }
@@ -1039,6 +1227,11 @@ export default class extends Controller {
         rows.push(["Name", info.name], ["Domain", info.domain],
                   ["Machine", group?.nonempty() ? `${this.link(info.group, group.data("name"))} ` +
                     `<button type="button" class="small" data-group-toggle="${esc(info.group)}" data-open="0">Fold</button>` : null, true],
+                  ["Machine", info.gateway ? `not known: ${esc(info.gateway.ip)} is a gateway ` +
+                    `<span class="hint">(${info.gateway.how === "detected"
+                      ? "this console's bridge comes through it too: a NAT, such as Docker's published port"
+                      : "given as one: ASTERISM_GATEWAY_IPS, or for an older recording the one the console sees today"}).
+                      Every machine behind it comes from this address, so this node is not folded with the others from there.</span>` : null, true],
                   ["Connection", this.connectionsHtml(info.connections, id, info.zid), true],
                   ["Publishes", topicList("publishers", "subscribers"), true],
                   ["Subscribes", topicList("subscribers", "publishers"), true])

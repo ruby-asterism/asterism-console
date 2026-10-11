@@ -29,10 +29,13 @@ calls the methods that Asterism nodes expose.
 - **Machines**: the ROS 2 nodes whose sessions come from the same IP
   address (two or more) are folded into one box, "192.0.2.5 (10 ROS 2
   nodes)", with the topic edges going in and out of it and its nodes'
-  badges added up. Its details open it (its nodes drawn again, no box
-  around them) and fold it back; the browser remembers which are open. An
-  admin can give a machine a name, kept with its nodes' names rather than
-  its IP, so it survives an address change (docs/v2_3.md).
+  badges added up. Its details open it and fold it back; the browser
+  remembers which are open. An open machine's nodes are kept together and
+  drawn in a frame with its name, which follows them as they move
+  (docs/v2_4.md). An admin can give a machine a name, kept with its nodes'
+  names rather than its IP, so it survives an address change
+  (docs/v2_3.md). ROS 2 nodes that come from a gateway's address (Docker's
+  published port: every LAN device looks alike there) are not folded.
 - **Topic rates** like rqt_topic: rate (Hz), bandwidth, the number of
   messages and the last one (time, size, a short preview: strings,
   numbers, `geometry_msgs` vectors and twists, `/rosout` lines, the header
@@ -91,6 +94,7 @@ bin/bridge                  # in another terminal: the one process on the networ
 | `ASTERISM_ZENOH_CONFIG` | | a zenoh configuration file (JSON5) for both sessions, instead of the three above |
 | `ASTERISM_CONSOLE_NODE` | `console` | the bridge's Asterism node ID (app `console`) |
 | `ASTERISM_RATES_MAX_BPS` | `8000000` | measuring all topics pauses above this many bytes per second (see Topic rates) |
+| `ASTERISM_GATEWAY_IPS` | | addresses to take as gateways (comma separated), when the bridge cannot see them (docs/v2_4.md) |
 | `CONSOLE_BIND` | `127.0.0.1` | the address the server listens on (see Security) |
 | `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
 | `ASTERISM_DIR`, `ASTERISM_ZENOH_DIR` | `../asterism`, `../asterism-zenoh` | the gem checkouts |

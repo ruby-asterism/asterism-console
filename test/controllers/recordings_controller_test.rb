@@ -211,6 +211,44 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     assert graph["edges"].any? { _1["kind"] == "attach" && _1["folded"] && _1["source"] == group["id"] }
   end
 
+  test "the rewind of a recording from before V2.4 takes today's gateways" do
+    r = Recording.new(user: users(:user), name: "two boards", status: "done")
+    r.selection_value = { "structure" => true }
+    r.save!
+    session = ->(z) { { "id" => "session:#{z}", "kind" => "session", "layer" => "infra", "label" => "client #{z}",
+                        "data" => { "zid" => z, "whatami" => "client", "address" => "tcp/[::ffff:192.0.2.1]:4000#{z[-1]}" } } }
+    ros = ->(z, name) { { "id" => "r_node:#{z}/0", "kind" => "r_node", "layer" => "ros", "label" => name, "data" => { "zid" => z } } }
+    edges = ->(zs) do
+      zs.flat_map do |z|
+        [ { "id" => "session:router:r1->session:#{z}", "kind" => "session", "source" => "router:r1", "target" => "session:#{z}" },
+          { "id" => "carries:session:#{z}->r_node:#{z}/0", "kind" => "carries", "source" => "session:#{z}", "target" => "r_node:#{z}/0" } ]
+      end
+    end
+    router = { "id" => "router:r1", "kind" => "router", "layer" => "infra", "label" => "router r1", "data" => {} }
+    old = { "nodes" => [ router, session.("s1"), session.("s2"), ros.("s1", "/fmruby_cam"), ros.("s2", "/cruby_rover") ],
+            "edges" => edges.(%w[s1 s2]) }
+    File.open(r.path, "wb") do |f|
+      w = MCAP::Writer.new(f)
+      g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+                        schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
+      w.add_message(channel_id: g, log_time: 10, data: JSON.generate("kind" => "snapshot", "version" => 1, "graph" => old))
+      w.finish
+    end
+    get graph_recording_path(r, t: 5), as: :json
+    assert response.parsed_body["graph"]["nodes"].any? { _1["kind"] == "r_group" }, "no gateway known: folded"
+
+    # Today the bridge sees itself from 192.0.2.1 through 127.0.0.1: a gateway.
+    me = session.("s9").deep_merge("data" => { "self" => true })
+    live = { "nodes" => [ router.merge("data" => { "bridge_link" => { "local" => "tcp/127.0.0.1:38722" } }), me ],
+             "edges" => [ { "id" => "session:router:r1->session:s9", "kind" => "session", "source" => "router:r1", "target" => "session:s9" } ] }
+    GraphState.current.update!(snapshot: JSON.generate(live))
+    get graph_recording_path(r, t: 5), as: :json
+    graph = response.parsed_body["graph"]
+    refute graph["nodes"].any? { _1["kind"] == "r_group" }
+    assert_equal({ "ip" => "192.0.2.1", "how" => "given" },
+                 graph["nodes"].find { _1["id"] == "r_node:s1/0" }["data"]["gateway"])
+  end
+
   test "a structure recorded before V2.1 is drawn the default way too" do
     r = Recording.new(user: users(:user), name: "old net", status: "done")
     r.selection_value = { "structure" => true }

@@ -7,7 +7,8 @@
 #     script/headless/run out.png ['[{"tapNode":"r_topic:0/chatter"},{"wait":1000}]']
 #
 # With CONSOLE_EMAIL / CONSOLE_PASSWORD it signs in first.
-# Steps (JSON): tapNode, tapEdge, tapKind, fill, click, check, uncheck, press, wait,
+# Steps (JSON): tapNode, tapEdge, tapKind, fill, click, clickAt ([x, y]),
+# clickLabel (a graph element's id: a real click on its label), check, uncheck, press, wait,
 # goto (a path), download ([selector, file]), select ([selector, value]),
 # upload ([selector, a file next to this script]),
 # accept (the next confirm dialog), shot, text (prints the element's text),

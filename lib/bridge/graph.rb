@@ -13,8 +13,10 @@
 #   self_node: the bridge's own Asterism node ID (marked, not hidden)
 #   self_zids: the bridge's own Zenoh session IDs (marked)
 #   own_links: the bridge's own links ({ router zid => { "protocol" =>,
-#              "cert_name" => } }): the certificate name of the router the
-#              bridge is connected to (the admin space does not tell it)
+#              "cert_name" =>, "local" => } }): the certificate name of the
+#              router the bridge is connected to (the admin space does not
+#              tell it) and the bridge's own end of the link (its locator,
+#              for Bridge::Gateways)
 #   self_cert: the common name of the bridge's own certificate (its sessions)
 #   registry: the relay registry (RelayPeer.registry: "name", "kind",
 #             "enabled", "in_acl", ...), or nil for none. Asterism nodes
@@ -30,6 +32,9 @@
 #             routers the registry's names are expected at (Bridge::Marks)
 #   names:    the machine names (MachineName.for_graph: "id", "name",
 #             "members"), for the groups of ROS 2 nodes (Bridge::Groups)
+#   gateways: IP addresses known to be a gateway (Gateways.configured:
+#             ASTERISM_GATEWAY_IPS), besides the ones the graph shows
+#             (Bridge::Gateways): ROS 2 nodes from them are not folded
 #
 # Output (to_h): { "nodes" => [node, ...], "edges" => [edge, ...] }, each a
 # Hash with "id", "kind", "layer", "label" and "data" (nodes) or
@@ -56,7 +61,9 @@
 #   - The groups (V2.3, Bridge::Groups): the ROS 2 nodes that come from the
 #     same IP address (two or more) folded into one "r_group" node, with
 #     folded copies of their edges; a group takes the machine name whose
-#     node names match its own.
+#     node names match its own. The ROS 2 nodes that come from a gateway's
+#     address (V2.4, Bridge::Gateways: a NAT, such as Docker's published
+#     ports) are not folded: the machine behind it is not known.
 #   - The marks (V2.2, Bridge::Marks): what each Asterism node runs on (data
 #     "machine"), the registered names not here in one box ("reg_box") with
 #     "expect" edges to the router the registry says they connect to.
@@ -86,12 +93,15 @@ module Bridge
     attr_accessor :cloud
     # The machine names (Bridge::Groups).
     attr_accessor :names
+    # The configured gateway addresses (Bridge::Gateways).
+    attr_accessor :gateways
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil, peer_links: [], cloud: nil, names: [])
+                   registry: nil, peer_links: [], cloud: nil, names: [], gateways: [])
       g = new
       g.cloud = cloud
       g.names = names
+      g.gateways = gateways
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
@@ -226,7 +236,7 @@ module Bridge
       own.each do |rzid, link|
         n = @nodes["router:#{self.class.norm_zid(rzid)}"]
         next unless n
-        n["data"]["bridge_link"] = link.slice("protocol", "cert_name").compact
+        n["data"]["bridge_link"] = link.slice("protocol", "cert_name", "local").compact
         n["data"]["cert_name"] ||= link["cert_name"] if link["cert_name"]
       end
     end
@@ -465,13 +475,15 @@ module Bridge
     # (Bridge::Marks) added.
     def to_h
       self.class.derive({ "nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] } },
-                        cloud: @cloud, names: @names)
+                        cloud: @cloud, names: @names, gateways: @gateways)
     end
 
     # The derived parts on a graph in to_h form (live, or recorded: the
     # rewind runs it again on recorded graphs, with today's names).
-    def self.derive(graph, cloud: nil, names: [])
-      Marks.apply(Groups.apply(Connections.apply(graph), names: names || []), cloud: cloud)
+    # gateways: addresses to take as gateways besides the ones the graph
+    # shows (Bridge::Gateways).
+    def self.derive(graph, cloud: nil, names: [], gateways: [])
+      Marks.apply(Groups.apply(Connections.apply(graph), names: names || [], gateways: gateways || []), cloud: cloud)
     end
 
     # What changed from old to new (both to_h): added / removed / changed.

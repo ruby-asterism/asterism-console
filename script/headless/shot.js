@@ -40,6 +40,17 @@ const steps = JSON.parse(process.argv[3] || "[]");
     if (s.tapKind) await page.evaluate((k) => { const n = window.consoleGraph.nodes(`[kind = '${k.kind}']`).filter(x => x.data('label').includes(k.label || "")).first(); n.select(); n.emit("tap"); }, s.tapKind);
     if (s.fill) await page.fill(s.fill[0], s.fill[1]);
     if (s.click) await page.click(s.click);
+    if (s.clickAt) await page.mouse.click(s.clickAt[0], s.clickAt[1]);
+    // A real click on a graph element's label: [element id] (its rendered label box, in the page).
+    if (s.clickLabel) {
+      const at = await page.evaluate((id) => {
+        const el = window.consoleGraph.getElementById(id);
+        const b = el.renderedBoundingBox({ includeNodes: false, includeEdges: false, includeLabels: true });
+        const r = window.consoleGraph.container().getBoundingClientRect();
+        return [r.left + (b.x1 + b.x2) / 2, r.top + (b.y1 + b.y2) / 2];
+      }, s.clickLabel);
+      await page.mouse.click(at[0], at[1]);
+    }
     if (s.press) await page.press(s.press[0], s.press[1]);
     if (s.uncheck) await page.uncheck(s.uncheck);
     if (s.check) await page.check(s.check);
