@@ -136,7 +136,7 @@ const EDGE_COLORS = {
 
 // What a "via_router" edge means (V2.6), for its legend line and details.
 const VIA_HINT = "Reached through this router; what is behind it is not visible: the console cannot read the router's " +
-  "admin space (for a router in the relay registry: turn on Admin space)."
+  "status (admin space). For a router in the relay registry: tick \"Console can see behind this router\"."
 
 const BADGE = { services: "#455a64", unmatched: "#ef6c00" }
 

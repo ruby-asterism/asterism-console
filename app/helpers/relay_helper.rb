@@ -13,6 +13,19 @@ module RelayHelper
     tag.span("no valid certificate", class: "badge warn")
   end
 
+  # The admin_space flag, by what it lets the console see: a router's
+  # status passed through the cloud router (behind), or a client reading the
+  # cloud router's status itself (reads). An entry in the cloud router's
+  # ACL; the peer's own configuration does not change.
+  def console_sees(peer, long: false)
+    return long ? "no (the cloud router's ACL does not pass it)" : "-" unless peer.admin_space?
+    if peer.kind == "router"
+      long ? "behind it (the cloud router passes the console's status requests to it)" : "behind"
+    else
+      long ? "reads the cloud router's status" : "reads"
+    end
+  end
+
   def keys_list(text)
     lines = RelayPeer.lines(text)
     return tag.span("none", class: "hint") if lines.empty?

@@ -12,8 +12,10 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     get new_relay_peer_path(kind: "router")
     assert_select "select option[selected]", "router"
     assert_select "input[type=checkbox][name='relay_peer[admin_space]'][checked]", 1, "a router's is read through by default"
+    assert_select "label", /Console can see behind this router/
     get new_relay_peer_path(kind: "client")
     assert_select "input[type=checkbox][name='relay_peer[admin_space]'][checked]", 0, "a client does not read the cloud's"
+    assert_select "label", /May read the cloud router's status/
     assert_difference("RelayPeer.count", 1) { post relay_peers_path, params: PARAMS }
     peer = RelayPeer.find_by!(name: "w2bot")
     assert_redirected_to relay_peer_path(peer)
@@ -23,6 +25,7 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "w2bot", false ], [ peer.reload.name, peer.enabled? ], "the name stays"
     get relay_peers_path
     assert_select "td a", "w2bot"
+    assert_select "th", "Console sees"
     assert_select ".badge", "disabled"
     assert_difference("RelayPeer.count", -1) { delete relay_peer_path(peer) }
   end

@@ -10,7 +10,7 @@
     <p class="hint">Nobody is registered yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Kind</th><th>Keys (read and write / read only)</th><th>Admin space</th>
+      <thead><tr><th>Name</th><th>Kind</th><th>Keys (read and write / read only)</th><th>Console sees</th>
                  <th>Certificate until</th><th>ACL (next apply)</th><th>Now</th></tr></thead>
       <tbody>
         <% @peers.each do |p| %>
@@ -18,7 +18,7 @@
             <td><%= link_to p.name, relay_peer_path(p) %><br><span class="hint"><%= p.description %></span></td>
             <td><%= p.kind %><%= tag.span(" (this router)", class: "hint") if p.name == @cloud %></td>
             <td><%= keys_list(p.rw_keys) %><% if p.ro_list.any? %><br><span class="hint">read only:</span><br><%= keys_list(p.ro_keys) %><% end %></td>
-            <td><%= p.admin_space? ? (p.kind == "router" ? "read through" : "reads") : "-" %></td>
+            <td><%= console_sees(p) %></td>
             <td><%= when_text(p.cert_expires_at) %></td>
             <td><%= p.name == @cloud ? tag.span("-", class: "hint") : acl_badge(p) %></td>
             <td><%= presence_badge(p, @seen) %></td>

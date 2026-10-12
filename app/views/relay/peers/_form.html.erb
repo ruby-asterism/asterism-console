@@ -5,7 +5,14 @@
   <label>Kind <%= f.select :kind, RelayPeer::KINDS %></label>
   <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
   <label class="check"><%= f.check_box :enabled %> Enabled</label>
-  <label class="check"><%= f.check_box :admin_space %> Admin space (a client reads it; a router's is read through)</label>
+  <% if peer.kind == "router" %>
+    <label class="check wide"><%= f.check_box :admin_space %> Console can see behind this router: the cloud router passes the
+      console's status requests to this router (this router must also answer them in its own configuration,
+      <code>adminspace</code> with read on)</label>
+  <% else %>
+    <label class="check wide"><%= f.check_box :admin_space %> May read the cloud router's status: every session connected to
+      it and its address. Only for the console</label>
+  <% end %>
   <label class="check"><%= f.check_box :player %> Player (the game rules: writes only at its own nodes)</label>
   <label class="wide">Description <%= f.text_field :description %></label>
   <label>Keys it may read and write (one per line)

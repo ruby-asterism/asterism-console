@@ -7,7 +7,7 @@
     <dt>Read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
     <dt>Read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
     <dt>Player</dt><dd><%= @peer.player? ? "yes, for #{(@peer.player_node_list.presence || [ @peer.name ]).join(', ')}" : "no" %></dd>
-    <dt>Admin space</dt><dd><%= @peer.admin_space? ? "yes" : "no" %></dd>
+    <dt>Console sees</dt><dd><%= console_sees(@peer, long: true) %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
     <dt>Certificate days</dt><dd><%= @peer.cert_days %></dd>
