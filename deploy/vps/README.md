@@ -170,21 +170,40 @@ diff ~/asterism-ports-before.txt ~/asterism-ports-after.txt     # only nginx:744
 curl -sI https://<each other site>/ | head -1                   # as before
 ```
 
-## 6. Firewall: ufw and the packet filter
+## 6. Firewall: the packet filter first, ufw second
 
-**Docker publishes ports past ufw.** A port docker publishes (7448 here) is
-reached through docker's own iptables rules, before ufw's. So ufw alone
-does not limit 7448; use the DOCKER-USER chain (kept in ufw's
-`/etc/ufw/after.rules`, below) and the provider's packet filter.
+**The main address limit is the provider's packet filter** (Sakura's
+control panel). It filters per port by source address, outside the server,
+so it also stops the ports docker publishes (which go past ufw). Mind what
+it does not filter:
 
-- ufw, for nginx's own wss port (not docker's):
+- **IPv6 is always let through.** Publish the router and the wss door on
+  IPv4 only: the compose file publishes 7448 as `0.0.0.0:7448` (IPv4), and
+  `asterism-router.conf` listens on IPv4 only. Check with
+  `ss -ltnp | grep -E ':7448|:7443'` that nothing listens on `[::]` for
+  them. If the server has an IPv6 address and something must listen on
+  IPv6, limit it with ufw (below).
+- **Ephemeral ports 32768-65535 are always let through** (and NTP, ICMP,
+  fragments). Keep every service port at 32767 or below (7448 and 7443 are).
+- It applies to **every** port of the server. Before adding to it, list
+  every port the server's services need now from
+  `~/asterism-ports-before.txt` (the web sites, the mail server, the game
+  server, the other apps' TLS ports, SSH from the admin's address) and keep
+  each one allowed. Then add: TCP 7448 and TCP 7443 from the players'
+  addresses (one entry per address or range). Check the other services
+  from outside afterwards.
+
+ufw is the second layer:
+
+- For nginx's own wss port (nginx is not in docker, so ufw sees it):
 
   ```
   sudo ufw allow from 192.0.2.20 to any port 7443 proto tcp comment 'asterism wss: player'
   sudo ufw status numbered
   ```
 
-- The router's port (docker), in `/etc/ufw/after.rules`, at the end:
+- Optional, for the router's port (docker publishes it past ufw): the
+  DOCKER-USER chain in `/etc/ufw/after.rules`, at the end:
 
   ```
   *filter
@@ -195,16 +214,9 @@ does not limit 7448; use the DOCKER-USER chain (kept in ufw's
   ```
 
   then `sudo ufw reload` and check with `sudo iptables -L DOCKER-USER -n -v`.
-  One `RETURN` line per allowed address. Try it from an allowed and from a
-  refused address before relying on it.
-
-- The provider's packet filter (Sakura's control panel): it applies to
-  **every** port of the server. Before turning it on (or adding to it),
-  list every port the server's services need now from
-  `~/asterism-ports-before.txt` (the web sites, the mail server, the game
-  server, the other apps' TLS ports, SSH from the admin's address) and keep
-  each one allowed. Then add: TCP 7448 and TCP 7443 from the players'
-  addresses. Check the other services from outside afterwards.
+  One `RETURN` line per allowed address. Not needed when the packet filter
+  limits 7448; if you add it, try it from an allowed and from a refused
+  address before relying on it.
 
 The address limits are the second lock: without them the router still
 asks for a certificate signed by the CA (7448) and nginx for a live pass
