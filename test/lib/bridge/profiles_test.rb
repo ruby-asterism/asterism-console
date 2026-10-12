@@ -38,7 +38,7 @@ class Bridge::ProfilesTest < ActiveSupport::TestCase
   end
 
   test "the graph puts the profile on the node, Marks the mark and the icon" do
-    g = Bridge::Graph.build(asterism: %w[asterism/fmruby-aaaaaa asterism/old asterism/console], self_node: "console",
+    g = Bridge::Graph.build(asterism: %w[asterism/fmruby-aaaaaa/demo asterism/old/demo asterism/console/console], self_node: "console",
                             profiles: { "fmruby-aaaaaa" => { "kind" => "family_mruby", "host" => "atoms3r", "icon_hash" => "0a1b2c3d" },
                                         "console" => { "kind" => "console", "icon_hash" => "ffffffff" },
                                         "gone" => { "kind" => "cruby" } },

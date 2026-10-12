@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -27,6 +27,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_180000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "user_id"
+    t.string "error_kind"
     t.index ["created_at"], name: "index_bridge_requests_on_created_at"
     t.index ["status"], name: "index_bridge_requests_on_status"
     t.index ["user_id"], name: "index_bridge_requests_on_user_id"

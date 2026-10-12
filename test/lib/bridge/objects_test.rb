@@ -19,7 +19,8 @@ class Bridge::ObjectsTest < ActiveSupport::TestCase
   teardown { Asterism.close }
 
   test "meta, with the arities the page shows" do
-    assert_equal %w[say to_s], @objects.meta("objtest/t/screen", timeout: 1.0)["methods"].map(&:first)
+    m = @objects.meta("objtest/t/screen", timeout: 1.0)["methods"]
+    assert_equal [ { "name" => "say", "arity" => -1 }, { "name" => "to_s", "arity" => -1 } ], m
   end
 
   test "a call with arguments and keywords, time limit in seconds" do

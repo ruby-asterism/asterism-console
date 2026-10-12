@@ -8,7 +8,9 @@
 #                               "tokens" => { token key => { "clients" => [...],
 #                                                            "peers" => [...],
 #                                                            "routers" => [...] } } } }
-#   asterism: token keys alive under asterism/** (with the "asterism/" prefix)
+#   asterism: token keys alive under asterism/** (with the "asterism/" prefix):
+#             asterism/<node>/<app> (an application) and
+#             asterism/<node>/<app>/<object> (an exposed object), protocol 1
 #   ros:      token keys alive under @ros2_lv/**
 #   self_node: the bridge's own Asterism node ID (marked, not hidden)
 #   self_zids: the bridge's own Zenoh session IDs (marked)
@@ -315,8 +317,10 @@ module Bridge
         parts = key.to_s.sub(%r{\Aasterism/}, "").split("/")
         next if parts.empty? || parts.any?(&:empty?)
         case parts.size
-        when 1
-          a_node(parts[0], self_node)
+        when 2 # an application's token (protocol 1): the app is up, maybe with no object
+          nid, app = parts
+          a_node(nid, self_node)
+          node("a_app:#{nid}/#{app}", "a_app", app, { "node" => nid, "app" => app }, "a_node:#{nid}")
         when 3
           nid, app, obj = parts
           a_node(nid, self_node)

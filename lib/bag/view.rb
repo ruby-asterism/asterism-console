@@ -70,6 +70,10 @@ module Bag
 
     def channel(id) = channels.find { _1["id"] == id.to_i }
 
+    # Whether the recording's Asterism channels were made with protocol 0
+    # (before asterism 0.7.0): they are listed but not read.
+    def protocol0? = channels.any? { Channels.protocol0?(_1) }
+
     def index
       @index ||= sync { @reader.index }
     end

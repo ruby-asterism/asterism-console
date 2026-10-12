@@ -30,9 +30,9 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
       },
       "linkstate" => {},
       "tokens" => {
-        "asterism/fmruby-aaaaaa" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] },
+        "asterism/fmruby-aaaaaa/demo" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] },
         "asterism/fmruby-aaaaaa/demo/screen" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] },
-        "asterism/console" => { "routers" => [], "peers" => [], "clients" => [ CONSOLE ] }
+        "asterism/console/console" => { "routers" => [], "peers" => [], "clients" => [ CONSOLE ] }
       }
     } }
   end
@@ -45,8 +45,8 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
   end
 
   def graph(**opts)
-    Bridge::Graph.build(admin: admin(opts.delete(:extra) || []), asterism: %w[asterism/fmruby-aaaaaa
-      asterism/fmruby-aaaaaa/demo/screen asterism/console], ros: ros + (opts.delete(:ros) || []),
+    Bridge::Graph.build(admin: admin(opts.delete(:extra) || []), asterism: %w[asterism/fmruby-aaaaaa/demo
+      asterism/fmruby-aaaaaa/demo/screen asterism/console/console], ros: ros + (opts.delete(:ros) || []),
                         self_node: "console", self_zids: [ READER ], **opts).to_h
   end
 
@@ -152,7 +152,7 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
 
   test "a node gone, its line gone, as a diff" do
     a = graph
-    b = Bridge::Graph.build(admin: admin, asterism: %w[asterism/console], ros: ros, self_node: "console",
+    b = Bridge::Graph.build(admin: admin, asterism: %w[asterism/console/console], ros: ros, self_node: "console",
                             self_zids: [ READER ]).to_h
     d = Bridge::Graph.diff(a, b)
     assert_includes d["remove_edges"], "attach:a_node:fmruby-aaaaaa->router:#{ROUTER}"

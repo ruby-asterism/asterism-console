@@ -22,7 +22,7 @@
 # thread, the answers on the worker.
 module Bridge
   class Profiles
-    FIELDS = %w[kind host name icon_hash].freeze
+    FIELDS = %w[protocol kind host name icon_hash].freeze
 
     def initialize(icons: nil)
       @lock = Mutex.new

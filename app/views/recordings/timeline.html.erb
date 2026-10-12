@@ -12,6 +12,7 @@
       (<%= @recording.source == "uploaded" ? "uploaded" : "recorded" %><%= ", #{@recording.stop_reason}" if @recording.stop_reason %>)</span>
     <%= render "shared/nav" %>
   </header>
+  <% if @info["notice"] %><p class="error"><%= @info["notice"] %></p><% end %>
 
   <nav class="layers tl-bar" aria-label="Playback">
     <button type="button" data-timeline-target="playButton" data-action="timeline#togglePlay">Play</button>

@@ -8,7 +8,11 @@
 #   Asterism key     topic = the key ("demo-node/sensors/imu"), message
 #                    encoding "msgpack", schema "asterism/msgpack" with
 #                    encoding "" (none: MessagePack carries no schema),
-#                    metadata asterism_key_expr (what was subscribed)
+#                    metadata asterism_key_expr (what was subscribed) and
+#                    asterism_protocol (the wire protocol the console
+#                    spoke: "1"; a recording without it was made with
+#                    protocol 0, before asterism 0.7.0, and its Asterism
+#                    channels are not read)
 #   the network      topic "/asterism/graph", message encoding "json",
 #                    schema "asterism/graph" (a JSON Schema): snapshots and
 #                    diffs of the console's graph (Bridge::Graph)
@@ -20,6 +24,9 @@ module Bag
   module Channels
     GRAPH_TOPIC = "/asterism/graph"
     MSGPACK_SCHEMA = "asterism/msgpack"
+    # The channel metadata saying which Asterism wire protocol the console
+    # recorded with (docs/protocol.md of the asterism gem).
+    PROTOCOL_KEY = "asterism_protocol"
     GRAPH_SCHEMA = "asterism/graph"
     GRAPH_JSON_SCHEMA = JSON.generate(
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
@@ -47,5 +54,15 @@ module Bag
     def ros?(channel) = channel["message_encoding"] == "cdr"
     def graph?(channel) = channel["topic"] == GRAPH_TOPIC && channel["message_encoding"] == "json"
     def msgpack?(channel) = channel["message_encoding"] == "msgpack"
+
+    # An Asterism channel (a key, or the network structure) recorded before
+    # protocol 1: no asterism_protocol in its metadata.
+    def protocol0?(channel)
+      return false unless msgpack?(channel) || graph?(channel)
+      channel.dig("metadata", PROTOCOL_KEY).to_s.empty?
+    end
+
+    PROTOCOL0_NOTE = "recorded with Asterism protocol 0 (before asterism 0.7.0): this console reads " \
+                     "protocol 1 recordings only".freeze
   end
 end

@@ -82,7 +82,8 @@ module Bridge
     def key(expr, sample)
       write("key:#{sample.key}", sample.payload, sample_time(sample)) do
         args = -> { { topic: sample.key.to_s, message_encoding: "msgpack",
-                      schema: [ Bag::Channels::MSGPACK_SCHEMA, "", "" ], metadata: { "asterism_key_expr" => expr } } }
+                      schema: [ Bag::Channels::MSGPACK_SCHEMA, "", "" ],
+                      metadata: { "asterism_key_expr" => expr, Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s } } }
         [ args, nil, nil ]
       end
     end
@@ -101,7 +102,8 @@ module Bridge
       end
       write("graph", JSON.generate(body), nil) do
         args = -> { { topic: Bag::Channels::GRAPH_TOPIC, message_encoding: "json",
-                      schema: [ Bag::Channels::GRAPH_SCHEMA, "jsonschema", Bag::Channels::GRAPH_JSON_SCHEMA ], metadata: {} } }
+                      schema: [ Bag::Channels::GRAPH_SCHEMA, "jsonschema", Bag::Channels::GRAPH_JSON_SCHEMA ],
+                      metadata: { Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s } } }
         [ args, nil, nil ]
       end
     end

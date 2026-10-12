@@ -1523,7 +1523,8 @@ export default class extends Controller {
       box().innerHTML = `<p class="error">meta: ${esc(STATUS_TEXT[req.status] || req.status)} ${esc(req.error_class || "")} ${esc(req.error_message || req.errors || "")}</p>`
       return
     }
-    const methods = (req.result?.methods || []).map((m) => Array.isArray(m) ? m : [m, -1])
+    // Protocol 1's meta: {"methods": [{"name", "arity"}, ...]}
+    const methods = (req.result?.methods || []).map((m) => (m && typeof m === "object" && !Array.isArray(m)) ? [m.name, m.arity ?? -1] : (Array.isArray(m) ? m : [m, -1]))
     let html = `<h3>Exposed methods</h3>`
     for (const [name, arity] of methods) {
       const hint = arity >= 0 ? `${arity} argument${arity === 1 ? "" : "s"}` : "any arguments"
@@ -1558,7 +1559,7 @@ export default class extends Controller {
     let text
     if (req.errors) text = `not sent: ${req.errors.join(", ")}`
     else if (req.status === "ok") text = `=> ${JSON.stringify(req.result)}`
-    else text = `${STATUS_TEXT[req.status] || req.status}: ${req.error_class || ""} ${req.error_message || ""}`
+    else text = `${STATUS_TEXT[req.status] || req.status}: ${req.error_kind ? `[${req.error_kind}] ` : ""}${req.error_class || ""} ${req.error_message || ""}`
     const took = req.took_ms != null ? ` <span class="took">${req.took_ms} ms</span>` : ""
     row.innerHTML = `<code>${esc(name)}(${esc(argsText)})</code> <span class="status">${esc(text)}</span>${took}`
   }

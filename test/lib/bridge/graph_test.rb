@@ -29,17 +29,17 @@ class Bridge::GraphTest < ActiveSupport::TestCase
         },
         "linkstate" => { "north" => "graph {\n    0 [ label = \"#{ROUTER}\" ]\n}\n" },
         "tokens" => {
-          "asterism/fmruby-aaaaaa" => { "routers" => [ ROUTER ], "peers" => [], "clients" => [ BOARD ] },
+          "asterism/fmruby-aaaaaa/demo" => { "routers" => [ ROUTER ], "peers" => [], "clients" => [ BOARD ] },
           "asterism/fmruby-aaaaaa/demo/screen" => { "routers" => [ ROUTER ], "peers" => [], "clients" => [ BOARD ] },
-          "asterism/console" => { "routers" => [ ROUTER ], "peers" => [], "clients" => [ CONSOLE ] }
+          "asterism/console/console" => { "routers" => [ ROUTER ], "peers" => [], "clients" => [ CONSOLE ] }
         }
       }
     }
   end
 
   def asterism
-    %w[asterism/fmruby-aaaaaa asterism/fmruby-aaaaaa/demo/screen asterism/fmruby-aaaaaa/demo/info
-       asterism/console asterism/a/b asterism/x//y]
+    %w[asterism/fmruby-aaaaaa/demo asterism/fmruby-aaaaaa/demo/screen asterism/fmruby-aaaaaa/demo/info
+       asterism/console/console asterism/a/b/c/d asterism/x//y]
   end
 
   def ros
@@ -236,7 +236,7 @@ class Bridge::GraphTest < ActiveSupport::TestCase
       { "name" => "zenohd-cloud", "kind" => "router", "enabled" => true, "in_acl" => false },
       { "name" => "w2bot", "kind" => "client", "enabled" => true, "in_acl" => true, "description" => "not running" }
     ]
-    g = Bridge::Graph.build(admin: adm, asterism: asterism + %w[asterism/stranger], ros: ros, self_node: "console",
+    g = Bridge::Graph.build(admin: adm, asterism: asterism + %w[asterism/stranger/demo], ros: ros, self_node: "console",
                             self_zids: [ READER ], registry: registry, cloud: "zenohd-cloud").to_h
     c = node(g, "a_node:console")["data"]
     assert_equal "registered", c["registry"]

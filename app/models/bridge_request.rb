@@ -56,7 +56,7 @@ class BridgeRequest < ApplicationRecord
   def as_payload
     { "id" => id, "kind" => kind, "path" => path, "method" => method_name, "args" => args_value,
       "kwargs" => kwargs_value, "status" => status, "result" => result_value,
-      "error_class" => error_class, "error_message" => error_message, "took_ms" => took_ms,
+      "error_kind" => error_kind, "error_class" => error_class, "error_message" => error_message, "took_ms" => took_ms,
       "user" => user&.email_address, "at" => created_at&.iso8601 }
   end
 

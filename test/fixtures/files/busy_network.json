@@ -189,7 +189,7 @@
         "north": "graph {\n    0 [ label = \"d1c2b9d0c6a7dd04d9c967b753321283\" ]\n    1 [ label = \"0cc0bb9e525fdfce0982e52abb9bc02c\" ]\n    0 -- 1 [ label = \"100\" ]\n}\n"
       },
       "tokens": {
-        "asterism/fmruby-aaaaaa": {
+        "asterism/fmruby-aaaaaa/demo": {
           "routers": [
             "0cc0bb9e525fdfce0982e52abb9bc02c"
           ],
@@ -225,7 +225,7 @@
             "bc58ee83430c2a6dfc8187e61f14baa9"
           ]
         },
-        "asterism/fmruby-bbbbbb": {
+        "asterism/fmruby-bbbbbb/demo": {
           "routers": [
             "0cc0bb9e525fdfce0982e52abb9bc02c"
           ],
@@ -270,7 +270,7 @@
             "82b6e93458483c05738044bd9c4c3792"
           ]
         },
-        "asterism/linux": {
+        "asterism/linux/demo": {
           "routers": [
             "0cc0bb9e525fdfce0982e52abb9bc02c"
           ],
@@ -306,7 +306,7 @@
             "fa0b3e2d39e1a6d290218d84f54e8fb4"
           ]
         },
-        "asterism/cruby": {
+        "asterism/cruby/demo": {
           "routers": [
             "0cc0bb9e525fdfce0982e52abb9bc02c"
           ],
@@ -334,7 +334,7 @@
           "peers": [],
           "clients": []
         },
-        "asterism/console": {
+        "asterism/console/console": {
           "routers": [
             "0cc0bb9e525fdfce0982e52abb9bc02c"
           ],
@@ -437,7 +437,7 @@
         "north": "graph {\n    0 [ label = \"0cc0bb9e525fdfce0982e52abb9bc02c\" ]\n    1 [ label = \"d1c2b9d0c6a7dd04d9c967b753321283\" ]\n    0 -- 1 [ label = \"100\" ]\n}\n"
       },
       "tokens": {
-        "asterism/fmruby-aaaaaa": {
+        "asterism/fmruby-aaaaaa/demo": {
           "routers": [
             "d1c2b9d0c6a7dd04d9c967b753321283"
           ],
@@ -465,7 +465,7 @@
           "peers": [],
           "clients": []
         },
-        "asterism/fmruby-bbbbbb": {
+        "asterism/fmruby-bbbbbb/demo": {
           "routers": [
             "d1c2b9d0c6a7dd04d9c967b753321283"
           ],
@@ -500,7 +500,7 @@
           "peers": [],
           "clients": []
         },
-        "asterism/linux": {
+        "asterism/linux/demo": {
           "routers": [
             "d1c2b9d0c6a7dd04d9c967b753321283"
           ],
@@ -528,7 +528,7 @@
           "peers": [],
           "clients": []
         },
-        "asterism/cruby": {
+        "asterism/cruby/demo": {
           "routers": [
             "d1c2b9d0c6a7dd04d9c967b753321283"
           ],
@@ -564,7 +564,7 @@
             "df13c20c4122fa46d33f9edacfc876d9"
           ]
         },
-        "asterism/console": {
+        "asterism/console/console": {
           "routers": [
             "d1c2b9d0c6a7dd04d9c967b753321283"
           ],
@@ -577,24 +577,24 @@
     }
   },
   "asterism": [
-    "asterism/fmruby-aaaaaa",
+    "asterism/fmruby-aaaaaa/demo",
     "asterism/fmruby-aaaaaa/demo/apu",
     "asterism/fmruby-aaaaaa/demo/info",
     "asterism/fmruby-aaaaaa/demo/screen",
-    "asterism/fmruby-bbbbbb",
+    "asterism/fmruby-bbbbbb/demo",
     "asterism/fmruby-bbbbbb/demo/info",
     "asterism/fmruby-bbbbbb/demo/screen",
     "asterism/fmruby-bbbbbb/sensors/imu",
     "asterism/fmruby-bbbbbb/sensors/battery",
-    "asterism/linux",
+    "asterism/linux/demo",
     "asterism/linux/demo/apu",
     "asterism/linux/demo/info",
     "asterism/linux/demo/screen",
-    "asterism/cruby",
+    "asterism/cruby/demo",
     "asterism/cruby/demo/info",
     "asterism/cruby/demo/screen",
     "asterism/cruby/planner/route",
-    "asterism/console"
+    "asterism/console/console"
   ],
   "ros": [
     "@ros2_lv/0/8717f7600c242ae4cb079e9b28d32a54/0/0/NN/%/%/talker",

@@ -24,7 +24,9 @@ calls the methods that Asterism nodes expose.
   (docs/v2_5.md). A display name also goes before the ID in the label, and
   a ROS 2 node on the same Zenoh session as an Asterism node (asterism
   0.6.0's `Asterism.session`) is drawn inside that node's box
-  (docs/g1b.md).
+  (docs/g1b.md). Since asterism 0.7.0 (wire protocol 1, docs/x1.md) every
+  application has a token of its own, so an app that exposes nothing is
+  drawn too.
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name
@@ -117,15 +119,16 @@ node.
 
 ### The Asterism gems
 
-The console needs asterism 0.5.0 or later (node profiles, V2.5) and
-asterism-zenoh 0.4.0 or later (the versions in `Gemfile.lock`). The Gemfile takes them from the checkouts next to this
+The console needs asterism 0.7.0 or later (wire protocol 1: it talks
+only to nodes of 0.7.0 and later, docs/x1.md) and asterism-zenoh 0.4.0 or
+later (the versions in `Gemfile.lock`). The Gemfile takes them from the checkouts next to this
 repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
 asterism-zenoh's C extension there with `rake compile`, or let Bundler
 build it). To use the gems from rubygems.org instead, replace the two
 `path:` lines of the Gemfile with
 
 ```ruby
-gem "asterism", "~> 0.5.0", require: false   # asterism-zenoh comes with it
+gem "asterism", "~> 0.7.0", require: false   # asterism-zenoh comes with it
 ```
 
 and run `bundle install`. Installing asterism-zenoh compiles a C extension
@@ -176,6 +179,10 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   schema `ros2msg` with the concatenated .msg definitions, the topic's QoS
   and type hash in the channel), Asterism keys as MessagePack, the network
   structure as JSON on `/asterism/graph` (a snapshot, then the changes).
+  The Asterism channels say the wire protocol they were recorded with
+  (channel metadata `asterism_protocol`, "1"): a recording made before
+  asterism 0.7.0 (protocol 0) lists its channels, but its Asterism
+  channels are not read (the timeline says so).
   `ros2 bag info file.mcap` lists all of it; `ros2 bag play` refuses a file
   whose channels are not all CDR, so "ROS 2 topics only" downloads the
   copy it plays.

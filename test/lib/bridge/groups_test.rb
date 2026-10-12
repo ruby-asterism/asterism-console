@@ -26,7 +26,7 @@ class Bridge::GroupsTest < ActiveSupport::TestCase
         "version" => "v1.10.1", "zid" => ROUTER
       },
       "linkstate" => {},
-      "tokens" => { "asterism/cruby" => { "routers" => [], "peers" => [], "clients" => [ ASTER ] } }
+      "tokens" => { "asterism/cruby/demo" => { "routers" => [], "peers" => [], "clients" => [ ASTER ] } }
     } }
   end
 
@@ -48,7 +48,7 @@ class Bridge::GroupsTest < ActiveSupport::TestCase
   end
 
   def graph(names: [], rover_ip: "192.0.2.5")
-    Bridge::Graph.build(admin: admin(rover_ip: rover_ip), asterism: %w[asterism/cruby], ros: ros, names: names).to_h
+    Bridge::Graph.build(admin: admin(rover_ip: rover_ip), asterism: %w[asterism/cruby/demo], ros: ros, names: names).to_h
   end
 
   def node(g, id)

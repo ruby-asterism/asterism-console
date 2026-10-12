@@ -237,7 +237,9 @@ class RecordingsController < ApplicationController
   def timeline_info
     info = safe_info
     return info if info["error"]
-    info.merge("channels" => Bag::View.open(@recording.path).channels)
+    view = Bag::View.open(@recording.path)
+    info = info.merge("notice" => Bag::Channels::PROTOCOL0_NOTE) if view.protocol0?
+    info.merge("channels" => view.channels)
   rescue MCAP::Error, SystemCallError => e
     { "error" => e.message, "channels" => [] }
   end

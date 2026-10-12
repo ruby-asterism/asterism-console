@@ -6,7 +6,9 @@
 #             (Bridge::Logs); the one-line preview of V2 (Bridge::Payload);
 #             a sensor_msgs/CompressedImage in JPEG / PNG also as its
 #             picture ("image", Bridge::Payload.image)
-#   msgpack   MessagePack (an Asterism key; its log keys also as log lines)
+#   msgpack   MessagePack (an Asterism key; its log keys also as log lines;
+#             a bin as hex). Not read when the channel was recorded with
+#             protocol 0 (Bag::Channels.protocol0?): an error says so
 #   json      JSON (the network structure)
 #   anything else, or what does not decode: hex
 #
@@ -43,10 +45,15 @@ module Bag
           out["error"] = "does not decode as #{schema_name}: #{e.class}"
         end
       when "msgpack"
+        if Channels.protocol0?(channel)
+          out["error"] = Channels::PROTOCOL0_NOTE
+          out["text"] = Channels::PROTOCOL0_NOTE
+          return out
+        end
         begin
           require "msgpack"
           v = MessagePack.unpack(bytes)
-          out["value"] = safe(v)
+          out["value"] = safe(v, bin: true)
           out["text"] = JSON.generate(out["value"])[0, 300]
           out["log"] = Bridge::Logs.asterism_line(channel["topic"], bytes, at_ms) if log_key?(channel["topic"])
         rescue StandardError
@@ -88,16 +95,19 @@ module Bag
     end
 
     # JSON-safe: binary Strings as hex, non-finite Floats as text, long
-    # arrays cut (with the number left out).
-    def safe(v)
+    # arrays cut (with the number left out). bin: a MessagePack bin
+    # (msgpack-ruby gives it as an ASCII-8BIT String) is hex even when its
+    # bytes happen to be text.
+    def safe(v, bin: false)
       case v
-      when Hash then v.to_h { |k, x| [ k.to_s, safe(x) ] }
+      when Hash then v.to_h { |k, x| [ k.to_s, safe(x, bin: bin) ] }
       when Array
-        out = v.first(MAX_ARRAY).map { safe(_1) }
+        out = v.first(MAX_ARRAY).map { safe(_1, bin: bin) }
         out << "... #{v.size - MAX_ARRAY} more" if v.size > MAX_ARRAY
         out
       when Float then v.finite? ? v : v.to_s
       when String
+        return "0x#{v.unpack1('H*')[0, MAX_TEXT]}" if bin && v.encoding == Encoding::BINARY
         s = v.dup.force_encoding(Encoding::UTF_8)
         s.valid_encoding? ? s[0, MAX_TEXT] : "0x#{v.unpack1('H*')[0, MAX_TEXT]}"
       when Symbol then v.to_s

@@ -4,7 +4,8 @@
 # The tests pass a stand-in with the same two methods.
 module Bridge
   class Objects
-    # {"methods" => [[name, arity], ...]}, fetched again on every request
+    # {"methods" => [{"name" => name, "arity" => n}, ...]} (protocol 1),
+    # fetched again on every request
     # (the object may have been exposed again since). The page wants the
     # arities, so this is the proxy's meta rather than remote_methods.
     def meta(path, timeout:)

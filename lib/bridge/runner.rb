@@ -494,7 +494,7 @@ module Bridge
             end
           { status: "ok", result: JSON.generate([ value ]) }
         rescue Asterism::RemoteError => e
-          { status: "remote_error", error_class: e.remote_class, error_message: e.remote_message }
+          { status: "remote_error", error_kind: e.remote_kind, error_class: e.remote_class, error_message: e.remote_message }
         rescue Asterism::TimeoutError => e
           { status: "timeout", error_class: e.class.name, error_message: e.message }
         rescue Asterism::Error, ArgumentError, JSON::GeneratorError => e

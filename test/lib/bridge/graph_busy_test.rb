@@ -85,8 +85,8 @@ class Bridge::GraphBusyTest < ActiveSupport::TestCase
     assert_equal "a_app:fmruby-bbbbbb/sensors", node("a_object:fmruby-bbbbbb/sensors/imu")["parent"]
     assert_equal 13, g["nodes"].count { _1["kind"] == "a_object" && _1["parent"] }
     refute g["edges"].any? { %w[has_app exposes].include?(_1["kind"]) }
-    # The console has no apps of its own: a plain node, no children.
-    refute g["nodes"].any? { _1["parent"] == "a_node:console" }
+    # The console's own application (its token, protocol 1) and nothing else.
+    assert_equal [ "a_app:console/console" ], g["nodes"].select { _1["parent"] == "a_node:console" }.map { _1["id"] }
     # Sessions still carry the (compound) node, and the registry marks it.
     assert g["edges"].any? { _1["kind"] == "carries" && _1["target"] == "a_node:fmruby-aaaaaa" }
     assert_equal "unregistered", node("a_node:fmruby-aaaaaa")["data"]["registry"]

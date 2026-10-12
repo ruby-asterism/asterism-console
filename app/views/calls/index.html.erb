@@ -19,7 +19,7 @@
             <td><code class="wrap"><%= r.args %></code></td>
             <td><span class="badge"><%= r.status %></span>
               <% if r.status == "ok" %><code class="wrap"><%= r.result.to_s.truncate(160) %></code>
-              <% else %><%= [ r.error_class, r.error_message ].compact.join(": ").truncate(200) %><% end %></td>
+              <% else %><%= [ (r.error_kind && "[#{r.error_kind}]"), r.error_class, r.error_message ].compact.join(" ").truncate(200) %><% end %></td>
             <td><%= r.took_ms %></td>
           </tr>
         <% end %>

@@ -32,13 +32,15 @@ class BagTest < ActiveSupport::TestCase
     assert_equal [ "best_effort", "reliable" ], Bag::Qos.from_yaml(yaml).map { _1["reliability"] }
   end
 
-  def write_mixed(path, finish: true)
+  def write_mixed(path, finish: true, protocol: "1")
     f = File.open(path, "wb")
     w = MCAP::Writer.new(f, profile: "ros2", chunk_size: 300)
     s = w.add_schema(name: "std_msgs/msg/String", encoding: "ros2msg", data: "string data\n")
     a = w.add_channel(topic: "/chatter", message_encoding: "cdr", schema_id: s)
-    k = w.add_channel(topic: "demo/imu", message_encoding: "msgpack", schema_id: w.add_schema(name: "asterism/msgpack", encoding: "", data: ""))
-    g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+    meta = protocol ? { "asterism_protocol" => protocol } : {}
+    k = w.add_channel(topic: "demo/imu", message_encoding: "msgpack", metadata: meta,
+                      schema_id: w.add_schema(name: "asterism/msgpack", encoding: "", data: ""))
+    g = w.add_channel(topic: "/asterism/graph", message_encoding: "json", metadata: meta,
                       schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
     graph = { "nodes" => [ { "id" => "r_node:a/0", "kind" => "r_node", "label" => "/talker" } ], "edges" => [] }
     w.add_message(channel_id: g, log_time: T0, data: JSON.generate("kind" => "snapshot", "version" => 1, "graph" => graph))
@@ -56,6 +58,21 @@ class BagTest < ActiveSupport::TestCase
     w.flush
     w.finish if finish
     f.close
+  end
+
+  test "a recording made with protocol 0 (no asterism_protocol): its Asterism channels are not read" do
+    write_mixed(path = tmp("old.mcap"), protocol: nil)
+    v = Bag::View.new(path)
+    assert v.protocol0?
+    m = v.message(2, 0)
+    assert_match(/protocol 0/, m["error"])
+    assert_nil m["value"]
+    write_mixed(fresh = tmp("new.mcap"))
+    refute Bag::View.new(fresh).protocol0?
+  end
+
+  test "a bin in an Asterism channel is shown as hex" do
+    assert_equal({ "icon" => "0x6869", "name" => "hi" }, Bag::Decode.safe({ "icon" => "hi".b, "name" => "hi" }, bin: true))
   end
 
   test "the view: channels by kind, ticks, the message at a time, series, the graph at a time" do

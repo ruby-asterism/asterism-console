@@ -10,10 +10,10 @@ class Relay::AppliesControllerTest < ActionDispatch::IntegrationTest
     admin = { CLOUD => { "router" => { "metadata" => { "name" => "zenohd-cloud" }, "zid" => CLOUD, "sessions" => [
       { "peer" => "aa11", "whatami" => "client", "links" => [ { "src" => "tls/x:7448", "dst" => "tls/y:1" } ] },
       { "peer" => HOME, "whatami" => "router", "links" => [ { "src" => "tls/x:7448", "dst" => "tls/z:2" } ] }
-    ] }, "tokens" => { "asterism/cruby" => { "clients" => [ "aa11" ] } }, "linkstate" => {} },
+    ] }, "tokens" => { "asterism/cruby/demo" => { "clients" => [ "aa11" ] } }, "linkstate" => {} },
               HOME => { "router" => { "metadata" => { "name" => "zenohd-home" }, "zid" => HOME, "sessions" => [] },
                         "tokens" => {}, "linkstate" => {} } }
-    g = Bridge::Graph.build(admin: admin, asterism: %w[asterism/cruby]).to_h
+    g = Bridge::Graph.build(admin: admin, asterism: %w[asterism/cruby/demo]).to_h
     Struct.new(:graph, :version).new(g, version)
   end
 
