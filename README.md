@@ -74,6 +74,11 @@ Everything needs a signed-in user: the graph, the values, the calls and
 the WebSocket. What the page may call is limited to the combinations an
 admin allowed, and every call is logged (see [Security](#security)).
 
+On a server, next to an internet router, behind the server's nginx:
+`deploy/vps/README.md` (and its rehearsal on one PC, `deploy/local/`);
+the design (the router's ACL for players and browsers, browser passes, the
+admin pages): `docs/g0_w4.md`.
+
 ## Running it
 
 Needs Ruby 3.2+, a zenohd router (1.x; the admin space is readable with
@@ -268,19 +273,23 @@ applies it.
   name, its subject in the cloud router's ACL and, by convention, its
   Asterism node ID (a client) or its router name (`metadata/name`). The
   graph matches nodes to the registry by it.
-- **Registry** (admins edit, everyone signed in reads): kind (router /
+- **Registry** (admins only, under `/admin/relay`): kind (router /
   client), description, keys it may read and write, keys it may only read
   (one key expression per line), whether it reads the admin space (a
   client) or has its admin space read through (a router), enabled,
-  certificate lifetime, extra DNS names / IPs for a router that listens.
-  Reading a key also lets it query it, and an Asterism call is a query.
+  certificate lifetime, extra DNS names / IPs for a router that listens,
+  and "Player" (the game rules of the internet router, with the node IDs
+  it speaks for; docs/g0_w4.md). Reading a key also lets it query it, and
+  an Asterism call is a query.
 - **The signer** (`bin/signer`, plain Ruby) is the only process that holds
-  the CA's private key. Rails makes the peer's key and a certificate request,
-  the signer checks the request and signs it for the peer's name (at most
-  825 days) and logs it in its own `issued.log`; Rails records the
-  certificate in its ledger (serial, dates, fingerprint, who) and answers
-  with a tar of the key, the certificate, the CA and an example
-  configuration. **The key is in that download only**; it is not stored.
+  the CA's private key. **The peer's key is made in the admin's browser**
+  (Web Crypto, ECDSA P-256): the page sends the public key only, the signer
+  signs a certificate for the peer's name over it (at most 825 days) and
+  logs it in its own `issued.log`, Rails records the certificate in its
+  ledger (serial, dates, fingerprint, who) and the page shows the private
+  key, the certificate, the CA and an example configuration once, with Copy
+  and Save buttons. The key never reaches the console; leaving the page
+  loses it (revoke and issue again). The page needs https or localhost.
   Run the signer where Rails cannot read its directory: its own user, or a
   container with the CA in a docker volume:
 
@@ -348,9 +357,10 @@ even on a LAN. What it does, and what it assumes:
   answers and watched values reach signed-in browsers only. There is no
   setting that turns sign-in off. A session lasts 12 hours; sign-in is
   rate limited (10 tries in 3 minutes).
-- **Accounts** are made on the command line (there is no sign-up page). The
-  password is read from the terminal or `CONSOLE_PASSWORD`, never from the
-  command line:
+- **Accounts**: there is no sign-up page. An admin makes an invitation
+  (Admin > Users: a one-time link, 72 hours), or an account on the command
+  line. The password is read from the terminal or `CONSOLE_PASSWORD`, never
+  from the command line:
 
   ```
   bin/rails console:user EMAIL=me@example.org ADMIN=1    # make (or set a new password)
@@ -358,7 +368,9 @@ even on a LAN. What it does, and what it assumes:
   bin/rails console:otp_off EMAIL=me@example.org         # a user who lost the device
   ```
 
-- **Two-factor sign-in (TOTP, optional per user).** On the account page,
+- **Two-factor sign-in (TOTP; required for admins when
+  `CONSOLE_ADMIN_TOTP=required`, the default in production: an admin
+  without it reaches only the account page).** On the account page,
   "Turn on" shows a secret (and its `otpauth://` URI) to add to an
   authenticator app; a code confirms it. From then on signing in asks for a
   code after the password. Each code is taken once (the `rotp` gem).
@@ -366,25 +378,40 @@ even on a LAN. What it does, and what it assumes:
   only when a row under "Call permissions" allows the object's path
   (`<node>/<app>/<object>`) and the method; `*` matches any run of
   characters within one part. No rows (the default): nothing can be called.
-  Only admins add or remove rows. Rails checks before a request reaches
+  Only admins see, add or remove rows (`/admin/call_permissions`). Rails checks before a request reaches
   the bridge, and the bridge checks again before it calls.
 - **Machine names** (the names of folded ROS 2 machines in the graph) are
   shared by every user; only admins give, change or remove one.
 - **Call log.** Every request is kept: who, when, the path, method and
   arguments, and the answer (`ok`, `remote_error`, `timeout`, ...), refused
-  ones as `denied`. "Call log" shows the last 200.
+  ones as `denied`. "Call log" shows the last 200 (a user sees their own,
+  an admin everyone's).
+- **Admin pages** are under `/admin` (the relay, call permissions, users,
+  invitations, passes), so a proxy can limit them by address;
+  `CONSOLE_ADMIN_NETS` limits them (and recordings) in the console too.
+  Recordings are for admins only.
+- **Browser passes**: a signed-in user makes a short-lived pass for the
+  browser build's `wss://` to the internet router; the proxy asks the
+  console about it once per connection (docs/g0_w4.md).
+- **Limits**: sign-in 10 tries per address in 3 minutes and 20 per email
+  address in an hour; the watch panel sends a camera picture (over 16 KB)
+  at most twice a second per key.
+- **Page policy**: a content security policy (scripts from this origin and
+  the import map's nonce only), and in production HTTPS only with a
+  `Secure`, `HttpOnly`, `SameSite=Lax` session cookie.
 - **Listening.** The server listens on 127.0.0.1 (in every environment).
   `CONSOLE_BIND=0.0.0.0` (or `-b`) opens it to other machines; it then
   refuses to start while there are no users. Sign-in sends a password and
   the cookie in the clear over plain HTTP: beyond this machine, put a TLS
   proxy in front (and set `config.assume_ssl` / `force_ssl` in production).
 - **The CA's key** is the signer's only (above). In this repository's
-  setup the console's user can still run docker, and so could reach the
-  signer's volume; on a server, run Rails as a user without docker rights
-  and give `ASTERISM_RELAY_RESTART` a narrow helper (a sudo rule for the one
-  restart) instead.
+  development setup the console's user can still run docker, and so could
+  reach the signer's volume. On a server (`deploy/vps`) the signer is a
+  container of its own with the CA in a volume nobody else mounts, the
+  console runs without docker rights, and "Apply" asks the router to
+  restart through a request file (`bin/relay_restart_request`).
 - **What it does not do**: no roles beyond admin / user, no limit on who may
-  watch which keys, no lockout beyond the rate limit, no password reset by
+  watch which keys, no lockout beyond the rate limits, no password reset by
   mail (an admin sets a new password with `console:user`).
 
 ## How it is built

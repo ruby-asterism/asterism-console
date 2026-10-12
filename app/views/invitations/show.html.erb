@@ -1,0 +1,16 @@
+<% content_for(:title, "Join - Asterism Console") %>
+<section class="card narrow">
+  <h2>Join the console</h2>
+  <p>You were invited<%= " as an admin" if @invitation.admin? %>. Choose your email address and a password
+    (12 characters or more). The link works once, until <%= when_text(@invitation.expires_at) %>.</p>
+  <% if @error %><p class="error"><%= @error %></p><% end %>
+  <%= form_with url: invitation_path(params[:token]), method: :patch, scope: :user, class: "stack" do |f| %>
+    <label>Email address <%= f.email_field :email_address, required: true, autocomplete: "username" %></label>
+    <label>Password <%= f.password_field :password, required: true, minlength: 12, maxlength: 72, autocomplete: "new-password" %></label>
+    <label>Password again <%= f.password_field :password_confirmation, required: true, autocomplete: "new-password" %></label>
+    <%= f.submit "Join" %>
+  <% end %>
+  <% if @invitation.admin? %>
+    <p class="hint">An admin needs two-factor sign-in (TOTP): the next page asks you to turn it on.</p>
+  <% end %>
+</section>

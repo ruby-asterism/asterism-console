@@ -15,3 +15,8 @@
 /script/headless/package*.json
 /script/headless/*.png
 /script/headless/*.mcap
+# deploy/vps: local settings and secrets never go in
+/deploy/vps/.env
+/deploy/vps/secrets
+/deploy/local/certs
+/deploy/local/.env

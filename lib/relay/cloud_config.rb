@@ -10,6 +10,21 @@
 #               querying and liveliness queries; to it (egress) everything
 #   admin    -> a client may read the admin space (@/**: query and reply);
 #               a router's admin space may be read through this router
+#   player -> the game rules (G0): it may write only at the nodes it speaks
+#               for (asterism/<node>, asterism/<node>/<game>/**,
+#               asterism/<node>/@profile; its own name unless the registry
+#               lists the boards behind a home router), may subscribe to,
+#               query and watch the game's keys of every node, and may watch
+#               the liveliness of asterism/** (the asterism gem declares that
+#               one watch; what reaches it is cut to the game's keys on the
+#               way out). Nothing else: a demo app at a player's home stays
+#               at home.
+# Browsers (the wasm build, settings "browsers"): the ws/ listener is behind
+# a proxy that checks a pass from the console (W4); the router itself cannot
+# tell one browser from another, so every ws/ session gets the same rules:
+# the game rules for the nodes named wasm-<anything> (the browser build's
+# IDs). One browser can write at another browser's node; see docs/g0_w4.md.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -31,15 +46,30 @@ module Relay
       "listen" => "tls/[::]:7448",
       "ca" => "/certs/ca.pem",
       "certificate" => "/certs/%<name>s.pem",
-      "private_key" => "/certs/%<name>s.key"
+      "private_key" => "/certs/%<name>s.key",
+      # The app whose keys a player may use (G0; to be settled by G1).
+      "game" => "game",
+      # ws/ endpoint for the browser build (behind the pass-checking proxy),
+      # or nil: no browsers.
+      "browsers" => nil,
+      # Connection limits (zenoh 1.10.1, transport/unicast and link/rx).
+      "max_sessions" => 64,
+      "accept_pending" => 16,
+      "accept_timeout_ms" => 5000,
+      "max_message_size" => 4 * 1024 * 1024
     }.freeze
+    BROWSER_NODE = "wasm-$*".freeze
 
     attr_reader :peers, :settings
 
     # peers: [{ "name", "kind" ("router"/"client"), "rw" => [keys], "ro" => [keys],
-    #           "admin_space" => bool, "in_acl" => bool }]
+    #           "admin_space" => bool, "in_acl" => bool,
+    #           "player" => bool, "player_nodes" => [node IDs] }]
     def initialize(peers, settings = {})
       @settings = DEFAULTS.merge(settings.transform_keys(&:to_s))
+      unless @settings["game"].to_s.match?(/\A[A-Za-z0-9_.-]{1,64}\z/)
+        raise ArgumentError, "game: #{@settings['game'].inspect} is not one key chunk"
+      end
       @peers = peers.map { _1.transform_keys(&:to_s) }
                     .select { _1["in_acl"] && _1["name"] != @settings["name"] }
                     .sort_by { _1["name"] }
@@ -54,15 +84,25 @@ module Relay
       {
         "mode" => "router",
         "metadata" => { "name" => name },
-        "listen" => { "endpoints" => [ @settings["listen"] ] },
+        "listen" => { "endpoints" => [ *Array(@settings["listen"]), *Array(@settings["browsers"]) ] },
         "scouting" => { "multicast" => { "enabled" => false }, "gossip" => { "enabled" => false } },
-        "transport" => { "link" => { "tls" => {
-          "root_ca_certificate" => @settings["ca"],
-          "listen_certificate" => format(@settings["certificate"], name: name),
-          "listen_private_key" => format(@settings["private_key"], name: name),
-          "enable_mtls" => true,
-          "close_link_on_expiration" => true
-        } } },
+        "transport" => {
+          "unicast" => {
+            "max_sessions" => @settings["max_sessions"].to_i,
+            "accept_pending" => @settings["accept_pending"].to_i,
+            "accept_timeout" => @settings["accept_timeout_ms"].to_i
+          },
+          "link" => {
+            "rx" => { "max_message_size" => @settings["max_message_size"].to_i },
+            "tls" => {
+              "root_ca_certificate" => @settings["ca"],
+              "listen_certificate" => format(@settings["certificate"], name: name),
+              "listen_private_key" => format(@settings["private_key"], name: name),
+              "enable_mtls" => true,
+              "close_link_on_expiration" => true
+            }
+          }
+        },
         "adminspace" => { "enabled" => true, "permissions" => { "read" => true, "write" => false } },
         "access_control" => access_control
       }
@@ -90,6 +130,15 @@ module Relay
                      "permission" => "allow", "key_exprs" => ro }
           mine.push("#{id}_ro_in", "#{id}_ro_out")
         end
+        if p["player"]
+          nodes = Array(p["player_nodes"]).uniq
+          nodes = [ p["name"] ] if nodes.empty?
+          rules << { "id" => "#{id}_own", "messages" => ALL, "flows" => %w[egress ingress],
+                     "permission" => "allow", "key_exprs" => nodes.flat_map { own_keys(_1) } }
+          mine << "#{id}_own"
+          shared["game"] = true
+          mine.concat(GAME_RULES)
+        end
         if p["admin_space"]
           ids = p["kind"] == "router" ? %w[admin_relay_in admin_relay_out] : %w[admin_read]
           ids.each { shared[_1] = true }
@@ -99,6 +148,14 @@ module Relay
         subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
         policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
       end
+      if @settings["browsers"]
+        rules << { "id" => "browsers_own", "messages" => ALL, "flows" => %w[egress ingress],
+                   "permission" => "allow", "key_exprs" => own_keys(BROWSER_NODE) }
+        subjects << { "id" => "browsers", "link_protocols" => [ "ws" ] }
+        policies << { "id" => "browsers", "rules" => [ "browsers_own", *GAME_RULES ], "subjects" => [ "browsers" ] }
+        shared["game"] = true
+      end
+      rules.concat(game_rules) if shared["game"]
       rules << { "id" => "admin_read", "messages" => %w[query reply], "flows" => %w[egress ingress],
                  "permission" => "allow", "key_exprs" => [ "@/**" ] } if shared["admin_read"]
       if shared["admin_relay_in"]
@@ -109,6 +166,27 @@ module Relay
       end
       { "enabled" => true, "default_permission" => "deny", "rules" => rules, "subjects" => subjects,
         "policies" => policies }
+    end
+
+    GAME_RULES = %w[game_in game_out game_watch].freeze
+
+    # A node's own place: its liveliness token, its game app, its profile.
+    def own_keys(node)
+      [ "asterism/#{node}", "asterism/#{node}/#{@settings['game']}/**", "asterism/#{node}/@profile" ]
+    end
+
+    # Every node's game keys: subscribe, query (an Asterism call is a query),
+    # liveliness queries from the player (ingress), everything on them towards
+    # it (egress); and the one liveliness watch the asterism gem declares.
+    def game_rules
+      game = [ "asterism/*", "asterism/*/#{@settings['game']}/**", "asterism/*/@profile" ]
+      [
+        { "id" => "game_in", "messages" => %w[declare_subscriber query liveliness_query], "flows" => %w[ingress],
+          "permission" => "allow", "key_exprs" => game },
+        { "id" => "game_out", "messages" => ALL, "flows" => %w[egress], "permission" => "allow", "key_exprs" => game },
+        { "id" => "game_watch", "messages" => %w[declare_liveliness_subscriber], "flows" => %w[ingress],
+          "permission" => "allow", "key_exprs" => [ "asterism/**" ] }
+      ]
     end
 
     def body
@@ -150,7 +228,7 @@ module Relay
     end
 
     def subject_names
-      to_h.dig("access_control", "subjects").flat_map { _1["cert_common_names"] }.sort
+      to_h.dig("access_control", "subjects").flat_map { _1["cert_common_names"].to_a }.sort
     end
   end
 end

@@ -3,7 +3,7 @@
 # network that other nodes act on. The bridge does the sending
 # (Bridge::Player); the rows are the audit log (the call log page lists them).
 class PlaybacksController < ApplicationController
-  require_admin only: %i[create stop]
+  require_admin
 
   def create
     unless params[:confirm] == "inject"

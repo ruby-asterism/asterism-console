@@ -1,0 +1,46 @@
+<% content_for(:title, "Browser passes - Asterism Console") %>
+<section class="card">
+  <h2>Browser passes</h2>
+  <p>A pass lets the browser build of Family mruby connect to this console's router over <code>wss://</code>
+    for <%= (BrowserPass::TTL / 60).to_i %> minutes. It is yours: connections it opens are logged with your name.
+    A connection that is open stays open after the pass expires; a new connection needs a live pass.</p>
+  <%= button_to "Make a pass", browser_passes_path, data: { turbo: false } %>
+</section>
+
+<% if @new_pass %>
+  <section class="card">
+    <h2>New pass (shown once)</h2>
+    <dl class="facts">
+      <dt>Until</dt><dd><%= when_text(@new_pass.expires_at) %></dd>
+      <dt>Pass</dt><dd><code class="wrap"><%= @new_pass.token %></code></dd>
+      <dt>Router</dt><dd><code><%= PassLink.router || "(ASTERISM_PASS_ROUTER is not set)" %></code></dd>
+      <dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd>
+    </dl>
+    <p class="hint">Do not share the link: anyone who has it can connect as you until it expires. Revoke it below when done.</p>
+  </section>
+<% end %>
+
+<section class="card">
+  <h2>Your passes</h2>
+  <% if @passes.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>#</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Last used</th><th>Refused</th><th></th></tr></thead>
+      <tbody>
+        <% @passes.each do |p| %>
+          <tr>
+            <td><%= p.id %></td>
+            <td class="nowrap"><%= when_text(p.created_at) %></td>
+            <td class="nowrap"><%= when_text(p.expires_at) %></td>
+            <td><span class="badge <%= p.status == 'live' ? 'ok' : 'bad' %>"><%= p.status %></span></td>
+            <td><%= p.uses %></td>
+            <td class="nowrap"><%= p.last_used_at ? "#{when_text(p.last_used_at)} from #{p.last_used_ip}" : "-" %></td>
+            <td><%= p.refused %></td>
+            <td><%= button_to "Revoke", revoke_browser_pass_path(p), method: :patch, class: "small" if p.status == "live" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

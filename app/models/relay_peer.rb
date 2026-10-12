@@ -16,6 +16,7 @@ class RelayPeer < ApplicationRecord
   validates :cert_days, numericality: { only_integer: true, in: 1..Relay::CertAuthority::LEAF_DAYS }
   validate :keys_are_key_expressions
   validate :names_and_addresses
+  validate :player_nodes_are_node_ids
 
   def self.lines(text)
     text.to_s.lines.map(&:strip).reject(&:empty?)
@@ -24,6 +25,7 @@ class RelayPeer < ApplicationRecord
   def rw_list = self.class.lines(rw_keys)
   def ro_list = self.class.lines(ro_keys)
   def dns_list = self.class.lines(dns_names)
+  def player_node_list = self.class.lines(player_nodes)
   def ip_list = self.class.lines(ip_addresses)
 
   def valid_certificates(at = Time.current)
@@ -46,7 +48,8 @@ class RelayPeer < ApplicationRecord
   # What Relay::CloudConfig takes.
   def to_config
     { "name" => name, "kind" => kind, "rw" => rw_list, "ro" => ro_list,
-      "admin_space" => admin_space?, "in_acl" => in_acl? }
+      "admin_space" => admin_space?, "in_acl" => in_acl?,
+      "player" => player?, "player_nodes" => player_node_list }
   end
 
   # What the bridge needs to mark the graph.
@@ -66,6 +69,12 @@ class RelayPeer < ApplicationRecord
       bad = keys.reject { KEY.match?(_1) }
       errors.add(attr, "has lines that are not key expressions: #{bad.join(' ')}") if bad.any?
     end
+  end
+
+  # Asterism node IDs: one key chunk, no wildcard, not starting with @.
+  def player_nodes_are_node_ids
+    bad = player_node_list.reject { NAME.match?(_1) }
+    errors.add(:player_nodes, "has lines that are not node IDs: #{bad.join(' ')}") if bad.any?
   end
 
   def names_and_addresses

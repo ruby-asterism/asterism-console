@@ -27,8 +27,13 @@ Rails.application.configure do
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   config.force_ssl = true
 
-  # Skip http-to-https redirect for the default health check endpoint.
-  # config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
+  # The health check and the proxy's pass check come from the proxy over
+  # plain HTTP on the loopback (deploy/vps): no redirect for them.
+  inside = ->(request) { request.path == "/up" || request.path == "/passes/check" }
+  config.ssl_options = { redirect: { exclude: inside }, hsts: { subdomains: false } }
+
+  # The session cookie: HTTPS only, not sent on cross-site subrequests.
+  config.session_store :cookie_store, key: "_asterism_console_session", secure: true, same_site: :lax, httponly: true
 
   # Log to STDOUT with the current request id as a default log tag.
   config.log_tags = [ :request_id ]
@@ -60,12 +65,11 @@ Rails.application.configure do
   # Only use :id for inspections in production.
   config.active_record.attributes_for_inspect = [ :id ]
 
-  # Enable DNS rebinding protection and other `Host` header attacks.
-  # config.hosts = [
-  #   "example.com",     # Allow requests from example.com
-  #   /.*\.example\.com/ # Allow requests from subdomains like `www.example.com`
-  # ]
-  #
-  # Skip DNS rebinding protection for the default health check endpoint.
-  # config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
+  # The names the console answers to (CONSOLE_HOSTS, comma separated, e.g.
+  # asterism.example.org): DNS rebinding protection, and the origins Action
+  # Cable takes WebSockets from.
+  hosts = ENV.fetch("CONSOLE_HOSTS", "").split(",").map(&:strip).reject(&:empty?)
+  config.hosts.concat(hosts)
+  config.host_authorization = { exclude: inside }
+  config.action_cable.allowed_request_origins = hosts.map { "https://#{_1}" }
 end

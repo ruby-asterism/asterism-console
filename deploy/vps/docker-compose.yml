@@ -1,0 +1,103 @@
+# Asterism on a server (G0 / W4): the internet router (zenohd) and the
+# console (Rails), its bridge and its signer. The server's own nginx is the
+# way in (deploy/vps/nginx): it ends TLS for the console's name and for the
+# browsers' wss://, and forwards to the loopback ports below. Only the
+# router's mutual-TLS port is reached directly.
+#
+#   service   listens                        published on the host
+#   zenohd    tls/7448 (mTLS, own CA)        ${ROUTER_TLS_BIND}:${ROUTER_TLS_PORT} (outside: limit by ufw)
+#             ws/7449 (browsers)             127.0.0.1:${ROUTER_WS_PORT} (nginx, with a pass check)
+#   console   3000 (Puma, production)        127.0.0.1:${CONSOLE_PORT} (nginx)
+#   bridge    -- (a client of zenohd)        none
+#   signer    7450 (the CA's key)            none: on the "signer" network only, which only the console joins
+#
+# Settings and secrets: .env next to this file (env.example lists them;
+# never commit it). Steps, certificates and backups: README.md.
+name: asterism
+
+x-console: &console
+  image: asterism-console:${CONSOLE_IMAGE_TAG:-local}
+  build:
+    context: ../..
+    dockerfile: deploy/vps/Dockerfile
+  init: true
+  restart: unless-stopped
+  env_file: ${ASTERISM_ENV_FILE:-.env}
+  stop_grace_period: 5s
+
+services:
+  zenohd:
+    image: eclipse/zenoh:1.10.1
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 3s
+    entrypoint: ["/bin/sh", "/run.sh"]
+    environment:
+      RUST_LOG: ${ZENOHD_LOG:-info}
+    volumes:
+      - ./zenohd/run.sh:/run.sh:ro
+      - certs:/certs:ro
+      - generated:/generated:ro
+    ports:
+      - "${ROUTER_TLS_BIND:-0.0.0.0}:${ROUTER_TLS_PORT:-7448}:7448"
+      - "127.0.0.1:${ROUTER_WS_PORT:-7449}:7449"
+    networks: [router]
+
+  console:
+    <<: *console
+    # The databases are made (or migrated) on every start. The server refuses
+    # to start until a user exists (README, first start).
+    command: ["sh", "-c", "bin/rails db:prepare && exec bin/rails server -b 0.0.0.0 -p 3000"]
+    environment:
+      CONSOLE_BIND: 0.0.0.0
+      ASTERISM_SIGNER_URL: http://signer:7450
+      ASTERISM_RELAY_GENERATED_DIR: /generated
+      ASTERISM_RELAY_RESTART: /app/bin/relay_restart_request
+      ASTERISM_RELAY_COMPOSE_DIR: /app
+      ASTERISM_RELAY_CLOUD_NAME: ${ROUTER_NAME:-zenohd-vps}
+      ASTERISM_RELAY_BROWSERS: ws/[::]:7449
+    volumes:
+      - storage:/app/storage
+      - generated:/generated
+      - certs:/certs
+    ports:
+      - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
+    networks: [router, signer]
+    depends_on: [signer]
+
+  bridge:
+    <<: *console
+    command: ["bin/bridge"]
+    environment:
+      ASTERISM_ROUTER: tls/zenohd:7448
+      ASTERISM_TLS_CA: /certs/ca.pem
+      ASTERISM_TLS_CERT: /certs/console.pem
+      ASTERISM_TLS_KEY: /certs/console.key
+      ASTERISM_CONSOLE_NODE: console
+    volumes:
+      - storage:/app/storage
+      - certs:/certs:ro
+    networks: [router]
+    depends_on: [zenohd, console]
+
+  signer:
+    <<: *console
+    user: "1001:1001"
+    env_file: !reset []
+    environment:
+      SIGNER_TOKEN: ${ASTERISM_SIGNER_TOKEN:?set ASTERISM_SIGNER_TOKEN in .env}
+    command: ["ruby", "bin/signer", "serve", "--ca-dir", "/ca/ca", "--listen", "0.0.0.0:7450"]
+    volumes:
+      - signer_ca:/ca
+    networks: [signer]
+
+volumes:
+  storage: {}      # the console's databases and recordings
+  generated: {}    # the router's configuration, written by the console
+  certs: {}        # the CA certificate and this server's own router / bridge keys
+  signer_ca: {}    # the CA's private key: the signer's only (back it up off the server, README)
+
+networks:
+  router: {}
+  signer:
+    internal: true   # no way out, and nothing in but the console

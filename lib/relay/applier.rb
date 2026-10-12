@@ -24,7 +24,7 @@ module Relay
     ].freeze
 
     def self.config_for(peers = RelayPeer.includes(:certificates).to_a)
-      CloudConfig.new(peers.map(&:to_config), "name" => Settings.cloud_name)
+      CloudConfig.new(peers.map(&:to_config), Settings.cloud_settings)
     end
 
     def initialize(config: self.class.config_for, path: Settings.config_path, command: Settings.restart_command,

@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# Asks the cloud router to restart on its configuration (deploy/vps): writes
+# the time to <generated dir>/restart.request, which the router's container
+# (deploy/vps/zenohd/run.sh) watches. The console's apply runs it as
+# ASTERISM_RELAY_RESTART, so Rails needs no docker rights on the server.
+dir = ENV["ASTERISM_RELAY_GENERATED_DIR"] || File.expand_path("../storage/relay/generated", __dir__)
+path = File.join(dir, "restart.request")
+tmp = "#{path}.tmp#{Process.pid}"
+File.write(tmp, "#{Time.now.utc.strftime('%Y-%m-%dT%H:%M:%S.%NZ')}\n")
+File.rename(tmp, path)
+puts "asked the router to restart (#{path})"

@@ -46,6 +46,11 @@ module Bridge
     MAX_WORKERS = 4
     # At most this many values per watched key and second reach the page.
     WATCH_RATE = 10
+    # A heavy value (a camera picture: more than WATCH_HEAVY_BYTES) reaches
+    # the page at most WATCH_HEAVY_RATE times a second per key (W4: every
+    # value is sent to every signed-in browser).
+    WATCH_HEAVY_BYTES = 16 * 1024
+    WATCH_HEAVY_RATE = Float(ENV.fetch("ASTERISM_WATCH_HEAVY_RATE", 2))
     RATES_EVERY = 1.0
     # Measuring every topic stops (for RATES_PAUSE seconds, the single
     # topics go on) when the topics bring in more than this many bytes per
@@ -530,10 +535,18 @@ module Bridge
 
     def watched(id, sample)
       sec = Time.now.to_i
-      r = (@rate[id] ||= [ sec, 0, 0 ])
+      r = (@rate[id] ||= [ sec, 0, 0, 0.0 ])
       if r[0] != sec
         r[0] = sec
         r[1] = 0
+      end
+      if sample.payload.to_s.bytesize > WATCH_HEAVY_BYTES
+        now = mono
+        if WATCH_HEAVY_RATE <= 0 || now - r[3].to_f < 1.0 / WATCH_HEAVY_RATE
+          r[2] += 1
+          return
+        end
+        r[3] = now
       end
       r[1] += 1
       if r[1] > WATCH_RATE

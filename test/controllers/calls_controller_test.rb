@@ -6,7 +6,7 @@ class CallsControllerTest < ActionDispatch::IntegrationTest
                           status: "ok", result: '{"up_ms":5}', took_ms: 3.2)
     BridgeRequest.new(kind: "call", path: "cruby/demo/info", method_name: "boom", user: users(:user)).deny!
     BridgeRequest.create!(kind: "meta", path: "cruby/demo/info", user: users(:user), status: "ok")
-    sign_in_as(users(:user))
+    sign_in_as(users(:admin))
 
     get calls_path
     assert_response :success
@@ -21,5 +21,13 @@ class CallsControllerTest < ActionDispatch::IntegrationTest
     get calls_path, as: :json
     assert_equal %w[denied ok], response.parsed_body.map { _1["status"] }
     assert_equal "boom", response.parsed_body[0]["method"]
+  end
+
+  test "a user sees their own requests only" do
+    BridgeRequest.create!(kind: "call", path: "cruby/demo/info", method_name: "status", user: users(:admin), status: "ok")
+    BridgeRequest.create!(kind: "call", path: "cruby/demo/info", method_name: "echo", user: users(:user), status: "ok")
+    sign_in_as(users(:user))
+    get calls_path, as: :json
+    assert_equal [ "echo" ], response.parsed_body.map { _1["method"] }
   end
 end

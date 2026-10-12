@@ -3,7 +3,7 @@ require "test_helper"
 class RecordingsControllerTest < ActionDispatch::IntegrationTest
   setup do
     FileUtils.mkdir_p(Recording.dir)
-    sign_in_as(users(:user))
+    sign_in_as(users(:admin))
   end
 
   teardown { Recording.find_each(&:destroy) }
@@ -28,7 +28,7 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
                                                  structure: "1", max_mb: "2", max_seconds: "30" } }
     r = Recording.last
     assert_redirected_to recording_path(r)
-    assert_equal [ "pending", "drive", 2 * Recording::MB, 30, users(:user) ], [ r.status, r.name, r.max_bytes, r.max_seconds, r.user ]
+    assert_equal [ "pending", "drive", 2 * Recording::MB, 30, users(:admin) ], [ r.status, r.name, r.max_bytes, r.max_seconds, r.user ]
     assert_equal({ "topics" => [ "r_topic:0/cmd_vel" ], "keys" => [ "demo/imu", "asterism/*/*/log" ], "structure" => true }, r.selection_value)
     assert_no_difference -> { Recording.count } do
       post recordings_path, params: { recording: { name: "nothing" } }, as: :json
@@ -46,7 +46,19 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "stop and delete: the one who started it, or an admin" do
+  test "recordings are for admins only (W4)" do
+    sign_in_as(users(:user))
+    get recordings_path
+    assert_redirected_to root_path
+    get recordings_path, as: :json
+    assert_response :forbidden
+    assert_no_difference -> { Recording.count } do
+      post recordings_path, params: { recording: { structure: "1" } }, as: :json
+    end
+  end
+
+  test "stop and delete: an admin; a user cannot" do
+    sign_in_as(users(:user))
     r = Recording.new(user: users(:admin), name: "theirs", status: "recording")
     r.selection_value = { "structure" => true }
     r.save!
@@ -182,7 +194,6 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "a recorded profile (V2.5) gives the mark, and the icon when this console has it" do
-    sign_in_as(users(:user))
     r = Recording.new(user: users(:user), name: "profiles", status: "done")
     r.selection_value = { "structure" => true }
     r.save!

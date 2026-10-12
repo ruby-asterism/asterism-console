@@ -1,8 +1,8 @@
 module Relay
   # The relay registry: the routers and clients the cloud router lets in.
-  # Everyone signed in reads it; admins change it.
+  # Admins only (under /admin).
   class PeersController < ApplicationController
-    require_admin except: %i[ index show ]
+    require_admin
     before_action :set_peer, only: %i[ show edit update destroy ]
     layout "plain"
 
@@ -14,6 +14,7 @@ module Relay
     end
 
     def show
+      response.headers["Cache-Control"] = "no-store" # the issuing page holds a key while open
       @seen = Relay::Presence.seen(GraphState.current.graph)
     end
 
@@ -55,7 +56,7 @@ module Relay
 
     def peer_params
       params.expect(relay_peer: %i[ name kind description rw_keys ro_keys admin_space enabled
-                                   dns_names ip_addresses cert_days ])
+                                   dns_names ip_addresses cert_days player player_nodes ])
     end
   end
 end

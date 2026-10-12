@@ -1,0 +1,72 @@
+# The rehearsal of deploy/vps on one PC (G0 / W4): the same compose, with an
+# nginx container standing in for the server's own nginx (self-signed
+# certificate, the names *.localtest), a home router for the boards, and a
+# web network whose fixed addresses stand in for the admin's and a
+# stranger's addresses. Layered on deploy/vps/docker-compose.yml under a
+# project name of its own (nothing here meets other compose projects):
+#
+#   deploy/local/rehearse up      # (the script runs the line below)
+#   docker compose -p asterism-rehearsal -f deploy/vps/docker-compose.yml \
+#     -f deploy/local/docker-compose.rehearsal.yml --env-file deploy/local/.env up -d
+#
+# What differs from the server, and why:
+#   - nginx is a container on the compose networks, so its upstreams are
+#     service names (nginx/asterism-upstreams.conf) instead of loopback
+#     ports; the server blocks and snippets are deploy/vps/nginx's own.
+#   - no host ports but the router's mutual-TLS port on 127.0.0.1:17448
+#     (CRuby on this PC), nginx's 443 / 7443 on 127.0.0.1:18443 / 17443,
+#     and the home router's tcp/7447 on ${HOME_ROUTER_BIND}:${HOME_ROUTER_PORT} (a board
+#     on the LAN; the AtomS3R's /home/zenoh_echo.txt points there).
+#   - the CA is a new one in the rehearsal's own signer volume.
+services:
+  zenohd:
+    ports: !override
+      - "127.0.0.1:17448:7448"
+
+  console:
+    ports: !override []
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: "no"
+    depends_on: [console, zenohd]
+    volumes:
+      - ./nginx/asterism-http.conf:/etc/nginx/conf.d/10-asterism-http.conf:ro
+      - ../local/nginx/asterism-upstreams.conf:/etc/nginx/conf.d/00-asterism-upstreams.conf:ro
+      - ./nginx/asterism-console.conf:/etc/nginx/conf.d/asterism-console.conf:ro
+      - ./nginx/asterism-router.conf:/etc/nginx/conf.d/asterism-router.conf:ro
+      - ../local/nginx/studio.conf:/etc/nginx/conf.d/studio.conf:ro
+      - ./nginx/asterism-proxy.conf:/etc/nginx/snippets/asterism-proxy.conf:ro
+      - ../local/nginx/asterism-ssl-console.conf:/etc/nginx/snippets/asterism-ssl-console.conf:ro
+      - ../local/nginx/asterism-ssl-router.conf:/etc/nginx/snippets/asterism-ssl-router.conf:ro
+      - ../local/nginx/asterism-admin-allow.conf:/etc/nginx/snippets/asterism-admin-allow.conf:ro
+      - ../local/nginx/asterism-players-allow.conf:/etc/nginx/snippets/asterism-players-allow.conf:ro
+      - ../local/certs:/etc/nginx/rehearsal-certs:ro
+      - ${STUDIO_DIST:-../local/certs/no-studio}:/srv/studio:ro
+    ports:
+      - "127.0.0.1:18443:443"
+      - "127.0.0.1:17443:7443"
+    networks:
+      router: {}
+      web:
+        ipv4_address: 172.31.240.2
+        aliases: [asterism.localtest, router.localtest, studio.localtest]
+
+  zenohd-home:
+    image: eclipse/zenoh:1.10.1
+    init: true
+    restart: "no"
+    profiles: [home]
+    command: ["-c", "/home.json5"]
+    volumes:
+      - ../local/zenohd/home.json5:/home.json5:ro
+      - ../local/certs/home:/certs:ro
+    ports:
+      - "${HOME_ROUTER_BIND:-127.0.0.1}:${HOME_ROUTER_PORT:-17447}:7447"
+    networks: [router]
+
+networks:
+  web:
+    ipam:
+      config:
+        - subnet: 172.31.240.0/24

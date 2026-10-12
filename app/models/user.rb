@@ -13,6 +13,10 @@ class User < ApplicationRecord
   has_secure_password
   has_many :sessions, dependent: :destroy
   has_many :bridge_requests, dependent: :nullify
+  has_many :browser_passes, dependent: :destroy
+  has_many :revoked_passes, class_name: "BrowserPass", foreign_key: :revoked_by_id, dependent: :nullify
+  has_one :invitation, dependent: :nullify
+  has_many :created_invitations, class_name: "Invitation", foreign_key: :created_by_id, dependent: :nullify
 
   normalizes :email_address, with: ->(e) { e.strip.downcase }
 

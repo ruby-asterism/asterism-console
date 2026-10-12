@@ -1,0 +1,18 @@
+# The image of deploy/vps: the code only. Never the databases, certificates,
+# recordings, logs or local settings.
+.git
+storage/*
+!storage/.keep
+tmp/*
+!tmp/.keep
+log/*
+!log/.keep
+script/headless
+deploy/vps/.env
+deploy/vps/secrets
+deploy/local/certs
+deploy/local/.env
+config/master.key
+*.key
+*.pem
+*.sqlite3

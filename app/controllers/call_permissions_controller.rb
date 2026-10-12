@@ -1,7 +1,8 @@
-# What the page may call. Everyone signed in sees the list (and the page
-# asks which rows cover an object); only admins add or remove rows.
+# What the page may call. Admins see, add and remove rows (under /admin);
+# everyone signed in may ask which rows cover one object (covering, JSON:
+# the graph page greys out the methods nobody allowed).
 class CallPermissionsController < ApplicationController
-  require_admin only: %i[ create destroy ]
+  require_admin except: %i[ covering ]
   layout "plain"
 
   def index
@@ -13,6 +14,12 @@ class CallPermissionsController < ApplicationController
         render json: rows.map(&:as_payload)
       end
     end
+  end
+
+  def covering
+    rows = CallPermission.order(:node, :app, :object, :method_name)
+    rows = params[:path].present? ? CallPermission.for_path(params[:path], rows: rows) : []
+    render json: rows.map(&:as_payload)
   end
 
   def create

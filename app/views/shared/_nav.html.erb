@@ -3,10 +3,16 @@
     <%= link_to "Graph", root_path %>
     <%= link_to "Plots", plots_path %>
     <%= link_to "Logs", logs_path %>
-    <%= link_to "Recordings", recordings_path %>
     <%= link_to "Call log", calls_path %>
-    <%= link_to "Call permissions", call_permissions_path %>
-    <%= link_to "Relay", relay_peers_path %>
+    <%= link_to "Browser passes", browser_passes_path %>
+    <% if current_user.admin? %>
+      <%= link_to "Recordings", recordings_path %>
+      <span class="nav-admin" title="Admin pages (/admin)">
+        <%= link_to "Call permissions", call_permissions_path %>
+        <%= link_to "Relay", relay_peers_path %>
+        <%= link_to "Users", admin_users_path %>
+      </span>
+    <% end %>
     <span class="who"><%= link_to current_user.email_address, account_path %><%= " (admin)" if current_user.admin? %></span>
     <%= button_to "Sign out", session_path, method: :delete, class: "small", form_class: "inline" %>
   </nav>

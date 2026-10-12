@@ -5,7 +5,13 @@ class SessionsController < ApplicationController
   OTP_WAIT = 5.minutes
 
   allow_unauthenticated_access only: %i[ new create otp verify_otp ]
-  rate_limit to: 10, within: 3.minutes, only: %i[ create verify_otp ],
+  allow_admin_without_second_factor only: :destroy
+  # Per address, and per email address (a slow guesser spread over many
+  # addresses still meets the second); the proxy has its own limit too.
+  rate_limit to: 10, within: 3.minutes, only: %i[ create verify_otp ], store: RateLimits::STORE,
+             with: -> { redirect_to new_session_path, alert: "Try again later." }
+  rate_limit to: 20, within: 1.hour, only: :create, name: "per_email", store: RateLimits::STORE,
+             by: -> { params[:email_address].to_s.strip.downcase },
              with: -> { redirect_to new_session_path, alert: "Try again later." }
 
   layout "plain"

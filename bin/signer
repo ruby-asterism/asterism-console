@@ -15,10 +15,14 @@
 #
 #   GET  /ca     the CA certificate (PEM)
 #   POST /sign   {"name": "cruby", "csr": "<PEM>", "dns": [], "ips": [], "days": 90}
+#            or  {"name": "cruby", "spki": "<base64 DER>", ...}
 #                -> {"certificate": "<PEM>", "serial": "<hex>", "not_before", "not_after", "fingerprint"}
 #
 # The common name is "name" (the CSR's subject is ignored, only its public
-# key is taken, after its signature is checked). Every signature is
+# key is taken, after its signature is checked). "spki" is a bare public
+# key (SubjectPublicKeyInfo, ECDSA P-256), made where its private key
+# stays (the admin's browser, W4): there is nothing to check it against,
+# and none is needed, since a certificate is no use without the key. Every signature is
 # appended to DIR/issued.log (JSON lines), the signer's own record next to
 # the console's ledger.
 #
@@ -127,11 +131,28 @@ module Signer
     reply(c, "400 Bad Request", { "error" => e.message })
   end
 
+  # A bare ECDSA P-256 public key (base64 of SubjectPublicKeyInfo DER).
+  def spki_key(b64)
+    der = b64.to_s.unpack1("m")
+    raise ArgumentError, "spki is too large" if der.bytesize > 512
+    key = OpenSSL::PKey.read(der)
+    raise ArgumentError, "spki is not an ECDSA P-256 public key" unless key.is_a?(OpenSSL::PKey::EC) && key.group.curve_name == "prime256v1"
+    raise ArgumentError, "spki holds a private key" if key.private?
+    key
+  rescue OpenSSL::PKey::PKeyError
+    raise ArgumentError, "spki is not a public key"
+  end
+
   def sign(c, ca, dir, req)
     days = Integer(req.fetch("days", 90))
     raise ArgumentError, "days must be 1..#{MAX_DAYS}" unless days.between?(1, MAX_DAYS)
-    csr = OpenSSL::X509::Request.new(req.fetch("csr"))
-    cert = ca.sign(req.fetch("name"), csr, dns: req["dns"] || [], ips: req["ips"] || [], days: days)
+    pub = if req.key?("spki")
+      raise ArgumentError, "csr or spki, not both" if req.key?("csr")
+      spki_key(req["spki"])
+    else
+      OpenSSL::X509::Request.new(req.fetch("csr"))
+    end
+    cert = ca.sign(req.fetch("name"), pub, dns: req["dns"] || [], ips: req["ips"] || [], days: days)
     out = { "certificate" => cert.to_pem, "serial" => cert.serial.to_s(16).downcase,
             "not_before" => cert.not_before.utc.iso8601, "not_after" => cert.not_after.utc.iso8601,
             "fingerprint" => Relay::CertAuthority.fingerprint(cert) }

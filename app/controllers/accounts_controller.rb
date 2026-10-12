@@ -1,5 +1,6 @@
 # The signed-in user's own account: the password and the second factor.
 class AccountsController < ApplicationController
+  allow_admin_without_second_factor only: %i[ show start_otp confirm_otp ]
   layout "plain"
 
   def show
@@ -33,6 +34,9 @@ class AccountsController < ApplicationController
   end
 
   def disable_otp
+    if current_user.admin? && ConsoleAdmin.totp_required?
+      return redirect_to account_path, alert: "An admin needs two-factor sign-in; it cannot be turned off."
+    end
     unless current_user.authenticate(params[:current_password].to_s)
       return redirect_to account_path, alert: "The current password did not match."
     end

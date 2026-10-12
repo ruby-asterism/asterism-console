@@ -3,7 +3,7 @@ module Relay
   # cuts) and the configuration first, then write it and restart the cloud
   # router. The restart runs on a thread; the page follows it.
   class AppliesController < ApplicationController
-    require_admin only: %i[ create ]
+    require_admin
     layout "plain"
 
     def index

@@ -1,0 +1,59 @@
+<% content_for(:title, "Users - Asterism Console") %>
+<section class="card">
+  <h2>Users</h2>
+  <table class="list">
+    <thead><tr><th>Email address</th><th>Role</th><th>Two-factor</th><th>Since</th><th></th></tr></thead>
+    <tbody>
+      <% @users.each do |u| %>
+        <tr>
+          <td><%= u.email_address %></td>
+          <td><%= u.admin? ? "admin" : "user" %></td>
+          <td><%= u.otp_enabled? ? "on" : "off" %></td>
+          <td class="nowrap"><%= when_text(u.created_at) %></td>
+          <td class="row">
+            <% unless u == current_user %>
+              <%= button_to(u.admin? ? "Make a user" : "Make an admin", admin_user_path(u, admin: !u.admin?), method: :patch, class: "small",
+                            form: { data: { turbo_confirm: "Change the role of #{u.email_address}?" } }) %>
+              <%= button_to "Turn two-factor off", otp_admin_user_path(u), method: :delete, class: "small" if u.otp_enabled? %>
+              <%= button_to "Remove", admin_user_path(u), method: :delete, class: "small",
+                            form: { data: { turbo_confirm: "Remove #{u.email_address}?" } } %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+  <p class="hint">Remove signs the user out everywhere. <%= link_to "Every browser pass", admin_browser_passes_path %>.</p>
+</section>
+
+<section class="card">
+  <h2>Invite</h2>
+  <%= form_with url: admin_invitations_path, data: { turbo: false }, class: "row" do |f| %>
+    <%= f.text_field :note, placeholder: "for whom (a note)", "aria-label": "Note" %>
+    <label class="check"><%= f.check_box :admin, {}, "1", "0" %> as an admin</label>
+    <%= f.submit "Make an invitation link" %>
+  <% end %>
+  <% if @new_link %>
+    <p>The link (shown once; it works once, until <%= when_text(@new_invitation.expires_at) %>):</p>
+    <p><code class="wrap"><%= @new_link %></code></p>
+  <% end %>
+  <% if @invitations.any? %>
+    <table class="list">
+      <thead><tr><th>#</th><th>Note</th><th>Role</th><th>Made by</th><th>Until</th><th>Status</th><th>User</th><th></th></tr></thead>
+      <tbody>
+        <% @invitations.each do |i| %>
+          <tr>
+            <td><%= i.id %></td>
+            <td><%= i.note %></td>
+            <td><%= i.admin? ? "admin" : "user" %></td>
+            <td><%= i.created_by&.email_address %></td>
+            <td class="nowrap"><%= when_text(i.expires_at) %></td>
+            <td><span class="badge <%= i.status == 'open' ? 'ok' : 'bad' %>"><%= i.status %></span></td>
+            <td><%= i.user&.email_address %></td>
+            <td><%= button_to "Revoke", revoke_admin_invitation_path(i), method: :patch, class: "small" if i.status == "open" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

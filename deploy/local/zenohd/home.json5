@@ -1,0 +1,18 @@
+// The rehearsal's home router (W1's shape): boards on the LAN connect to it
+// over plain TCP; it connects out to the internet router over mutual TLS
+// with its own certificate (zenohd-home, a player router).
+{
+  mode: "router",
+  metadata: { name: "zenohd-home" },
+  listen: { endpoints: ["tcp/[::]:7447"] },
+  connect: { endpoints: ["tls/zenohd:7448"] },
+  scouting: { multicast: { enabled: false } },
+  transport: { link: { tls: {
+    root_ca_certificate: "/certs/ca.pem",
+    connect_certificate: "/certs/zenohd-home.pem",
+    connect_private_key: "/certs/zenohd-home.key",
+    enable_mtls: true,
+    close_link_on_expiration: true,
+  } } },
+  adminspace: { enabled: true, permissions: { read: true, write: false } },
+}

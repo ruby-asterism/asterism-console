@@ -7,10 +7,12 @@ class CallsController < ApplicationController
   layout "plain"
 
   def index
+    # A user sees their own requests; an admin sees everyone's.
     scope = BridgeRequest.includes(:user).order(id: :desc).limit(LIMIT)
+    scope = scope.where(user: current_user) unless current_user.admin?
     scope = scope.where(kind: "call") unless params[:all].present?
     @rows = scope.to_a
-    @playbacks = Playback.includes(:user).order(id: :desc).limit(LIMIT).to_a
+    @playbacks = current_user.admin? ? Playback.includes(:user).order(id: :desc).limit(LIMIT).to_a : []
     respond_to do |f|
       f.html
       f.json { render json: @rows.map(&:as_payload) }

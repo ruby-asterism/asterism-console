@@ -35,12 +35,20 @@ module Relay
       OpenSSL::X509::Certificate.new(res.body).to_pem
     end
 
-    # Signs csr (OpenSSL::X509::Request) for name. Returns the parsed answer
-    # with "certificate" (PEM), "serial", "not_before", "not_after",
-    # "fingerprint".
-    def sign(name:, csr:, dns: [], ips: [], days: 90)
+    # Signs, for name, either csr (OpenSSL::X509::Request, a key made on
+    # this side) or spki (an OpenSSL::PKey public key, e.g. made in a
+    # browser: only the public key travels). Returns the parsed answer with
+    # "certificate" (PEM), "serial", "not_before", "not_after", "fingerprint".
+    def sign(name:, csr: nil, spki: nil, dns: [], ips: [], days: 90)
+      raise ArgumentError, "csr: or spki:" unless csr.nil? ^ spki.nil?
       req = Net::HTTP::Post.new("/sign", "Content-Type" => "application/json")
-      req.body = JSON.generate("name" => name, "csr" => csr.to_pem, "dns" => dns, "ips" => ips, "days" => days)
+      body = { "name" => name, "dns" => dns, "ips" => ips, "days" => days }
+      if csr
+        body["csr"] = csr.to_pem
+      else
+        body["spki"] = [ spki.public_to_der ].pack("m0")
+      end
+      req.body = JSON.generate(body)
       JSON.parse(request(req).body)
     end
 

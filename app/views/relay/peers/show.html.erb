@@ -6,6 +6,7 @@
     <dt>Description</dt><dd><%= @peer.description.presence || "-" %></dd>
     <dt>Read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
     <dt>Read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
+    <dt>Player</dt><dd><%= @peer.player? ? "yes, for #{(@peer.player_node_list.presence || [ @peer.name ]).join(', ')}" : "no" %></dd>
     <dt>Admin space</dt><dd><%= @peer.admin_space? ? "yes" : "no" %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
@@ -19,12 +20,35 @@
 <section class="card">
   <h2>Certificates</h2>
   <% if current_user.admin? %>
-    <%= form_with url: relay_peer_certificates_path(@peer), data: { turbo: false }, class: "row" do |f| %>
-      <%= f.submit "Issue a certificate (downloads the key once)", disabled: !@peer.enabled? %>
-    <% end %>
-    <p class="hint">The signer signs it; the key is made here, put in the download and not kept.
-      Issuing again does not stop an older certificate: the router's ACL matches the name, and zenohd 1.10.1
-      has no revocation list. To shut a peer out, disable it and apply; it stays out until its certificates expire.</p>
+    <div data-controller="issue" data-issue-url-value="<%= relay_peer_certificates_path(@peer) %>"
+         data-issue-name-value="<%= @peer.name %>">
+      <p data-issue-target="insecure" class="error" hidden>Issuing needs a secure page (https, or localhost):
+        the key is made by this browser's Web Crypto, which other pages do not have.</p>
+      <button type="button" data-issue-target="button" data-action="issue#issue" <%= "disabled" unless @peer.enabled? %>>
+        Issue a certificate (the key is made in this browser)</button>
+      <p class="hint">This browser makes the key pair (ECDSA P-256) and sends the public key only; the signer signs a
+        certificate for it. The private key is shown once, here, with the certificate: copy or save it before leaving
+        the page. It is not sent anywhere and cannot be shown again (if it is lost, revoke and issue again).
+        Issuing again does not stop an older certificate: the router's ACL matches the name, and zenohd 1.10.1
+        has no revocation list. To shut a peer out, disable it and apply; it stays out until its certificates expire.</p>
+      <div data-issue-target="result" hidden>
+        <p class="flash alert" role="alert">Copy or save the private key now. Leaving this page loses it for good.</p>
+        <dl class="facts" data-issue-target="facts"></dl>
+        <% [ [ "key", "#{@peer.name}.key", "Private key (PKCS#8)" ], [ "cert", "#{@peer.name}.pem", "Certificate" ],
+             [ "ca", "ca.pem", "CA" ], [ "config", "zenoh.json5", "Example configuration" ] ].each do |id, file, label| %>
+          <section class="pem">
+            <h3><%= label %> <span class="hint"><%= file %></span></h3>
+            <textarea readonly rows="6" class="wide mono" data-issue-target="<%= id %>" spellcheck="false" autocomplete="off"></textarea>
+            <p class="row">
+              <button type="button" class="small" data-action="issue#copy" data-issue-which-param="<%= id %>">Copy</button>
+              <button type="button" class="small" data-action="issue#save" data-issue-which-param="<%= id %>" data-issue-file-param="<%= file %>">Save to file</button>
+            </p>
+          </section>
+        <% end %>
+        <p class="hint" data-issue-target="command"></p>
+      </div>
+      <p class="error" data-issue-target="error" hidden></p>
+    </div>
   <% end %>
   <% if @peer.certificates.empty? %>
     <p class="hint">None in the ledger.</p>

@@ -6,17 +6,23 @@
   <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
   <label class="check"><%= f.check_box :enabled %> Enabled</label>
   <label class="check"><%= f.check_box :admin_space %> Admin space (a client reads it; a router's is read through)</label>
+  <label class="check"><%= f.check_box :player %> Player (the game rules: writes only at its own nodes)</label>
   <label class="wide">Description <%= f.text_field :description %></label>
   <label>Keys it may read and write (one per line)
     <%= f.text_area :rw_keys, rows: 5, placeholder: "asterism/**" %></label>
   <label>Keys it may only read (one per line)
     <%= f.text_area :ro_keys, rows: 5, placeholder: "demo/**" %></label>
+  <label>Nodes it speaks for, as a player (one node ID per line; empty: its own name. A home router lists the boards behind it)
+    <%= f.text_area :player_nodes, rows: 3, placeholder: "fmruby-aaaaaa" %></label>
   <label>DNS names in its certificate (a router that listens; one per line)
     <%= f.text_area :dns_names, rows: 3 %></label>
   <label>IP addresses in its certificate (one per line)
     <%= f.text_area :ip_addresses, rows: 3 %></label>
   <p class="hint wide">Reading a key also lets it query that key, and an Asterism method call is a query:
     read-only on <code>asterism/**</code> still lets it call methods. A wider subscription than the keys
-    allowed is refused whole. Keys starting with <code>@</code> are not in <code>**</code>.</p>
+    allowed is refused whole. Keys starting with <code>@</code> are not in <code>**</code>.
+    A player needs no keys here: it may write at <code>asterism/&lt;node&gt;</code>,
+    <code>asterism/&lt;node&gt;/<%= Relay::Settings.cloud_settings["game"] || "game" %>/**</code> and
+    <code>asterism/&lt;node&gt;/@profile</code> of its nodes, and read the game's keys of every node.</p>
   <%= f.submit peer.persisted? ? "Save" : "Register" %>
 <% end %>

@@ -41,22 +41,52 @@ Rails.application.routes.draw do
   resources :playbacks, only: %i[create show] do
     post :stop, on: :member
   end
-  resources :call_permissions, only: %i[index create destroy]
   # Names of machines of ROS 2 nodes (V2.3), from the graph's details.
   resources :machine_names, only: %i[index create update destroy]
   resources :calls, only: :index
   # The icons of the nodes' profiles (V2.5).
   get "icons/:hash", to: "icons#show", as: :icon, format: false
 
-  # The relay: registry, certificates (through the signer), apply.
-  namespace :relay do
-    resources :peers do
-      resources :certificates, only: :create do
+  # The call permissions that cover one object (the graph page asks; JSON).
+  get "permissions", to: "call_permissions#covering", as: :covering_permissions
+
+  # Passes for the browser build's wss:// (W4): a signed-in user makes one;
+  # the proxy in front of the router asks check (no session: the proxy's
+  # subrequest) whether a pass may open a connection.
+  resources :browser_passes, path: "passes", only: %i[index create] do
+    patch :revoke, on: :member
+    get :check, on: :collection
+  end
+
+  # Joining by invitation (there is no sign-up page).
+  resources :invitations, only: %i[show update], param: :token
+
+  # Everything an admin manages lives under /admin, one prefix that the
+  # proxy can limit by address (deploy/vps/nginx) on top of the admin role
+  # (and CONSOLE_ADMIN_NETS here): the relay registry, certificates and
+  # apply, the call permissions, the users and invitations, every pass.
+  scope "admin" do
+    resources :call_permissions, only: %i[index create destroy]
+    # The relay: registry, certificates (through the signer, or imported), apply.
+    namespace :relay do
+      resources :peers do
+        resources :certificates, only: :create do
+          patch :revoke, on: :member
+        end
+      end
+      resources :applies, only: %i[index new create show]
+      get "/", to: redirect("/admin/relay/peers")
+    end
+    namespace :admin, path: "" do
+      resources :users, only: %i[index update destroy] do
+        delete :otp, on: :member, action: :otp_off
+      end
+      resources :invitations, only: %i[index create] do
         patch :revoke, on: :member
       end
+      resources :browser_passes, path: "passes", only: :index
     end
-    resources :applies, only: %i[index new create show]
-    get "/", to: redirect("/relay/peers")
+    get "/", to: redirect("/admin/relay/peers"), as: :admin_root
   end
 
   get "up" => "rails/health#show", as: :rails_health_check

@@ -3,7 +3,8 @@ require "test_helper"
 # Without signing in, every route answers with the sign-in page (HTML) or
 # 401 (anything else); nothing about the network is in the answer.
 class AuthenticationTest < ActionDispatch::IntegrationTest
-  OPEN = %w[sessions#new sessions#create sessions#otp sessions#verify_otp rails/health#show].freeze
+  OPEN = %w[sessions#new sessions#create sessions#otp sessions#verify_otp rails/health#show
+            invitations#show invitations#update browser_passes#check].freeze
 
   def app_routes
     Rails.application.routes.routes.filter_map do |r|

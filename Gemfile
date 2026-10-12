@@ -62,5 +62,11 @@ end
 #   gem "asterism", "~> 0.5.0", require: false
 # (asterism-zenoh comes with it) and run `bundle install` (README, "The
 # Asterism gems").
-gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
-gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
+# ASTERISM_GEMS=rubygems takes them from rubygems.org (the container of
+# deploy/vps does; Bundler then resolves the lock again inside the image).
+if ENV["ASTERISM_GEMS"] == "rubygems"
+  gem "asterism", "~> 0.5.0", require: false
+else
+  gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
+  gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
+end

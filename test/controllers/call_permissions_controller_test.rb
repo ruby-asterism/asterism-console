@@ -23,12 +23,11 @@ class CallPermissionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
   end
 
-  test "a user sees the rows but cannot change them" do
+  test "a user cannot see or change the rows (admin pages)" do
     row = CallPermission.create!(node: "*", app: "*", object: "*", method_name: "status")
     sign_in_as(users(:user))
     get call_permissions_path
-    assert_response :success
-    assert_select "td code", "status"
+    assert_redirected_to root_path
     assert_no_difference("CallPermission.count") { post call_permissions_path, params: ROW }
     assert_redirected_to root_path
     assert_no_difference("CallPermission.count") { delete call_permission_path(row) }
@@ -40,9 +39,9 @@ class CallPermissionsControllerTest < ActionDispatch::IntegrationTest
     CallPermission.create!(node: "fmruby-*", app: "demo", object: "screen", method_name: "say")
     CallPermission.create!(node: "cruby", app: "demo", object: "*", method_name: "status")
     sign_in_as(users(:user))
-    get call_permissions_path(path: "fmruby-aaaaaa/demo/screen"), as: :json
+    get covering_permissions_path(path: "fmruby-aaaaaa/demo/screen"), as: :json
     assert_equal [ "say" ], response.parsed_body.map { _1["method"] }
-    get call_permissions_path(path: "linux/demo/screen"), as: :json
+    get covering_permissions_path(path: "linux/demo/screen"), as: :json
     assert_equal [], response.parsed_body
   end
 end

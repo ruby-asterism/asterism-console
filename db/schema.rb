@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_120000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -32,6 +32,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
     t.index ["user_id"], name: "index_bridge_requests_on_user_id"
   end
 
+  create_table "browser_passes", force: :cascade do |t|
+    t.string "token_digest", null: false
+    t.integer "user_id", null: false
+    t.string "created_ip"
+    t.datetime "expires_at", null: false
+    t.datetime "revoked_at"
+    t.integer "revoked_by_id"
+    t.datetime "last_used_at"
+    t.string "last_used_ip"
+    t.integer "uses", default: 0, null: false
+    t.integer "refused", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["expires_at"], name: "index_browser_passes_on_expires_at"
+    t.index ["revoked_by_id"], name: "index_browser_passes_on_revoked_by_id"
+    t.index ["token_digest"], name: "index_browser_passes_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_browser_passes_on_user_id"
+  end
+
   create_table "call_permissions", force: :cascade do |t|
     t.string "node", null: false
     t.string "app", null: false
@@ -51,6 +70,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
     t.text "bridge_info"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "invitations", force: :cascade do |t|
+    t.string "token_digest", null: false
+    t.string "note"
+    t.boolean "admin", default: false, null: false
+    t.integer "created_by_id"
+    t.integer "user_id"
+    t.datetime "expires_at", null: false
+    t.datetime "used_at"
+    t.datetime "revoked_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_invitations_on_created_by_id"
+    t.index ["token_digest"], name: "index_invitations_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_invitations_on_user_id"
   end
 
   create_table "machine_names", force: :cascade do |t|
@@ -172,6 +207,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
     t.integer "cert_days", default: 90, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "player", default: false, null: false
+    t.text "player_nodes"
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 
@@ -220,7 +257,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
   end
 
   add_foreign_key "bridge_requests", "users"
+  add_foreign_key "browser_passes", "users"
+  add_foreign_key "browser_passes", "users", column: "revoked_by_id"
   add_foreign_key "call_permissions", "users", column: "created_by_id"
+  add_foreign_key "invitations", "users"
+  add_foreign_key "invitations", "users", column: "created_by_id"
   add_foreign_key "machine_names", "users", column: "created_by_id", on_delete: :nullify
   add_foreign_key "playbacks", "recordings", on_delete: :nullify
   add_foreign_key "playbacks", "users"

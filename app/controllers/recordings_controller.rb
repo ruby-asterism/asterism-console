@@ -2,10 +2,12 @@
 # (the bridge writes it), list them, upload and download MCAP files, and
 # the timeline of one (the JSON endpoints read the file with Bag::View).
 #
-# Any signed-in user may record, upload, look and download; stopping and
+# Admins only (W4: recordings hold everything that crossed the network,
+# so on a console on the web they are not for every user). Stopping and
 # deleting are for the one who started it, or an admin. Playing back onto
 # the network is PlaybacksController (admins only).
 class RecordingsController < ApplicationController
+  require_admin
   before_action :set_recording, except: %i[index create upload]
   before_action :require_owner, only: %i[stop destroy]
   before_action :require_file, only: %i[download ticks message fields series graph structure]

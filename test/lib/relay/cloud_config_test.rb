@@ -72,4 +72,53 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal({ "enabled" => true, "default_permission" => "deny", "rules" => [], "subjects" => [], "policies" => [] },
                  h["access_control"])
   end
+
+  test "the connection limits (zenoh 1.10.1 names)" do
+    h = Relay::CloudConfig.new([], "max_sessions" => 8).to_h
+    assert_equal({ "max_sessions" => 8, "accept_pending" => 16, "accept_timeout" => 5000 }, h["transport"]["unicast"])
+    assert_equal 4 * 1024 * 1024, h["transport"]["link"]["rx"]["max_message_size"]
+  end
+
+  test "a player writes only at its own nodes and reads the game of every node" do
+    peers = [
+      { "name" => "alice", "kind" => "client", "player" => true, "in_acl" => true },
+      { "name" => "home-bob", "kind" => "router", "player" => true, "player_nodes" => %w[fmruby-aaaaaa fmruby-bbbbbb],
+        "in_acl" => true }
+    ]
+    h = Relay::CloudConfig.new(peers).to_h
+    assert_equal %w[asterism/alice asterism/alice/game/** asterism/alice/@profile], rule(h, "alice_own")["key_exprs"]
+    assert_equal Relay::CloudConfig::ALL, rule(h, "alice_own")["messages"]
+    assert_equal %w[asterism/fmruby-aaaaaa asterism/fmruby-aaaaaa/game/** asterism/fmruby-aaaaaa/@profile
+                    asterism/fmruby-bbbbbb asterism/fmruby-bbbbbb/game/** asterism/fmruby-bbbbbb/@profile],
+                 rule(h, "home_bob_own")["key_exprs"]
+    game_in = rule(h, "game_in")
+    assert_equal %w[ingress], game_in["flows"]
+    refute_includes game_in["messages"], "put"
+    assert_equal %w[asterism/* asterism/*/game/** asterism/*/@profile], game_in["key_exprs"]
+    assert_equal %w[egress], rule(h, "game_out")["flows"]
+    assert_equal [ "asterism/**" ], rule(h, "game_watch")["key_exprs"]
+    assert_equal %w[declare_liveliness_subscriber], rule(h, "game_watch")["messages"]
+    pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
+    assert_equal %w[alice_own game_in game_out game_watch], pol["alice"]
+    assert_equal 1, h["access_control"]["rules"].count { _1["id"] == "game_in" }, "shared rules once"
+    refute h["access_control"]["rules"].any? { _1["key_exprs"].any? { |k| k.include?("demo") } }
+  end
+
+  test "another game app" do
+    h = Relay::CloudConfig.new([ { "name" => "alice", "player" => true, "in_acl" => true } ], "game" => "othello").to_h
+    assert_includes rule(h, "alice_own")["key_exprs"], "asterism/alice/othello/**"
+    assert_raises(ArgumentError) { Relay::CloudConfig.new([], "game" => "a/b") }
+  end
+
+  test "browsers: a ws/ listener, one subject by link protocol, wasm-* nodes only" do
+    c = Relay::CloudConfig.new([], "listen" => [ "tls/[::]:7448" ], "browsers" => "ws/[::]:7449")
+    h = c.to_h
+    assert_equal [ "tls/[::]:7448", "ws/[::]:7449" ], h["listen"]["endpoints"]
+    assert_includes h["access_control"]["subjects"], { "id" => "browsers", "link_protocols" => [ "ws" ] }
+    assert_equal %w[asterism/wasm-$* asterism/wasm-$*/game/** asterism/wasm-$*/@profile], rule(h, "browsers_own")["key_exprs"]
+    pol = h["access_control"]["policies"].find { _1["id"] == "browsers" }
+    assert_equal %w[browsers_own game_in game_out game_watch], pol["rules"]
+    assert_equal [], c.subject_names, "no certificate names for the browsers"
+    refute Relay::CloudConfig.new([]).to_h["access_control"]["subjects"].any?, "none without the setting"
+  end
 end

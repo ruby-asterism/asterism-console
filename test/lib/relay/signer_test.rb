@@ -72,23 +72,55 @@ class Relay::SignerTest < ActiveSupport::TestCase
     assert_raises(Relay::SignerClient::Error) { Relay::SignerClient.new("http://127.0.0.1:1", TOKEN).ca_pem }
   end
 
-  test "issuing for a peer: the ledger has the certificate, the download has the key, the database does not" do
+  test "the signer signs a bare public key (SPKI) and refuses a private key or another curve" do
+    key = OpenSSL::PKey::EC.generate("prime256v1")
+    pub = OpenSSL::PKey.read(key.public_to_der)
+    ans = @client.sign(name: "w4bot", spki: pub, dns: %w[w4bot.local], days: 3)
+    cert = OpenSSL::X509::Certificate.new(ans["certificate"])
+    assert_equal "/CN=w4bot", cert.subject.to_s
+    assert cert.check_private_key(key), "a certificate for the key the public half came from"
+    ext = cert.extensions.to_h { [ _1.oid, _1.value ] }
+    assert_equal "TLS Web Server Authentication, TLS Web Client Authentication", ext["extendedKeyUsage"]
+    assert_equal "DNS:w4bot, DNS:w4bot.local", ext["subjectAltName"]
+    req = ->(body) do
+      r = Net::HTTP::Post.new("/sign", "Content-Type" => "application/json", "Authorization" => "Bearer #{TOKEN}")
+      r.body = JSON.generate(body)
+      Net::HTTP.start("127.0.0.1", @port) { _1.request(r) }
+    end
+    priv = req.({ "name" => "x", "spki" => [ key.private_to_der ].pack("m0") })
+    assert_equal "400", priv.code
+    rsa = OpenSSL::PKey::RSA.new(2048)
+    assert_equal "400", req.({ "name" => "x", "spki" => [ rsa.public_to_der ].pack("m0") }).code
+    p384 = OpenSSL::PKey::EC.generate("secp384r1")
+    assert_equal "400", req.({ "name" => "x", "spki" => [ p384.public_to_der ].pack("m0") }).code
+  end
+
+  test "issuing for a peer from a browser's public key: the ledger has the certificate, no private key anywhere" do
     peer = RelayPeer.create!(name: "w2bot", kind: "client", rw_keys: "asterism/**", cert_days: 30)
-    record, tar, file = Relay::Issuer.new(signer: @client).issue(peer, by: users(:admin))
-    assert_match(/\Aw2bot-[0-9a-f]{8}\.tar\z/, file)
-    files = {}
-    Gem::Package::TarReader.new(StringIO.new(tar)).each { files[_1.full_name] = [ _1.read, _1.header.mode ] if _1.file? }
-    assert_equal %w[w2bot/README.txt w2bot/ca.pem w2bot/w2bot.key w2bot/w2bot.pem w2bot/zenoh.json5], files.keys.sort
-    assert_equal 0o600, files["w2bot/w2bot.key"][1]
-    key = OpenSSL::PKey.read(files["w2bot/w2bot.key"][0])
-    cert = OpenSSL::X509::Certificate.new(files["w2bot/w2bot.pem"][0])
+    key = OpenSSL::PKey::EC.generate("prime256v1")
+    record, cert_pem, ca_pem = Relay::Issuer.new(signer: @client).issue(peer, [ key.public_to_der ].pack("m0"),
+                                                                        by: users(:admin))
+    cert = OpenSSL::X509::Certificate.new(cert_pem)
     assert cert.check_private_key(key)
+    store = OpenSSL::X509::Store.new
+    store.add_cert(OpenSSL::X509::Certificate.new(ca_pem))
+    assert store.verify(cert)
     assert_equal [ record.serial, "signer", users(:admin) ], [ cert.serial.to_s(16).downcase, record.source, record.issued_by ]
     assert peer.reload.in_acl?
     stored = RelayCertificate.all.map(&:attributes).to_s + RelayPeer.all.map(&:attributes).to_s
     refute_includes stored, "PRIVATE KEY"
-    refute_includes stored, files["w2bot/w2bot.key"][0].lines[1].strip
+    assert_raises(Relay::Issuer::Error) { Relay::Issuer.new(signer: @client).issue(peer, [ key.private_to_der ].pack("m0")) }
+    assert_raises(Relay::Issuer::Error) { Relay::Issuer.new(signer: @client).issue(peer, "garbage") }
     peer.update!(enabled: false)
-    assert_raises(Relay::Issuer::Error) { Relay::Issuer.new(signer: @client).issue(peer) }
+    assert_raises(Relay::Issuer::Error) { Relay::Issuer.new(signer: @client).issue(peer, [ key.public_to_der ].pack("m0")) }
+  end
+
+  test "issue_local: this server's own key, made here" do
+    peer = RelayPeer.create!(name: "zenohd-vps", kind: "router", dns_names: "router.example.org", cert_days: 30)
+    record, key, cert_pem, = Relay::Issuer.new(signer: @client).issue_local(peer)
+    cert = OpenSSL::X509::Certificate.new(cert_pem)
+    assert cert.check_private_key(key)
+    assert_includes cert.extensions.find { _1.oid == "subjectAltName" }.value, "DNS:router.example.org"
+    assert_equal record.serial, cert.serial.to_s(16).downcase
   end
 end

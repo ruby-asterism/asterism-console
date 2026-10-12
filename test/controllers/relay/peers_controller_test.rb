@@ -35,20 +35,19 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a user reads the registry but cannot change it" do
+  test "a user can neither read nor change the registry (admin pages)" do
     peer = RelayPeer.create!(name: "cruby", kind: "client", rw_keys: "asterism/**")
     sign_in_as(users(:user))
     get relay_peers_path
-    assert_response :success
+    assert_redirected_to root_path
     get relay_peer_path(peer)
-    assert_response :success
-    assert_select "input[type=submit][value^='Issue']", 0
+    assert_redirected_to root_path
     assert_no_difference("RelayPeer.count") { post relay_peers_path, params: PARAMS }
     assert_redirected_to root_path
     patch relay_peer_path(peer), params: { relay_peer: { enabled: "0" } }
     assert peer.reload.enabled?
-    post relay_peer_certificates_path(peer)
-    assert_redirected_to root_path
+    post relay_peer_certificates_path(peer), params: { spki: "x" }, as: :json
+    assert_response :forbidden
     assert_equal 0, peer.certificates.count
     post relay_applies_path
     assert_redirected_to root_path

@@ -1502,13 +1502,13 @@ export default class extends Controller {
     const box = () => this.detailsTarget.querySelector("[data-role=methods]")
     let rules = []
     try {
-      const res = await fetch(`/call_permissions.json?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } })
+      const res = await fetch(`/permissions?path=${encodeURIComponent(path)}`, { headers: { Accept: "application/json" } })
       if (res.ok) rules = await res.json()
     } catch (_e) { /* treated as none */ }
     if (this.selected !== `a_object:${path}` || !box()) return
     if (rules.length === 0) {
       box().innerHTML = `<p class="hint">No call permission covers this object, so its methods are not read or called.
-        <a href="/call_permissions">Call permissions</a></p>`
+        ${this.adminValue ? `<a href="/admin/call_permissions">Call permissions</a>` : "An admin can allow it."}</p>`
       return
     }
     const allowed = (name) => rules.some((r) => globMatch(r.method, name))

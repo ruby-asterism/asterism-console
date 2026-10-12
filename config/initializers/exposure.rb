@@ -32,7 +32,9 @@ module ConsoleExposure
 end
 
 Rails.application.config.after_initialize do
-  ConsoleExposure.check! if defined?(Rails::Server) || defined?(Puma::Server)
+  # The server only (bin/rails server, or puma itself); not rake tasks and
+  # the bridge, which load Puma's constants with the bundle.
+  ConsoleExposure.check! if defined?(Rails::Server) || File.basename($PROGRAM_NAME).start_with?("puma")
 rescue ActiveRecord::ActiveRecordError
   nil # no database yet (db:prepare)
 end

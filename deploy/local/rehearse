@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+# The rehearsal of deploy/vps on this PC (README.md next to this file).
+#
+#   deploy/local/rehearse prepare     # .env (fresh secrets) and the web certificate
+#   deploy/local/rehearse build       # the console's image
+#   deploy/local/rehearse bootstrap   # a new CA, the database, the first admin, the router's and bridge's certificates
+#   deploy/local/rehearse up          # everything (HOME_ROUTER=1 adds the home router)
+#   deploy/local/rehearse down        # stop and remove the containers (VOLUMES=1: the volumes too)
+#   deploy/local/rehearse compose ARGS...   # any docker compose command on the rehearsal
+#
+# Settings: ADMIN_EMAIL, ADMIN_PASSWORD (bootstrap), STUDIO_DIST (a browser
+# build's dist, served at https://studio.localtest), HOME_ROUTER_BIND.
+require "openssl"
+require "securerandom"
+require "fileutils"
+
+HERE = __dir__
+ROOT = File.expand_path("../..", HERE)
+ENV_FILE = File.join(HERE, ".env")
+CERTS = File.join(HERE, "certs")
+PROJECT = "asterism-rehearsal"
+
+def compose(*args, env: {})
+  cmd = [ "docker", "compose", "-p", PROJECT, "-f", File.join(ROOT, "deploy/vps/docker-compose.yml"),
+          "-f", File.join(HERE, "docker-compose.rehearsal.yml"), "--env-file", ENV_FILE, *args ]
+  puts "$ #{cmd.join(' ')}"
+  system(env, *cmd) || abort("failed: #{args.first}")
+end
+
+def prepare
+  unless File.exist?(ENV_FILE)
+    text = File.read(File.join(ROOT, "deploy/vps/env.example"))
+    text = text.sub(/^CONSOLE_HOSTS=.*/, "CONSOLE_HOSTS=asterism.localtest")
+               .sub(/^ASTERISM_PASS_ROUTER=.*/, "ASTERISM_PASS_ROUTER=ws/router.localtest:7443")
+               .sub(/^ASTERISM_RELAY_PUBLIC_ENDPOINT=.*/, "ASTERISM_RELAY_PUBLIC_ENDPOINT=tls/localhost:17448")
+               .sub(/^ASTERISM_STUDIO_URL=.*/, "ASTERISM_STUDIO_URL=https://studio.localtest/index.html")
+               .sub(/^CONSOLE_ADMIN_NETS=.*/, "CONSOLE_ADMIN_NETS=172.31.240.50/32")
+               .sub(/^SECRET_KEY_BASE=.*/, "SECRET_KEY_BASE=#{SecureRandom.hex(64)}")
+               .sub(/^ASTERISM_SIGNER_TOKEN=.*/, "ASTERISM_SIGNER_TOKEN=#{SecureRandom.hex(32)}")
+    text += "\n# The rehearsal's compose reads this file for the services too.\nASTERISM_ENV_FILE=../local/.env\n"
+    File.open(ENV_FILE, File::WRONLY | File::CREAT | File::EXCL, 0o600) { _1.write(text) }
+    puts "made #{ENV_FILE}"
+  end
+  FileUtils.mkdir_p(File.join(CERTS, "home"))
+  FileUtils.mkdir_p(File.join(CERTS, "no-studio"))
+  return if File.exist?(File.join(CERTS, "web.pem"))
+  key = OpenSSL::PKey::EC.generate("prime256v1")
+  cert = OpenSSL::X509::Certificate.new
+  cert.version = 2
+  cert.serial = SecureRandom.random_number(2**64)
+  cert.subject = cert.issuer = OpenSSL::X509::Name.parse("/CN=asterism.localtest")
+  cert.public_key = key
+  cert.not_before = Time.now - 60
+  cert.not_after = Time.now + 30 * 86_400
+  ef = OpenSSL::X509::ExtensionFactory.new(cert, cert)
+  cert.add_extension(ef.create_extension("subjectAltName",
+                                         "DNS:asterism.localtest,DNS:router.localtest,DNS:studio.localtest,DNS:localhost"))
+  cert.add_extension(ef.create_extension("extendedKeyUsage", "serverAuth"))
+  cert.sign(key, OpenSSL::Digest.new("SHA256"))
+  File.write(File.join(CERTS, "web.pem"), cert.to_pem)
+  File.write(File.join(CERTS, "web.key"), key.private_to_pem)
+  File.chmod(0o644, File.join(CERTS, "web.key")) # nginx's worker reads it in the container (rehearsal only)
+  puts "made the self-signed web certificate in #{CERTS}"
+end
+
+def bootstrap
+  email = ENV.fetch("ADMIN_EMAIL")
+  password = ENV.fetch("ADMIN_PASSWORD")
+  unless system("docker", "compose", "-p", PROJECT, "-f", File.join(ROOT, "deploy/vps/docker-compose.yml"),
+                "-f", File.join(HERE, "docker-compose.rehearsal.yml"), "--env-file", ENV_FILE,
+                "run", "--rm", "--no-deps", "signer", "test", "-s", "/ca/ca/ca.key", err: File::NULL)
+    compose("run", "--rm", "--no-deps", "signer", "ruby", "bin/signer", "init", "--ca-dir", "/ca/ca")
+  end
+  compose("up", "-d", "signer")
+  compose("run", "--rm", "console", "bin/rails", "db:prepare")
+  compose("run", "--rm", "-e", "CONSOLE_PASSWORD=#{password}", "console", "bin/rails", "console:user",
+          "EMAIL=#{email}", "ADMIN=1")
+  compose("run", "--rm", "console", "bin/rails", "relay:issue_local", "NAME=zenohd-vps", "KIND=router",
+          "DNS=zenohd,router.localtest,localhost", "IPS=127.0.0.1", "OUT=/certs")
+  compose("run", "--rm", "console", "bin/rails", "relay:issue_local", "NAME=console", "KIND=client",
+          "RW=asterism/**", "ADMIN_SPACE=1", "OUT=/certs")
+  compose("run", "--rm", "console", "bin/rails", "relay:generate")
+end
+
+case ARGV.shift
+when "prepare" then prepare
+when "build" then compose("build", "console")
+when "bootstrap" then bootstrap
+when "up"
+  args = %w[up -d]
+  args = [ "--profile", "home", *args ] if ENV["HOME_ROUTER"] == "1"
+  compose(*args, env: { "STUDIO_DIST" => ENV["STUDIO_DIST"] }.compact)
+when "down"
+  compose("--profile", "home", "down", *(ENV["VOLUMES"] == "1" ? %w[--volumes] : []))
+when "compose" then compose(*ARGV)
+else
+  puts File.read(__FILE__).lines[1..14].join.gsub(/^# ?/, "")
+  exit 2
+end
