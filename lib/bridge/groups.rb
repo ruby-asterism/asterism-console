@@ -48,7 +48,7 @@
 module Bridge
   module Groups
     KIND = "r_group".freeze
-    FOLDABLE = %w[topic_link attach publishes subscribes carries peer_link].freeze
+    FOLDABLE = %w[topic_link attach publishes subscribes carries peer_link via_router].freeze
 
     module_function
 

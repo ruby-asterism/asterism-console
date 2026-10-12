@@ -72,6 +72,10 @@
 #     the router the registry says they connect to.
 #   - The profiles (V2.5, Bridge::Profiles): data "profile" on an Asterism
 #     node that told its profile (kind, host, name, icon_hash).
+#   - Through a router (V2.6): a node no readable router carries, whose
+#     token a readable router's table lists under "routers" (a router whose
+#     admin space the console cannot read), gets a "via_router" edge, node
+#     -> that router, label "via". Not drawn when a "carries" edge exists.
 module Bridge
   class Graph
     LAYERS = {
@@ -420,9 +424,11 @@ module Bridge
     # Which session carries what: the router's token table names the session
     # behind each Asterism token; ROS tokens carry their session's ID.
     def link_tokens(admin)
+      via = Hash.new { |h, k| h[k] = {} } # node id => { router id => true }
       admin.each do |rzid, info|
         own = self.class.norm_zid(rzid)
         (info["tokens"] || {}).each do |key, who|
+          note_via(via, key, who, own)
           m = key.to_s.match(%r{\Aasterism/([^/]+)})
           next unless m
           nid = "a_node:#{m[1]}"
@@ -441,6 +447,48 @@ module Bridge
         next unless n["kind"] == "r_node"
         sid = @session_of[self.class.norm_zid(n["data"]["zid"])]
         edge(sid, n["id"], "carries") if sid
+      end
+      link_via(via, admin)
+    end
+
+    # The node a token in a router's table belongs to (an Asterism node or a
+    # ROS 2 node), or nil.
+    def token_node(key)
+      if (m = key.to_s.match(%r{\Aasterism/([^/]+)}))
+        id = "a_node:#{m[1]}"
+      elsif (t = self.class.parse_ros_token(key))
+        id = "r_node:#{self.class.norm_zid(t[:zid])}/#{t[:nid]}"
+      end
+      id if id && @nodes[id]
+    end
+
+    # The routers a token came through, as a router's table lists them
+    # ("routers"): known routers other than the one that lists it.
+    def note_via(via, key, who, own)
+      nid = token_node(key)
+      return unless nid
+      Array(who["routers"]).each do |z|
+        nz = self.class.norm_zid(z)
+        next if nz == own
+        rid = @session_of[nz]
+        via[nid][rid] = true if rid&.start_with?("router:")
+      end
+    end
+
+    # A node no readable router carries (its router's admin space is not
+    # readable: an ACL in the way) but that a readable router's token table
+    # says came through another router: a "via_router" edge, node -> that
+    # router. What is behind the router is not visible. When some of the
+    # routers named are not readable, only those: a readable one would
+    # have carried the node.
+    def link_via(via, admin)
+      read = admin.keys.to_h { [ "router:#{self.class.norm_zid(_1)}", true ] }
+      carried = @edges.each_value.filter_map { _1["target"] if _1["kind"] == "carries" }.to_h { [ _1, true ] }
+      via.each do |nid, routers|
+        next if carried[nid]
+        rids = routers.keys
+        unread = rids.reject { read[_1] }
+        (unread.empty? ? rids : unread).each { edge(nid, _1, "via_router", "via") }
       end
     end
 
@@ -479,11 +527,15 @@ module Bridge
       end
     end
 
-    # The router an Asterism node comes through (its session's router).
+    # The router an Asterism node comes through (its session's router, or
+    # the router of its "via_router" edge).
     def via_router(n)
       sid = @edges.values.find { _1["kind"] == "carries" && _1["target"] == n["id"] }&.dig("source")
-      return nil unless sid
-      rid = @edges.values.find { _1["kind"] == "session" && _1["target"] == sid }&.dig("source")
+      rid = if sid
+        @edges.values.find { _1["kind"] == "session" && _1["target"] == sid }&.dig("source")
+      else
+        @edges.values.find { _1["kind"] == "via_router" && _1["source"] == n["id"] }&.dig("target")
+      end
       r = rid && @nodes[rid]
       r && (r["data"]["name"] || r["label"])
     end

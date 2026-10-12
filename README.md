@@ -234,6 +234,13 @@ REST plugin), not from the network. So the console shows the certificate
 of the router it is connected to (from its own link) and its own; the
 others show as not known.
 
+A router whose admin space the console cannot read (the cloud router's ACL
+does not let it through) shows no sessions. A node behind it is still
+joined to it by a dashed `via` line when a readable router's token table
+says its tokens came through that router (docs/v2_6.md); the line goes
+once the router's admin space is readable and the node's own connection
+is drawn.
+
 `script/relay_certs` makes a CA and certificates for such a relay
 (`lib/relay/cert_authority.rb`, Ruby's OpenSSL; ECDSA P-256 keys, the
 common name is what zenohd's ACL matches). They go to

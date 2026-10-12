@@ -227,6 +227,80 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_nil board["data"]["cert_name"]
     assert edge?(g, "session", "router:#{HOME}", "session:#{BOARD}")
   end
+  # V2.6: the cloud router's ACL does not let the console read the home
+  # router's admin space. The cloud router's token table still says the
+  # board's tokens came through the home router ("routers").
+  BROWSER = "e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5" # client of the cloud router: the browser build
+  HOME_ROS = "f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6" # peer at the home router: a ROS 2 node
+
+  def via_admin
+    a = relay_admin
+    a[CLOUD]["router"]["sessions"] << session(BROWSER, "client", 9)
+    a[HOME]["router"]["sessions"] << session(HOME_ROS, "peer", 8)
+    a[CLOUD]["tokens"] = {
+      "asterism/fmruby-aaaaaa/game" => { "routers" => [ HOME ], "peers" => [], "clients" => [] },
+      "asterism/fmruby-aaaaaa/game/screen" => { "routers" => [ HOME ], "peers" => [], "clients" => [] },
+      "asterism/wasm-aaaaaa/player" => { "routers" => [], "peers" => [], "clients" => [ BROWSER ] },
+      "@ros2_lv/0/#{HOME_ROS}/0/0/NN/%/%/talker" => { "routers" => [ HOME ], "peers" => [], "clients" => [] }
+    }
+    a[HOME]["tokens"] = {
+      "asterism/fmruby-aaaaaa/game" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] },
+      "asterism/fmruby-aaaaaa/game/screen" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] },
+      "asterism/wasm-aaaaaa/player" => { "routers" => [ CLOUD ], "peers" => [], "clients" => [] },
+      "@ros2_lv/0/#{HOME_ROS}/0/0/NN/%/%/talker" => { "routers" => [], "peers" => [ HOME_ROS ], "clients" => [] }
+    }
+    a
+  end
+
+  def via_graph(admin)
+    Bridge::Graph.build(admin: admin, asterism: %w[asterism/fmruby-aaaaaa/game asterism/fmruby-aaaaaa/game/screen
+                                                   asterism/wasm-aaaaaa/player],
+                        ros: [ "@ros2_lv/0/#{HOME_ROS}/0/0/NN/%/%/talker" ], self_zids: [ READER ]).to_h
+  end
+
+  test "a node behind a router whose admin space is not readable: a via_router edge to that router" do
+    g = via_graph(via_admin.slice(CLOUD))
+    vias = g["edges"].select { _1["kind"] == "via_router" }
+    assert_equal [ [ "a_node:fmruby-aaaaaa", "router:#{HOME}", "via" ], [ "r_node:#{HOME_ROS}/0", "router:#{HOME}", "via" ] ],
+                 vias.map { _1.values_at("source", "target", "label") }.sort
+    # The browser build is the cloud router's own client: carried, no via.
+    assert edge?(g, "carries", "session:#{BROWSER}", "a_node:wasm-aaaaaa")
+    refute edge?(g, "via_router", "a_node:wasm-aaaaaa", "router:#{CLOUD}")
+  end
+
+  test "both admin spaces readable: no via_router edge, the graph as without the routers' lists" do
+    g = via_graph(via_admin)
+    assert_empty g["edges"].select { _1["kind"] == "via_router" }
+    assert edge?(g, "carries", "session:#{BOARD}", "a_node:fmruby-aaaaaa")
+    assert edge?(g, "carries", "session:#{HOME_ROS}", "r_node:#{HOME_ROS}/0")
+    plain = via_admin
+    plain.each_value { |info| info["tokens"].each_value { _1["routers"] = [] } }
+    assert_equal via_graph(plain), g
+  end
+
+  test "via_router: not to the router that lists the token, nor to a router not in the graph" do
+    stranger = "abababababababababababababababab"
+    a = via_admin.slice(CLOUD)
+    a[CLOUD]["tokens"]["asterism/fmruby-aaaaaa/game"]["routers"] = [ CLOUD, stranger ]
+    a[CLOUD]["tokens"]["asterism/fmruby-aaaaaa/game/screen"]["routers"] = [ CLOUD ]
+    g = via_graph(a)
+    refute g["edges"].any? { _1["kind"] == "via_router" && _1["source"] == "a_node:fmruby-aaaaaa" }
+    assert_nil g["nodes"].find { _1["id"] == "router:#{stranger}" }
+  end
+
+  test "via_router: one edge per node and router, to the router that is not readable" do
+    a = via_admin.slice(CLOUD)
+    # The cloud router lists the board's token under itself and the home router.
+    a[CLOUD]["tokens"]["asterism/fmruby-aaaaaa/game"]["routers"] = [ CLOUD, HOME, HOME.upcase ]
+    g = via_graph(a)
+    assert_equal [ "router:#{HOME}" ], g["edges"].select { _1["kind"] == "via_router" && _1["source"] == "a_node:fmruby-aaaaaa" }
+                                                 .map { _1["target"] }
+    # Through the registry, the node's "via" names the router (by its label:
+    # its name is in its admin space).
+    g = Bridge::Graph.build(admin: a, asterism: %w[asterism/fmruby-aaaaaa/game], self_zids: [ READER ], registry: []).to_h
+    assert_equal "router #{HOME[0, 8]}", node(g, "a_node:fmruby-aaaaaa")["data"]["via"]
+  end
+
   test "the relay registry over the graph: registered, disabled, unregistered, absent" do
     adm = admin
     adm[ROUTER]["router"]["metadata"] = { "name" => "zenohd-cloud" }

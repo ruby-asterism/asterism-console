@@ -130,9 +130,13 @@ const MARK_SIZE = 14
 
 const EDGE_COLORS = {
   session: "#9aa0a6", router_link: ROUTER_BLUE, carries: "#c0c4ca", attach: "#9aa0a6", peer_link: "#5c6bc0",
-  peer_session: "#5c6bc0", expect: ROUTER_BLUE,
+  peer_session: "#5c6bc0", expect: ROUTER_BLUE, via_router: "#9aa0a6",
   publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00",
 }
+
+// What a "via_router" edge means (V2.6), for its legend line and details.
+const VIA_HINT = "Reached through this router; what is behind it is not visible: the console cannot read the router's " +
+  "admin space (for a router in the relay registry: turn on Admin space)."
 
 const BADGE = { services: "#455a64", unmatched: "#ef6c00" }
 
@@ -144,7 +148,7 @@ const STATUS_TEXT = {
 const LAYOUT = {
   name: "fcose", nodeDimensionsIncludeLabels: true, padding: 30,
   nodeRepulsion: () => 7000, edgeElasticity: () => 0.45, nestingFactor: 0.1, gravity: 0.25,
-  idealEdgeLength: (e) => e.data("kind") === "topic_link" ? 150 : ["carries", "attach"].includes(e.data("kind")) ? 90 : 70,
+  idealEdgeLength: (e) => e.data("kind") === "topic_link" ? 150 : ["carries", "attach", "via_router"].includes(e.data("kind")) ? 90 : 70,
   nodeSeparation: 60, numIter: 2500, tilingPaddingVertical: 20, tilingPaddingHorizontal: 20,
 }
 
@@ -230,7 +234,8 @@ export default class extends Controller {
     this.cy.on("tap", "node", (ev) => this.select(ev.target.hasClass("frame") ? ev.target.data("machine") : ev.target.id()))
     // A machine's frame follows its nodes (dragged, laid out, added).
     this.cy.on("position", "node", (ev) => { if (ev.target.data("group")) this.queueFrames() })
-    this.cy.on("tap", "edge[kind = 'topic_link'], edge[kind = 'attach'], edge[kind = 'peer_link']", (ev) => this.select(ev.target.id()))
+    this.cy.on("tap", "edge[kind = 'topic_link'], edge[kind = 'attach'], edge[kind = 'peer_link'], edge[kind = 'via_router']",
+               (ev) => this.select(ev.target.id()))
     this.cy.on("tap", (ev) => { if (ev.target === this.cy) this.select(null) })
     this.applyView()
     this.layoutAll()
@@ -287,6 +292,12 @@ export default class extends Controller {
       { selector: "edge[kind = 'attach']", style: { width: 1.2, "line-opacity": 0.7 } },
       { selector: "edge[kind = 'attach']:selected, edge[kind = 'peer_link']:selected", style: { width: 3 } },
       { selector: "node[kind = 'others']", style: { "font-size": 9, color: "#555" } },
+      // Reached through a router whose admin space the console cannot read
+      // (V2.6): what is behind that router is not visible.
+      { selector: "edge[kind = 'via_router']", style: {
+          "line-style": "dashed", "line-dash-pattern": [4, 4], width: 1.2, "line-opacity": 0.55,
+          "target-arrow-shape": "none", label: "data(label)", "font-size": 8, color: "#80868b",
+          "text-background-color": "#fff", "text-background-opacity": 0.85, "text-background-padding": 1 } },
       { selector: "edge[kind = 'router_link']", style: { width: 3 } },
       { selector: "edge[kind = 'router_link'][label]", style: {
           label: "data(label)", "font-size": 9, color: "#1f4e99", "text-background-color": "#fff",
@@ -1075,6 +1086,7 @@ export default class extends Controller {
         `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.carries}"></span>what a session carries</span>`
       : `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.attach}"></span>connection to the router (client / peer)</span>` +
         `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.peer_link}"></span>peer to peer, no router</span>`
+    const via = `<span class="key" title="${VIA_HINT}"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.via_router}"></span>via a router whose admin space is not readable</span>`
     const registry = this.layers.registry
       ? `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.expect}"></span>expected router (from the registry)</span>` +
         Object.entries(REGISTRY).filter(([, r]) => r.glyph).map(([key, r]) =>
@@ -1086,7 +1098,7 @@ export default class extends Controller {
       Object.values(MACHINES).map((m) => `<span class="key"><span class="mark-text">${m.mark}</span>${m.label}</span>`).join("") +
       `<span class="key"><span class="mark-text">${OTHER_MACHINE.mark}</span>another kind a profile told</span>` +
       `<span class="key">an icon before a name: the node's own (its profile), in place of the mark</span>` +
-      lines +
+      lines + via +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
       `<span class="key">${badge(BADGE.unmatched, "2")} topics with no counterpart</span>` +
@@ -1444,6 +1456,12 @@ export default class extends Controller {
   // A node's line to its router (or to a peer): the sessions behind it.
   connectionDetails(el) {
     const a = el.source(), b = el.target()
+    if (el.data("kind") === "via_router") {
+      this.renderDetails(`<h2><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.via_router}"></span>Through a router</h2>` +
+        `<p class="name">${this.link(a.id(), a.data("name"))} &ndash; ${this.link(b.id(), b.data("name"))}</p>` +
+        `<p class="hint">${VIA_HINT}</p>`)
+      return
+    }
     let html = `<h2><span class="swatch line" style="background:${EDGE_COLORS[el.data("kind")]}"></span>${el.data("kind") === "peer_link" ? "Peer to peer" : "Connection"}</h2>`
     html += `<p class="name">${this.link(a.id(), a.data("name"))} &ndash; ${this.link(b.id(), b.data("name"))}</p>`
     const zids = new Set(el.data("sessions") || [])

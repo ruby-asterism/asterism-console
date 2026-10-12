@@ -141,6 +141,50 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
     assert_equal g, Bridge::Graph.derive(g)
   end
 
+  # V2.6: a board at a home router behind the cloud router. The console reads
+  # the cloud router's admin space, and the home router's only when the ACL
+  # lets it.
+  HOME = "cc08bfcde72b91280a1274d1cd78dc7e"
+  CLOUD = "d5e0deae1c2513eb274afb6f7b4d1de1"
+
+  def relay(home_readable)
+    link = { "dst" => "tls/192.0.2.20:7448", "src" => "tls/192.0.2.30:60652" }
+    a = {
+      CLOUD => {
+        "router" => { "metadata" => { "name" => "zenohd-cloud" }, "zid" => CLOUD,
+                      "sessions" => [ { "links" => [ { "dst" => link["src"], "src" => link["dst"] } ],
+                                        "peer" => HOME, "whatami" => "router" }, session(READER.sub(/\A0+/, ""), "client", 3) ] },
+        "linkstate" => {},
+        "tokens" => { "asterism/fmruby-aaaaaa/game" => { "routers" => [ HOME ], "peers" => [], "clients" => [] } }
+      },
+      HOME => {
+        "router" => { "metadata" => { "name" => "zenohd-home" }, "zid" => HOME,
+                      "sessions" => [ { "links" => [ link ], "peer" => CLOUD, "whatami" => "router" },
+                                      session(BOARD, "client", 1) ] },
+        "linkstate" => {},
+        "tokens" => { "asterism/fmruby-aaaaaa/game" => { "routers" => [], "peers" => [], "clients" => [ BOARD ] } }
+      }
+    }
+    a = a.slice(CLOUD) unless home_readable
+    Bridge::Graph.build(admin: a, asterism: %w[asterism/fmruby-aaaaaa/game], self_zids: [ READER ]).to_h
+  end
+
+  test "a node behind a router the console cannot read: no attach, a via_router edge to that router" do
+    g = relay(false)
+    assert_nil attach(g, "a_node:fmruby-aaaaaa")
+    via = g["edges"].select { _1["kind"] == "via_router" }
+    assert_equal [ [ "a_node:fmruby-aaaaaa", "router:#{HOME}", "via", "cross" ] ],
+                 via.map { _1.values_at("source", "target", "label", "layer") }
+    assert_empty node(g, "a_node:fmruby-aaaaaa")["data"]["connections"]
+    assert_equal g, Bridge::Graph.derive(g), "idempotent"
+  end
+
+  test "both routers readable: the board attached to the home router, no via_router edge" do
+    g = relay(true)
+    assert_equal [ "router:#{HOME}", "client" ], attach(g, "a_node:fmruby-aaaaaa").values_at("target", "label")
+    assert_empty g["edges"].select { _1["kind"] == "via_router" }
+  end
+
   test "apply is idempotent, and rebuilds a graph recorded without its parts" do
     g = graph(extra: [ session(BARE, "client", 5) ])
     assert_equal g, Bridge::Connections.apply(g)
