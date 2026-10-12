@@ -36,7 +36,8 @@ cytoscape.use(fcose)
 // gets its kind (Family mruby, PicoRuby, CRuby, console) from it, and its
 // icon (data "icon", /icons/<hash>) before its name in place of the mark;
 // the mark of its kind is shown only when it has no icon. Its host and
-// display name are in the details. A node without a profile keeps the mark
+// display name are in the details, and the display name also goes before
+// the ID in the label (G1b). A node without a profile keeps the mark
 // by its name (V2.2). The icon is a background image placed left of the
 // label (applyIcons), since a label cannot hold an image.
 //
@@ -339,6 +340,10 @@ export default class extends Controller {
 
   nodeElement(n) {
     let label = n.data?.self ? `${n.label} (this console)` : n.label
+    // A display name the node's profile told goes before its ID (G1b): the
+    // ID stays in the label, since calls, permissions and the registry use it.
+    const shown = n.kind === "a_node" && !n.data?.self && n.data?.profile?.name
+    if (shown && shown !== n.label) label = `${shown} (${n.label})`
     const machine = n.kind === "a_node" && machineOf(n.data?.machine)
     // A node's own icon stands for it; the mark is the fallback without one.
     if (machine && !n.data?.icon) label = `${machine.mark} ${label}`

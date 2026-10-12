@@ -21,7 +21,10 @@ calls the methods that Asterism nodes expose.
   asterism 0.5.0 or later tells its profile: the mark comes from its kind,
   its icon is drawn before its name, its host and display name are in the
   details; an older node keeps the mark guessed from its name
-  (docs/v2_5.md).
+  (docs/v2_5.md). A display name also goes before the ID in the label, and
+  a ROS 2 node on the same Zenoh session as an Asterism node (asterism
+  0.6.0's `Asterism.session`) is drawn inside that node's box
+  (docs/g1b.md).
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name

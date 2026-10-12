@@ -6,7 +6,8 @@
 # ROS 2 does not say which machine or process a node runs in. The one hint
 # is the address its session comes from: the ROS 2 nodes whose session
 # comes from the same IP address, two or more of them, make one group.
-# Asterism nodes are left out (they have their own nesting).
+# Asterism nodes are left out (they have their own nesting), and so are the
+# ROS 2 nodes inside one (data "in_node", Bridge::Connections).
 #
 # Gateways (V2.4, Bridge::Gateways): a ROS 2 node whose session comes from
 # a gateway's address (seen in the graph at its router, or configured) is
@@ -134,6 +135,7 @@ module Bridge
       by_ip = Hash.new { |h, k| h[k] = [] }
       nodes = nodes.map do |n|
         next n unless n["kind"] == "r_node"
+        next n if n.dig("data", "in_node") # inside its Asterism node (Bridge::Connections)
         gw = gateway_of(n, detected, configured)
         next n.merge("data" => (n["data"] || {}).merge("gateway" => gw)) if gw
         ip = node_ip(n)

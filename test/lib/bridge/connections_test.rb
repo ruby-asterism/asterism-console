@@ -122,6 +122,25 @@ class Bridge::ConnectionsTest < ActiveSupport::TestCase
     assert_nil node(g, "r_node:#{LONE}/0")["data"]["connections"][0]["router"]
   end
 
+  test "a ROS 2 node on an Asterism node's session sits inside that node (G1b)" do
+    brain = [ "@ros2_lv/0/#{BOARD}/0/0/NN/%/%/fmruby_brain_fmruby_aaaaaa",
+              "@ros2_lv/0/#{BOARD}/0/1/MP/%/%/fmruby_brain_fmruby_aaaaaa/%chatter/#{STRING}/#{QOS}" ]
+    g = graph(ros: brain)
+    rn = node(g, "r_node:#{BOARD}/0")
+    assert_equal "a_node:fmruby-aaaaaa", rn["parent"]
+    assert_equal "a_node:fmruby-aaaaaa", rn["data"]["in_node"]
+    assert_nil attach(g, "r_node:#{BOARD}/0"), "the board's line stands for the session"
+    assert_equal "client", attach(g, "a_node:fmruby-aaaaaa")["label"]
+    assert_equal [ "a_node:fmruby-aaaaaa", "r_node:#{BOARD}/0" ], rn["data"]["connections"][0]["nodes"]
+    refute rn["data"].key?("group"), "not folded into a machine"
+    # Its topics stay: the edge to the other process's subscriber.
+    assert(g["edges"].any? { _1["source"] == "r_node:#{BOARD}/0" && _1["kind"] == "publishes" })
+    # A ROS 2 process with nodes only stays outside.
+    assert_nil node(g, "r_node:#{ROS}/0")["parent"]
+    # Idempotent, also on a graph that has it already.
+    assert_equal g, Bridge::Graph.derive(g)
+  end
+
   test "apply is idempotent, and rebuilds a graph recorded without its parts" do
     g = graph(extra: [ session(BARE, "client", 5) ])
     assert_equal g, Bridge::Connections.apply(g)

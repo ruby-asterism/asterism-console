@@ -17,6 +17,12 @@
 #   - data "connections" on every Asterism / ROS 2 node: its sessions, each
 #     { "zid", "role", "address", "protocol", "links", "router", "router_label",
 #       "cert_name", "self", "nodes" (ids of the nodes on that session) }.
+#   - ROS 2 nodes inside an Asterism node (G1b): a ROS 2 node whose session
+#     also carries one Asterism node (a board running Asterism and a ROS 2
+#     node on one connection, Asterism.session) gets that Asterism node as
+#     its parent and data "in_node"; it has no "attach" edge of its own (the
+#     Asterism node's stands for the session), and Bridge::Groups leaves it
+#     out of the machines.
 #
 # The sessions, "session" and "carries" edges stay: the page shows either
 # them ("Sessions as points") or what is added here. apply is idempotent.
@@ -31,8 +37,9 @@ module Bridge
       nodes = graph["nodes"].to_a.reject { _1["kind"] == "others" }.to_h do |n|
         n = n.dup
         if HOLDERS.include?(n["kind"]) && n["data"].is_a?(Hash)
-          n["data"] = n["data"].except("connections")
+          n["data"] = n["data"].except("connections", "in_node")
         end
+        n.delete("parent") if n["kind"] == "r_node" # (only this step nests them)
         [ n["id"], n ]
       end
       # The folded copies (Bridge::Groups) stay: that step makes them again.
@@ -77,8 +84,15 @@ module Bridge
           next
         end
         holder[s["id"]] = held
+        boards = held.select { nodes[_1]["kind"] == "a_node" }
+        inside = boards.size == 1 ? boards[0] : nil
         held.each do |nid|
           nodes[nid]["data"]["connections"] << entry
+          if inside && nodes[nid]["kind"] == "r_node"
+            nodes[nid]["parent"] = inside
+            nodes[nid]["data"]["in_node"] = inside
+            next
+          end
           next unless rid
           e = add_edge.("attach:#{nid}->#{rid}", "attach", nid, rid, nil)
           e["sessions"] = ((e["sessions"] || []) + [ d["zid"] ]).uniq
