@@ -33,10 +33,11 @@ cytoscape.use(fcose)
 // object a small red dot.
 //
 // Profiles (V2.5, lib/bridge/profiles.rb): a node that tells its profile
-// gets its mark from its kind (Family mruby, PicoRuby, CRuby, console) and
-// its icon (data "icon", /icons/<hash>) before its name; its host and
-// display name are in the details. A node without one keeps the mark by
-// its name (V2.2). The icon is a background image placed left of the
+// gets its kind (Family mruby, PicoRuby, CRuby, console) from it, and its
+// icon (data "icon", /icons/<hash>) before its name in place of the mark;
+// the mark of its kind is shown only when it has no icon. Its host and
+// display name are in the details. A node without a profile keeps the mark
+// by its name (V2.2). The icon is a background image placed left of the
 // label (applyIcons), since a label cannot hold an image.
 //
 // Machines (V2.3, lib/bridge/groups.rb): the ROS 2 nodes that come from the
@@ -339,7 +340,8 @@ export default class extends Controller {
   nodeElement(n) {
     let label = n.data?.self ? `${n.label} (this console)` : n.label
     const machine = n.kind === "a_node" && machineOf(n.data?.machine)
-    if (machine) label = `${machine.mark} ${label}`
+    // A node's own icon stands for it; the mark is the fallback without one.
+    if (machine && !n.data?.icon) label = `${machine.mark} ${label}`
     const data = { id: n.id, kind: n.kind, layer: n.layer, label, name: n.label, self: !!n.data?.self, info: n.data }
     if (n.parent) data.parent = n.parent
     if (n.data?.registry) data.registry = n.data.registry
@@ -1078,7 +1080,7 @@ export default class extends Controller {
     ).join("") +
       Object.values(MACHINES).map((m) => `<span class="key"><span class="mark-text">${m.mark}</span>${m.label}</span>`).join("") +
       `<span class="key"><span class="mark-text">${OTHER_MACHINE.mark}</span>another kind a profile told</span>` +
-      `<span class="key">an icon before a name: the node's own (its profile)</span>` +
+      `<span class="key">an icon before a name: the node's own (its profile), in place of the mark</span>` +
       lines +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
