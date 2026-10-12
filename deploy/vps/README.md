@@ -157,7 +157,10 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 (`certbot --nginx -d asterism.example.org` also works, but it edits the
-server block itself; the files here already have the TLS lines.) The wss
+server block itself; the files here already have the TLS lines. On a server
+whose certificates renew with Certbot's nginx authenticator, `sudo certbot
+certonly --nginx -d asterism.example.org` before linking the console's file
+gets the certificate without touching any file, and renews the same way.) The wss
 port uses the server's existing certificate for its main name, as the other
 apps on their own TLS ports do; nothing new is requested for it.
 
@@ -194,7 +197,12 @@ it does not filter:
   addresses (one entry per address or range). Check the other services
   from outside afterwards.
 
-ufw is the second layer:
+ufw is the second layer. If it is not enabled on the server yet
+(`sudo ufw status`), turning it on applies its default (deny incoming) to
+every service at once, SSH included: allow SSH and every port of
+`~/asterism-ports-before.txt` first, and keep a console session (the
+provider's web console) open while you do it. Or leave ufw off and rely on
+the packet filter, the certificates and the passes.
 
 - For nginx's own wss port (nginx is not in docker, so ufw sees it):
 
@@ -236,14 +244,20 @@ curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H '
 
 Then sign in (the admin is asked to turn on TOTP first), register a
 player under Admin > Relay, issue its certificate (the key is made in your
-browser), apply, and connect a CRuby node with it:
+browser), apply, and connect a CRuby player with it (`check_player.rb` next
+to this file; `gem install asterism -v '~> 0.7.0'`):
 
 ```
-ruby examples/node.rb --router tls/router.example.org:7448 --node alice \
-  --ca ca.pem --cert alice.pem --key alice.key
+ruby check_player.rb --router tls/router.example.org:7448 --node alice \
+  --ca ca.pem --cert alice.pem --key alice.key --serve 120
+# a second player, in another terminal: it calls alice's board
+ruby check_player.rb --router tls/router.example.org:7448 --node bob \
+  --ca ca.pem --cert bob.pem --key bob.key
 ```
 
-The graph shows it. A browser pass (Browser passes > Make a pass) opens
+(The asterism repository's `examples/node.rb` joins the app `demo`, which
+the players' ACL refuses; `check_player.rb` joins `game`.) The graph shows
+them. A browser pass (Browser passes > Make a pass) opens
 the browser build on `wss://router.example.org:7443` (the link carries the
 pass in its fragment, `#zenoh_pass=`). A pass opens one connection; the
 door closes a connection after `WS_DOOR_MAX_SECONDS` (4 h), and the user

@@ -16,6 +16,13 @@ HOME_ROUTER=1 HOME_ROUTER_BIND=0.0.0.0 HOME_ROUTER_PORT=7447 deploy/local/rehear
 deploy/local/rehearse down               # VOLUMES=1 also drops the volumes (the rehearsal's CA too)
 ```
 
+`NGINX_IMAGE=nginx:1.18-alpine` (in the environment of `up`) runs the
+nginx of the server's distribution instead of 1.27 (Ubuntu 22.04 ships
+1.18), so a directive the server's nginx does not know fails here first.
+`STUDIO_DIST` must be a dist built from the same wire protocol as the gems
+(asterism 0.7.0: protocol 1); an older dist connects and plays with other
+old browsers but answers nobody else.
+
 - The compose project is `asterism-rehearsal`; nothing is shared with other
   projects. Published on this PC: the router's mutual TLS on
   `127.0.0.1:17448`, nginx's 443 / 7443 on `127.0.0.1:18443` / `17443`, and

@@ -30,7 +30,9 @@ services:
     ports: !override []
 
   nginx:
-    image: nginx:1.27-alpine
+    # NGINX_IMAGE: match the server's nginx (e.g. nginx:1.18-alpine for
+    # Ubuntu 22.04's 1.18, which has no "http2 on;").
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
     restart: "no"
     depends_on: [console, zenohd, door]
     volumes:
