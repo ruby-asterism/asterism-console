@@ -11,6 +11,9 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_select ".hint", /Nobody is registered/
     get new_relay_peer_path(kind: "router")
     assert_select "select option[selected]", "router"
+    assert_select "input[type=checkbox][name='relay_peer[admin_space]'][checked]", 1, "a router's is read through by default"
+    get new_relay_peer_path(kind: "client")
+    assert_select "input[type=checkbox][name='relay_peer[admin_space]'][checked]", 0, "a client does not read the cloud's"
     assert_difference("RelayPeer.count", 1) { post relay_peers_path, params: PARAMS }
     peer = RelayPeer.find_by!(name: "w2bot")
     assert_redirected_to relay_peer_path(peer)

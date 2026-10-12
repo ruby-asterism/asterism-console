@@ -18,9 +18,13 @@ module Relay
       @seen = Relay::Presence.seen(GraphState.current.graph)
     end
 
+    # A router starts with its admin space read through (the graph shows what
+    # is behind it); a client starts without reading the cloud router's, which
+    # lists every session and its address.
     def new
-      @peer = RelayPeer.new(kind: params[:kind].presence_in(RelayPeer::KINDS) || "client",
-                            name: params[:name], rw_keys: "asterism/**\n", cert_days: 90)
+      kind = params[:kind].presence_in(RelayPeer::KINDS) || "client"
+      @peer = RelayPeer.new(kind: kind, name: params[:name], rw_keys: "asterism/**\n", cert_days: 90,
+                            admin_space: kind == "router")
     end
 
     def create
