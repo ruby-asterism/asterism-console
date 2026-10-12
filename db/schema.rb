@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_180000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -45,6 +45,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_120000) do
     t.integer "refused", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "used_at"
     t.index ["expires_at"], name: "index_browser_passes_on_expires_at"
     t.index ["revoked_by_id"], name: "index_browser_passes_on_revoked_by_id"
     t.index ["token_digest"], name: "index_browser_passes_on_token_digest", unique: true

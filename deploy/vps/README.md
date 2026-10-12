@@ -17,7 +17,8 @@ Design notes (the ACL, passes, the admin pages): `docs/g0_w4.md`.
 | Service | Listens (in its container) | Published on the server | Reached by |
 |---|---|---|---|
 | `zenohd` (eclipse/zenoh 1.10.1) | `tls/7448` mutual TLS, own CA | `${ROUTER_TLS_BIND}:${ROUTER_TLS_PORT}` (0.0.0.0:7448) | home routers, boards, CRuby, directly |
-| | `ws/7449` (browsers) | `127.0.0.1:${ROUTER_WS_PORT}` (7449) | nginx only (`wss://router.example.org:7443`, with a pass) |
+| | `ws/7449` (browsers) | none (the door only) | |
+| door (`bin/ws_door`) | 7451 (relay to zenohd ws/7449) | `127.0.0.1:${ROUTER_WS_PORT}` (7449) | nginx only (`wss://router.example.org:7443`, with a pass); closes a connection after `WS_DOOR_MAX_SECONDS` (4 h) |
 | `console` (Rails, production) | 3000 | `127.0.0.1:${CONSOLE_PORT}` (3000) | nginx only (`https://asterism.example.org`) |
 | `bridge` | - | - | connects to `tls/zenohd:7448` with the `console` certificate |
 | `signer` (`bin/signer`, the CA's key) | 7450 | nothing | the console only, over the internal `signer` network |
@@ -243,8 +244,11 @@ ruby examples/node.rb --router tls/router.example.org:7448 --node alice \
 ```
 
 The graph shows it. A browser pass (Browser passes > Make a pass) opens
-the browser build on `wss://router.example.org:7443` once the browser
-build carries passes (`docs/g0_w4.md`).
+the browser build on `wss://router.example.org:7443` (the link carries the
+pass in its fragment, `#zenoh_pass=`). A pass opens one connection; the
+door closes a connection after `WS_DOOR_MAX_SECONDS` (4 h), and the user
+then makes a fresh pass (`docs/g0_w4.md`). `docker compose logs door`
+shows each connection's path (never a query) and why it closed.
 
 ## 8. Stop, roll back
 
@@ -310,6 +314,6 @@ The console migrates its databases on start.
 - **A CRuby player**: a client peer with "Player" ticked; its name is its
   node ID.
 - **A browser**: the player signs in to the console (by an invitation) and
-  makes a pass; the pass opens connections for 10 minutes.
+  makes a pass; the pass opens one connection, within 10 minutes.
 - **Invitations**: Admin > Users > Make an invitation link (works once, 72
   hours).

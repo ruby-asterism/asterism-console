@@ -1,7 +1,8 @@
 require "test_helper"
 
 # Passes for the browser build's wss:// (W4): made by a signed-in user,
-# shown once, checked by the proxy (check), refused when expired or revoked.
+# shown once, checked by the proxy (check), good for one connection, refused
+# when used, expired or revoked.
 class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
   setup { RateLimits::STORE.clear }
 
@@ -22,7 +23,7 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
              "ASTERISM_STUDIO_URL" => "https://studio.example.org/index.html") do
       token = make_pass
       assert_includes response.headers["Cache-Control"], "no-store"
-      assert_select "a[href=?]", "https://studio.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443&zenoh_pass=#{token}"
+      assert_select "a[href=?]", "https://studio.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}"
       pass = BrowserPass.sole
       assert_equal BrowserPass.digest(token), pass.token_digest
       refute_includes BrowserPass.all.map(&:attributes).to_s, token
@@ -34,23 +35,61 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
 
   test "the proxy's check: 204 for a live pass, 401 without, expired or revoked" do
     token = make_pass
+    other = make_pass
     sign_out
-    assert_equal 204, check(token)
     get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}", "X-Forwarded-For" => "198.51.100.7" }
     assert_response :no_content, "the pass from the WebSocket URL nginx hands over"
-    pass = BrowserPass.sole
-    assert_equal [ 2, "198.51.100.7" ], [ pass.reload.uses, pass.last_used_ip ]
+    pass = BrowserPass.find_by!(token_digest: BrowserPass.digest(token))
+    assert_equal [ 1, "198.51.100.7" ], [ pass.reload.uses, pass.last_used_ip ]
     assert_equal 401, check(nil)
     assert_equal 401, check("nonsense")
     assert_equal 401, check("A" * 43)
     travel BrowserPass::TTL + 1.second do
-      assert_equal 401, check(token)
-      get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}", "X-Forwarded-For" => "198.51.100.8" }
+      assert_equal 401, check(other)
+      get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{other}", "X-Forwarded-For" => "198.51.100.8" }
       assert_response :unauthorized, "expired (from the URI nginx hands over)"
     end
-    assert_equal 2, pass.reload.refused
-    pass.revoke!(users(:user))
-    assert_equal 401, check(token)
+    unused = BrowserPass.find_by!(token_digest: BrowserPass.digest(other))
+    assert_equal [ 2, 0, nil ], [ unused.reload.refused, unused.uses, unused.used_at ]
+    third = make_pass
+    sign_out
+    BrowserPass.find_by!(token_digest: BrowserPass.digest(third)).revoke!(users(:user))
+    assert_equal 401, check(third)
+  end
+
+  test "a pass opens one connection: the first 204 consumes it" do
+    token = make_pass
+    sign_out
+    assert_equal 204, check(token, ip: "198.51.100.7")
+    pass = BrowserPass.sole
+    assert_equal "used", pass.reload.status
+    assert pass.used_at
+    assert_equal 401, check(token, ip: "198.51.100.7"), "the same pass again"
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}", "X-Forwarded-For" => "198.51.100.7" }
+    assert_response :unauthorized, "also from the URI"
+    assert_equal [ 1, 2 ], [ pass.reload.uses, pass.refused ]
+    assert_not pass.live?
+    assert_not_includes BrowserPass.live, pass
+    sign_in_as(users(:user))
+    get browser_passes_path
+    assert_select "span.badge", "used"
+  end
+
+  test "two checks racing for one pass: only one wins" do
+    token = make_pass
+    pass = BrowserPass.sole
+    copy = BrowserPass.find(pass.id)
+    assert pass.consume!("198.51.100.7")
+    assert_not copy.consume!("198.51.100.8"), "the second, holding a stale copy"
+    assert_equal 1, pass.reload.uses
+  end
+
+  test "a used pass does not count among a user's live passes" do
+    token = make_pass
+    sign_out
+    assert_equal 204, check(token)
+    3.times { make_pass }
+    assert_equal %w[used live live live], BrowserPass.order(:id).map(&:status)
   end
 
   test "revoking: the owner or an admin, nobody else" do
@@ -88,8 +127,11 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
     old = Rails.logger
     Rails.logger = ActionController::Base.logger = ActiveSupport::TaggedLogging.logger(io)
     check(token)
+    check(token)
     refute_includes io.string, token
     assert_includes io.string, "opened a connection"
+    assert_includes io.string, "refused from"
+
   ensure
     Rails.logger = ActionController::Base.logger = old
   end

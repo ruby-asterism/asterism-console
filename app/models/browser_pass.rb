@@ -4,9 +4,12 @@
 # nginx auth_request) whether it may open each WebSocket. Only the
 # SHA-256 of the pass is kept; the pass itself is shown once.
 #
-# A pass opens connections until it expires or is revoked. A connection
-# that is open stays open when the pass expires (the check is made when a
-# connection opens; the router has no way to ask later).
+# A pass opens ONE connection (G1): the first successful check consumes it
+# (used_at), and every later check with it is refused, also before it
+# expires. A connection that is open stays open when the pass expires or is
+# revoked (the check is made when a connection opens; the router has no way
+# to ask later); the router door closes it after a few hours at most
+# (deploy/vps: the door relay), and the browser needs a fresh pass then.
 require "digest"
 require "securerandom"
 
@@ -20,7 +23,7 @@ class BrowserPass < ApplicationRecord
 
   attr_reader :token
 
-  scope :live, ->(at = Time.current) { where(revoked_at: nil).where("expires_at > ?", at) }
+  scope :live, ->(at = Time.current) { where(revoked_at: nil, used_at: nil).where("expires_at > ?", at) }
 
   def self.digest(token)
     Digest::SHA256.hexdigest(token.to_s)
@@ -46,17 +49,23 @@ class BrowserPass < ApplicationRecord
   end
 
   def live?(at = Time.current)
-    revoked_at.nil? && expires_at > at
+    revoked_at.nil? && used_at.nil? && expires_at > at
   end
 
   def status(at = Time.current)
     return "revoked" if revoked_at
+    return "used" if used_at
     return "expired" if expires_at <= at
     "live"
   end
 
-  def used!(ip)
-    self.class.where(id: id).update_all([ "uses = uses + 1, last_used_at = ?, last_used_ip = ?", Time.current, ip.to_s[0, 64] ])
+  # Consumes the pass for one connection. True when this call took it: one
+  # UPDATE that only matches a live, unused row, so two checks racing for
+  # the same pass cannot both win.
+  def consume!(ip, at = Time.current)
+    n = self.class.live(at).where(id: id)
+            .update_all([ "used_at = ?, uses = uses + 1, last_used_at = ?, last_used_ip = ?", at, at, ip.to_s[0, 64] ])
+    n == 1
   end
 
   def revoke!(by)

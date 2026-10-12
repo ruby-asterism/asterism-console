@@ -1,0 +1,84 @@
+#!/usr/bin/env ruby
+# The browsers' door between nginx and zenohd's ws/ listener (G1): a plain
+# TCP relay that gives every connection a lifetime. nginx cannot: its proxy
+# timeouts only close a connection that has been idle, and a Zenoh session
+# is never idle (keep-alives every few seconds). So nginx (which ends TLS and
+# checks the pass, deploy/vps/nginx/asterism-router.conf) hands each
+# WebSocket to this relay, which forwards the bytes both ways to zenohd and
+# closes both sides when the connection is MAX seconds old. A browser that
+# is still there then needs a fresh pass to connect again (a pass opens one
+# connection).
+#
+# It also logs, per connection, the path of the request nginx forwarded and
+# whether it carried a query (it must not: nginx drops the pass before
+# proxying). The query itself is never logged.
+#
+#   WS_DOOR_LISTEN        0.0.0.0:7451
+#   WS_DOOR_UPSTREAM      zenohd:7449
+#   WS_DOOR_MAX_SECONDS   14400 (4 hours)
+require "socket"
+
+LISTEN = ENV.fetch("WS_DOOR_LISTEN", "0.0.0.0:7451")
+UPSTREAM = ENV.fetch("WS_DOOR_UPSTREAM", "zenohd:7449")
+MAX_SECONDS = Float(ENV.fetch("WS_DOOR_MAX_SECONDS", "14400"))
+HEAD_MAX = 16 * 1024
+$stdout.sync = true
+
+def log(msg) = puts("#{Time.now.utc.strftime('%Y-%m-%dT%H:%M:%S')} ws_door: #{msg}")
+
+def split_hostport(s)
+  host, _, port = s.rpartition(":")
+  [ host.delete_prefix("[").delete_suffix("]"), Integer(port) ]
+end
+
+# Reads the request head (up to the blank line) without reading past it.
+def read_head(io)
+  head = +""
+  head << io.readpartial(1) until head.end_with?("\r\n\r\n") || head.bytesize > HEAD_MAX
+  head
+end
+
+def serve(n, client)
+  t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  head = read_head(client)
+  line = head.lines.first.to_s.strip
+  target = line.split(" ")[1].to_s
+  path = target.split("?", 2).first
+  query = target.include?("?") ? (target.include?("pass=") ? " WITH A QUERY CARRYING pass=" : " with a query") : ""
+  from = head[/^X-Forwarded-For:\s*([^\r\n]+)/i, 1] || "?"
+  upstream = TCPSocket.new(*split_hostport(UPSTREAM))
+  upstream.write(head)
+  log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}")
+  reason = relay(client, upstream, t0)
+  secs = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)
+  log("##{n} closed after #{secs} s (#{reason})")
+rescue StandardError => e
+  log("##{n} #{e.class}: #{e.message}")
+ensure
+  [ client, upstream ].each { |s| s&.close rescue nil }
+end
+
+def relay(a, b, t0)
+  peer = { a => b, b => a }
+  loop do
+    left = MAX_SECONDS - (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0)
+    return "lifetime #{MAX_SECONDS.round} s reached" if left <= 0
+    ready, = IO.select([ a, b ], nil, nil, left)
+    next unless ready
+    ready.each do |s|
+      data = s.readpartial(64 * 1024)
+      peer[s].write(data)
+    rescue EOFError, IOError, SystemCallError
+      return s == a ? "closed by the browser side" : "closed by zenohd"
+    end
+  end
+end
+
+server = TCPServer.new(*split_hostport(LISTEN))
+log("listening on #{LISTEN}, to #{UPSTREAM}, lifetime #{MAX_SECONDS.round} s")
+n = 0
+loop do
+  client = server.accept
+  n += 1
+  Thread.new(n, client) { |i, c| serve(i, c) }
+end

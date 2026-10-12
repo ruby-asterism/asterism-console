@@ -6,7 +6,8 @@
 # router's ws/ listener, deploy/vps/nginx): the pass is the "pass" query
 # parameter of the WebSocket URL, which nginx hands over as X-Original-URI
 # (or the X-Asterism-Pass header); the answer is 204 (open the connection)
-# or 401. It needs no session, and the
+# or 401. A pass opens one connection: the first 204 consumes it, and
+# later checks with it get 401 (BrowserPass#consume!). It needs no session, and the
 # public server block of the console does not pass it on (only the
 # router's server block reaches it, as a subrequest).
 class BrowserPassesController < ApplicationController
@@ -50,8 +51,7 @@ class BrowserPassesController < ApplicationController
   def check
     token = pass_from_request
     ip = request.remote_ip
-    if (pass = BrowserPass.find_live(token))
-      pass.used!(ip)
+    if (pass = BrowserPass.find_live(token)) && pass.consume!(ip)
       Rails.logger.info("pass: #{pass.id} (#{pass.user.email_address}) opened a connection from #{ip}")
       head :no_content
     else

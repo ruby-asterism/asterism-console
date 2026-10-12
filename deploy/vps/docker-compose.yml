@@ -6,7 +6,9 @@
 #
 #   service   listens                        published on the host
 #   zenohd    tls/7448 (mTLS, own CA)        ${ROUTER_TLS_BIND}:${ROUTER_TLS_PORT} (outside: limit by ufw)
-#             ws/7449 (browsers)             127.0.0.1:${ROUTER_WS_PORT} (nginx, with a pass check)
+#             ws/7449 (browsers)             none: the door only
+#   door      7451 (bin/ws_door)             127.0.0.1:${ROUTER_WS_PORT} (nginx, with a pass check);
+#             relays to zenohd ws/7449 and closes a connection after WS_DOOR_MAX_SECONDS
 #   console   3000 (Puma, production)        127.0.0.1:${CONSOLE_PORT} (nginx)
 #   bridge    -- (a client of zenohd)        none
 #   signer    7450 (the CA's key)            none: on the "signer" network only, which only the console joins
@@ -40,8 +42,23 @@ services:
       - generated:/generated:ro
     ports:
       - "${ROUTER_TLS_BIND:-0.0.0.0}:${ROUTER_TLS_PORT:-7448}:7448"
-      - "127.0.0.1:${ROUTER_WS_PORT:-7449}:7449"
     networks: [router]
+
+  # The browsers' door (G1): nginx -> here -> zenohd's ws/ listener. Gives
+  # each WebSocket a lifetime (nginx's timeouts only close idle ones) and
+  # logs the path nginx forwarded (it must carry no pass).
+  door:
+    <<: *console
+    env_file: !reset []
+    command: ["ruby", "bin/ws_door"]
+    environment:
+      WS_DOOR_LISTEN: 0.0.0.0:7451
+      WS_DOOR_UPSTREAM: zenohd:7449
+      WS_DOOR_MAX_SECONDS: ${WS_DOOR_MAX_SECONDS:-14400}
+    ports:
+      - "127.0.0.1:${ROUTER_WS_PORT:-7449}:7451"
+    networks: [router]
+    depends_on: [zenohd]
 
   console:
     <<: *console

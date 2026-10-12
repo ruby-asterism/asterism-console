@@ -2,8 +2,9 @@
 <section class="card">
   <h2>Browser passes</h2>
   <p>A pass lets the browser build of Family mruby connect to this console's router over <code>wss://</code>
-    for <%= (BrowserPass::TTL / 60).to_i %> minutes. It is yours: connections it opens are logged with your name.
-    A connection that is open stays open after the pass expires; a new connection needs a live pass.</p>
+    once, within <%= (BrowserPass::TTL / 60).to_i %> minutes. It is yours: the connection it opens is logged with your name.
+    A pass opens one connection; the router closes a connection after a few hours at most, and a page that
+    has to connect again (that, or a reload) needs a new pass.</p>
   <%= button_to "Make a pass", browser_passes_path, data: { turbo: false } %>
 </section>
 
@@ -16,7 +17,7 @@
       <dt>Router</dt><dd><code><%= PassLink.router || "(ASTERISM_PASS_ROUTER is not set)" %></code></dd>
       <dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd>
     </dl>
-    <p class="hint">Do not share the link: anyone who has it can connect as you until it expires. Revoke it below when done.</p>
+    <p class="hint">Do not share the link: whoever opens it first connects as you (once, until it expires). Revoke it below when you will not use it.</p>
   </section>
 <% end %>
 

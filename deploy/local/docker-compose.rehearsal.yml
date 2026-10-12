@@ -26,10 +26,13 @@ services:
   console:
     ports: !override []
 
+  door:
+    ports: !override []
+
   nginx:
     image: nginx:1.27-alpine
     restart: "no"
-    depends_on: [console, zenohd]
+    depends_on: [console, zenohd, door]
     volumes:
       - ./nginx/asterism-http.conf:/etc/nginx/conf.d/10-asterism-http.conf:ro
       - ../local/nginx/asterism-upstreams.conf:/etc/nginx/conf.d/00-asterism-upstreams.conf:ro
