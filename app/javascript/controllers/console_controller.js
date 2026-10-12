@@ -32,6 +32,13 @@ cytoscape.use(fcose)
 // (data "machine", lib/bridge/marks.rb), an app a grey dashed box, an
 // object a small red dot.
 //
+// Profiles (V2.5, lib/bridge/profiles.rb): a node that tells its profile
+// gets its mark from its kind (Family mruby, PicoRuby, CRuby, console) and
+// its icon (data "icon", /icons/<hash>) before its name; its host and
+// display name are in the details. A node without one keeps the mark by
+// its name (V2.2). The icon is a background image placed left of the
+// label (applyIcons), since a label cannot hold an image.
+//
 // Machines (V2.3, lib/bridge/groups.rb): the ROS 2 nodes that come from the
 // same IP address (two or more) are one "r_group" node, folded by default,
 // named by its IP or by the machine name an admin gave it. Opening it (its
@@ -80,11 +87,25 @@ const KINDS = {
 
 // What an Asterism node runs on (data "machine"): the mark before its name.
 // Plain characters of the Geometric Shapes block (no emoji).
+// The keys are the profiles' kinds (V2.5; before, "board" and "ruby").
 const MACHINES = {
-  board:   { mark: "\u25A3", label: "board (Family mruby, its sim or browser build)" },
-  ruby:    { mark: "\u25C8", label: "CRuby (any other Ruby process)" },
-  console: { mark: "\u25CE", label: "this console" },
+  family_mruby: { mark: "\u25A3", label: "Family mruby (a board, the sim or the browser build)" },
+  picoruby:     { mark: "\u25A4", label: "PicoRuby" },
+  cruby:        { mark: "\u25C8", label: "CRuby" },
+  console:      { mark: "\u25CE", label: "console" },
 }
+// A kind this console does not know (a profile may tell any word).
+const OTHER_MACHINE = { mark: "\u25C7", label: "another Ruby" }
+const machineOf = (kind) => MACHINES[kind] || (kind ? { ...OTHER_MACHINE, label: kind } : null)
+// How the mark is known (data "machine_by").
+const MACHINE_BY = { profile: "told by its profile", name: "guessed from its name: no profile", self: "this console" }
+// The size of a profile icon in the graph, and the room between it and the
+// name.
+const ICON_SIZE = 16
+const ICON_GAP = 4
+const ICON_PROPS = ["background-image", "background-width", "background-height", "background-fit", "background-clip",
+                    "background-image-containment", "background-position-x", "background-position-y",
+                    "background-offset-x", "background-offset-y", "bounds-expansion", "background-image-smoothing"]
 
 // Shown only with "Sessions as points" / only without it.
 const POINT_KINDS = ["session", "carries", "peer_session"]
@@ -317,7 +338,7 @@ export default class extends Controller {
 
   nodeElement(n) {
     let label = n.data?.self ? `${n.label} (this console)` : n.label
-    const machine = n.kind === "a_node" && MACHINES[n.data?.machine]
+    const machine = n.kind === "a_node" && machineOf(n.data?.machine)
     if (machine) label = `${machine.mark} ${label}`
     const data = { id: n.id, kind: n.kind, layer: n.layer, label, name: n.label, self: !!n.data?.self, info: n.data }
     if (n.parent) data.parent = n.parent
@@ -326,6 +347,7 @@ export default class extends Controller {
     if (n.kind === "registered") data.regkind = n.data?.peer?.kind
     if (n.kind === "r_node" || n.kind === "r_group") Object.assign(data, badgeOf(n.data, this.hideDebug))
     if (n.data?.group) data.group = n.data.group
+    if (n.kind === "a_node" && n.data?.icon) data.icon = n.data.icon
     if (n.kind === "r_topic") data.label = this.topicNodeLabel(n.id, n.label)
     return { group: "nodes", data, classes: `layer-${n.layer}` }
   }
@@ -386,7 +408,7 @@ export default class extends Controller {
         if (el.empty()) continue
         const fresh = this.nodeElement(n).data
         el.data({ label: fresh.label, name: fresh.name, info: fresh.info, self: fresh.self })
-        for (const key of ["registry", "regmark", "regkind", "group"]) {
+        for (const key of ["registry", "regmark", "regkind", "group", "icon"]) {
           if (fresh[key] === undefined) el.removeData(key)
           else el.data(key, fresh[key])
         }
@@ -849,6 +871,7 @@ export default class extends Controller {
         n.toggleClass("off", !shown)
         n.toggleClass("reg-on", this.layers.registry)
       })
+      this.applyIcons()
       this.cy.edges().forEach((e) => {
         const k = e.data("kind")
         let shown = true
@@ -1000,6 +1023,42 @@ export default class extends Controller {
     this.countsTarget.textContent = `v${this.version}  ${parts.join("  ")}`
   }
 
+  // The profile icons (V2.5): left of each Asterism node's name, above the
+  // box when it holds apps (the name is above it), below it otherwise. A
+  // style bypass, because the position depends on the label's width and
+  // the registry's corner mark (also a background image) has to go in the
+  // same arrays.
+  applyIcons() {
+    this.cy.nodes("[kind = 'a_node']").forEach((n) => {
+      const icon = n.data("icon")
+      if (!icon) {
+        if (n.scratch("iconStyled")) {
+          n.removeStyle(ICON_PROPS.join(" "))
+          n.removeScratch("iconStyled")
+        }
+        return
+      }
+      const w = labelWidth(n.data("label"))
+      const top = n.isParent()
+      const img = { url: icon, x: "50%", y: top ? "0%" : "100%", dx: -(w / 2 + ICON_GAP + ICON_SIZE / 2),
+                    dy: top ? -(ICON_SIZE + 4) : ICON_SIZE + 3, size: ICON_SIZE }
+      const imgs = [img]
+      if (n.hasClass("reg-on") && n.data("regmark")) {
+        imgs.push({ url: n.data("regmark"), x: "100%", y: "0%", dx: MARK_SIZE / 2, dy: -MARK_SIZE / 2, size: MARK_SIZE })
+      }
+      const side = Math.max(MARK_SIZE, w / 2 + ICON_GAP + ICON_SIZE + 4 - n.width() / 2)
+      n.style({
+        "background-image": imgs.map((i) => i.url), "background-width": imgs.map((i) => i.size),
+        "background-height": imgs.map((i) => i.size), "background-fit": imgs.map(() => "none"),
+        "background-clip": imgs.map(() => "none"), "background-image-containment": imgs.map(() => "over"),
+        "background-position-x": imgs.map((i) => i.x), "background-position-y": imgs.map((i) => i.y),
+        "background-offset-x": imgs.map((i) => i.dx), "background-offset-y": imgs.map((i) => i.dy),
+        "bounds-expansion": [ICON_SIZE + 6, side], "background-image-smoothing": imgs.map(() => "yes"),
+      })
+      n.scratch("iconStyled", true)
+    })
+  }
+
   renderLegend() {
     const badge = (c, t) => `<span class="pill" style="background:${c}">${t}</span>`
     const kinds = Object.entries(KINDS).filter(([kind]) => kind !== (this.sessionPoints ? "others" : "session") &&
@@ -1018,6 +1077,8 @@ export default class extends Controller {
       `<span class="key">${swatch(k)}${k.label}</span>`
     ).join("") +
       Object.values(MACHINES).map((m) => `<span class="key"><span class="mark-text">${m.mark}</span>${m.label}</span>`).join("") +
+      `<span class="key"><span class="mark-text">${OTHER_MACHINE.mark}</span>another kind a profile told</span>` +
+      `<span class="key">an icon before a name: the node's own (its profile)</span>` +
       lines +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
@@ -1183,9 +1244,15 @@ export default class extends Controller {
                   ["Carries", names("[kind = 'carries']").map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
       case "a_node":
+        const m = machineOf(info.machine)
+        const pr = info.profile || {}
         rows.push(["ID", info.node],
-                  ["Runs on", MACHINES[info.machine] ? `${MACHINES[info.machine].mark} ${MACHINES[info.machine].label}` +
-                    (info.machine === "console" ? "" : " (told by its name)") : null],
+                  ["Runs on", m ? `${esc(m.mark)} ${esc(m.label)}` +
+                    (MACHINE_BY[info.machine_by] ? ` <span class="hint">(${MACHINE_BY[info.machine_by]})</span>` : "") : null, true],
+                  ["Name", pr.name || null],
+                  ["Host", pr.host || null],
+                  ["Icon", info.icon ? `<img class="node-icon" src="${esc(info.icon)}" alt=""> <span class="hint">${esc(pr.icon_hash)}</span>`
+                    : (pr.icon_hash ? `<span class="hint">${esc(pr.icon_hash)} (not fetched yet)</span>` : null), true],
                   ["Apps", el.children().map((a) =>
                     `${this.link(a.id(), a.data("name"))}: ${a.children().map((o) => this.link(o.id(), o.data("name"))).join(", ")}`
                   ).join("<br>") || "none", true],
@@ -1624,6 +1691,15 @@ function badgeOf(info, hideDebug) {
 }
 
 // The legend's and the details' sample of a kind: its shape, fill and border.
+// The width of an Asterism node's label in the graph (bold 12 px, the
+// a_node style), for placing its icon.
+let labelCanvas = null
+function labelWidth(text) {
+  labelCanvas ||= document.createElement("canvas").getContext("2d")
+  labelCanvas.font = 'bold 12px "Helvetica Neue", Helvetica, sans-serif'
+  return labelCanvas.measureText(String(text || "")).width
+}
+
 function swatch(k) {
   const border = k.double ? `;outline:1.5px solid ${k.border};outline-offset:1.5px`
     : k.border ? `;border:${k.dashed ? "1.5px dashed" : "2px solid"} ${k.border}` : ""

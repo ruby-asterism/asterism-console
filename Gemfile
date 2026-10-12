@@ -56,10 +56,10 @@ group :test do
   gem "selenium-webdriver"
 end
 
-# Asterism 0.4.0: the local checkouts next to this repository.
+# Asterism 0.5.0 (node profiles, V2.5): the local checkouts next to this repository.
 # ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
 # rubygems.org instead, replace these two lines with
-#   gem "asterism", "~> 0.4.0", require: false
+#   gem "asterism", "~> 0.5.0", require: false
 # (asterism-zenoh comes with it) and run `bundle install` (README, "The
 # Asterism gems").
 gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")

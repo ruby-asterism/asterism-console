@@ -16,8 +16,12 @@ calls the methods that Asterism nodes expose.
   colour says only which family something is (blue routers, purple ROS 2,
   orange topics, Ruby red Asterism); the Asterism levels differ by shape: a
   node is a white box with a Ruby red border and a mark before its name for
-  what it runs on (board, CRuby, this console), an app a grey dashed box,
-  an object a small Ruby red dot (docs/v2_2.md).
+  what Ruby runs it (Family mruby, PicoRuby, CRuby, console), an app a grey
+  dashed box, an object a small Ruby red dot (docs/v2_2.md). A node of
+  asterism 0.5.0 or later tells its profile: the mark comes from its kind,
+  its icon is drawn before its name, its host and display name are in the
+  details; an older node keeps the mark guessed from its name
+  (docs/v2_5.md).
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name
@@ -105,15 +109,15 @@ node.
 
 ### The Asterism gems
 
-The console needs asterism and asterism-zenoh 0.4.0 or later (the versions
-in `Gemfile.lock`; V4 was checked with the asterism 0.4.1 checkout). The Gemfile takes them from the checkouts next to this
+The console needs asterism 0.5.0 or later (node profiles, V2.5) and
+asterism-zenoh 0.4.0 or later (the versions in `Gemfile.lock`). The Gemfile takes them from the checkouts next to this
 repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
 asterism-zenoh's C extension there with `rake compile`, or let Bundler
 build it). To use the gems from rubygems.org instead, replace the two
 `path:` lines of the Gemfile with
 
 ```ruby
-gem "asterism", "~> 0.4.0", require: false   # asterism-zenoh comes with it
+gem "asterism", "~> 0.5.0", require: false   # asterism-zenoh comes with it
 ```
 
 and run `bundle install`. Installing asterism-zenoh compiles a C extension

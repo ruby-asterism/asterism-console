@@ -33,9 +33,38 @@ class Bridge::MarksTest < ActiveSupport::TestCase
     g = Bridge::Marks.apply({ "nodes" => [ a_node("console", true), a_node("fmruby-aaaaaa"), a_node("linux"), a_node("wasm"),
                                            a_node("wasm-0a1b2c"), a_node("wasm-board"), a_node("cruby"), a_node("fmruby-board"), a_node("mujoco") ],
                               "edges" => [] })
-    assert_equal({ "console" => "console", "fmruby-aaaaaa" => "board", "linux" => "board", "wasm" => "board", "wasm-0a1b2c" => "board",
-                   "wasm-board" => "ruby", "cruby" => "ruby", "fmruby-board" => "ruby", "mujoco" => "ruby" },
+    assert_equal({ "console" => "console", "fmruby-aaaaaa" => "family_mruby", "linux" => "family_mruby", "wasm" => "family_mruby",
+                   "wasm-0a1b2c" => "family_mruby", "wasm-board" => "cruby", "cruby" => "cruby", "fmruby-board" => "cruby",
+                   "mujoco" => "cruby" },
                  g["nodes"].to_h { [ _1["label"], _1["data"]["machine"] ] })
+    assert_equal [ "self" ], g["nodes"].select { _1["data"]["self"] }.map { _1["data"]["machine_by"] }
+    assert_equal [ "name" ], g["nodes"].reject { _1["data"]["self"] }.map { _1["data"]["machine_by"] }.uniq
+  end
+
+  def with_profile(n, profile)
+    n.merge("data" => n["data"].merge("profile" => profile))
+  end
+
+  test "what a node runs on, by its profile (V2.5), and its icon when the store has it" do
+    nodes = [ with_profile(a_node("renamed-board"), { "kind" => "family_mruby", "host" => "atoms3r", "icon_hash" => "0a1b2c3d" }),
+              with_profile(a_node("fmruby-aaaaaa"), { "kind" => "cruby" }),
+              with_profile(a_node("pico"), { "kind" => "picoruby", "icon_hash" => "ffffffff" }),
+              with_profile(a_node("jr"), { "kind" => "jruby" }),
+              with_profile(a_node("console", true), { "kind" => "console", "icon_hash" => "0a1b2c3d" }),
+              a_node("old-cruby") ]
+    g = Bridge::Marks.apply({ "nodes" => nodes, "edges" => [] }, icons: Set["0a1b2c3d"])
+    got = g["nodes"].to_h { [ _1["label"], _1["data"].values_at("machine", "machine_by", "icon") ] }
+    assert_equal({ "renamed-board" => [ "family_mruby", "profile", "/icons/0a1b2c3d" ],
+                   "fmruby-aaaaaa" => [ "cruby", "profile", nil ],
+                   "pico" => [ "picoruby", "profile", nil ],
+                   "jr" => [ "jruby", "profile", nil ],
+                   "console" => [ "console", "self", "/icons/0a1b2c3d" ],
+                   "old-cruby" => [ "cruby", "name", nil ] }, got)
+    # Without the store's hashes (a recording's rewind on another console):
+    # no icon, the marks the same.
+    g2 = Bridge::Marks.apply(g)
+    assert_nil g2["nodes"].find { _1["label"] == "renamed-board" }["data"]["icon"]
+    assert_equal g, Bridge::Marks.apply(g, icons: Set["0a1b2c3d"])
   end
 
   test "registered names not here go in one box, with a line to the cloud router when it is here" do

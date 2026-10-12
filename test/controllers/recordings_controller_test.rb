@@ -175,10 +175,37 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     end
     get graph_recording_path(r, t: 5), as: :json
     graph = response.parsed_body["graph"]
-    assert_equal "board", graph["nodes"].find { _1["id"] == "a_node:linux" }["data"]["machine"]
+    assert_equal "family_mruby", graph["nodes"].find { _1["id"] == "a_node:linux" }["data"]["machine"]
     assert_equal "reg_box", graph["nodes"].find { _1["id"] == "reg:w2bot" }["parent"]
     assert graph["nodes"].any? { _1["kind"] == "reg_box" }
     assert graph["edges"].any? { _1["kind"] == "expect" && _1["source"] == "reg:w2bot" && _1["target"] == "router:r1" }
+  end
+
+  test "a recorded profile (V2.5) gives the mark, and the icon when this console has it" do
+    sign_in_as(users(:user))
+    r = Recording.new(user: users(:user), name: "profiles", status: "done")
+    r.selection_value = { "structure" => true }
+    r.save!
+    NodeIcon.keep("0a1b2c3d", File.binread(Rails.root.join("app/assets/images/asterism_console.png")), 32, 32)
+    nodes = [
+      { "id" => "a_node:renamed", "kind" => "a_node", "layer" => "asterism", "label" => "renamed",
+        "data" => { "node" => "renamed", "machine" => "cruby", "icon" => "/icons/stale",
+                    "profile" => { "kind" => "family_mruby", "host" => "atoms3r", "icon_hash" => "0a1b2c3d" } } },
+      { "id" => "a_node:elsewhere", "kind" => "a_node", "layer" => "asterism", "label" => "elsewhere",
+        "data" => { "node" => "elsewhere", "profile" => { "kind" => "picoruby", "icon_hash" => "ffffffff" } } }
+    ]
+    File.open(r.path, "wb") do |f|
+      w = MCAP::Writer.new(f)
+      g = w.add_channel(topic: "/asterism/graph", message_encoding: "json",
+                        schema_id: w.add_schema(name: "asterism/graph", encoding: "jsonschema", data: "{}"))
+      w.add_message(channel_id: g, log_time: 10, data: JSON.generate("kind" => "snapshot", "version" => 1,
+                                                                      "graph" => { "nodes" => nodes, "edges" => [] }))
+      w.finish
+    end
+    get graph_recording_path(r, t: 5), as: :json
+    data = response.parsed_body["graph"]["nodes"].to_h { [ _1["label"], _1["data"] ] }
+    assert_equal [ "family_mruby", "profile", "/icons/0a1b2c3d" ], data["renamed"].values_at("machine", "machine_by", "icon")
+    assert_equal [ "picoruby", "profile", nil ], data["elsewhere"].values_at("machine", "machine_by", "icon")
   end
 
   test "the rewind folds the ROS 2 nodes of one machine, with today's names" do

@@ -21,7 +21,11 @@
 #     and keys and writes them, with the network structure, into an MCAP
 #     file (Bridge::Recorder) until it is stopped or reaches a limit;
 #   - plays recordings back onto the network (Playback rows, admins only;
-#     Bridge::Player).
+#     Bridge::Player);
+#   - asks each Asterism node that appears for its profile (V2.5,
+#     Bridge::Profiles) on a worker thread of its own, follows the notices
+#     put on asterism/*/@profile, keeps the icons (NodeIcon), and tells its
+#     own profile (kind console, app/assets/images/asterism_console.png).
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -61,6 +65,8 @@ module Bridge
     RECORD_DEPTH = 1024
     # Points and log lines go out this often (one broadcast each).
     STREAMS_EVERY = 0.2
+    # This console's own profile icon (V2.5).
+    CONSOLE_ICON = File.expand_path("../../app/assets/images/asterism_console.png", __dir__)
 
     attr_reader :locator, :node_id, :config
 
@@ -117,6 +123,8 @@ module Bridge
       @topic_types = {} # ROS 2 topic id => type (from the graph)
       @recorders = {} # recording id => { recorder:, subs: [Subscription] }
       @players = {} # playback id => Player
+      @profiles = Profiles.new
+      @profile_queue = Queue.new # [node, notice or nil] for the profile worker
       @stop = false
     end
 
@@ -150,6 +158,7 @@ module Bridge
       reset
       opts = @config ? { config: @config } : {}
       @z = Asterism::Zenoh.open(@locator, **opts)
+      own_profile
       Asterism.connect(@locator, node: @node_id, app: @app, **opts)
       @net = Asterism.net
       @net.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
@@ -157,6 +166,8 @@ module Bridge
       @z.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
       follow("asterism/**", @asterism_keys)
       follow("@ros2_lv/**", @ros_keys)
+      @profile_sub = @z.subscribe("asterism/*/@profile") { |sample| profile_notice(sample) }
+      @profile_worker = start_profile_worker
       @z.start
       @self_zids = [ @z.zid ]
       say "bridge: zid #{@z.zid}, routers #{@z.router_zids.join(' ')}"
@@ -183,6 +194,8 @@ module Bridge
       @plot_meta = {}
       @logs.clear
       @log_subs = {}
+      @profiles.clear
+      @profile_queue.clear
     end
 
     def stop
@@ -239,6 +252,7 @@ module Bridge
         publish_graph if @lock.synchronize { @dirty }
         if now >= next_sync
           check_follows
+          sync_profiles
           sync_watches
           sync_rates
           sync_plots
@@ -404,7 +418,9 @@ module Bridge
         Graph.build(admin: @admin, asterism: @asterism_keys.keys, ros: @ros_keys.keys,
                     self_node: @node_id, self_zids: @self_zids, own_links: @own_links,
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
-                    cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured).to_h
+                    cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured,
+                    profiles: @profiles.to_graph.merge(@node_id => @own_profile).compact,
+                    icons: @profiles.icon_set).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"
@@ -689,6 +705,80 @@ module Bridge
       ConsoleChannel.send_to("logs", "logs", "lines" => lines, "dropped" => @logs.dropped, "errors" => @logs.errors)
     end
 
+    # --------------------------------------------------------------- profiles
+
+    # This console's profile (V2.5): kind console and its icon, kept in the
+    # icon store so its own node shows it too.
+    def own_profile
+      icon = File.binread(CONSOLE_ICON)
+      pr = Asterism.profile(kind: :console, icon: icon)
+      w, h, hash = Asterism::Profile.png_info(icon)
+      @profiles.keep_icon(hash, icon, w, h)
+      @own_profile = Profiles.summary(pr)
+    rescue SystemCallError, ArgumentError, ActiveRecord::ActiveRecordError => e
+      say "bridge: own profile: #{e.class}: #{e.message}"
+      @own_profile = Profiles.summary(Asterism.profile(kind: :console))
+    end
+
+    # The Asterism nodes here now (from their liveliness tokens), this
+    # console's own left out.
+    def asterism_nodes
+      keys = @lock.synchronize { @asterism_keys.keys }
+      keys.filter_map { _1.split("/")[1] }.uniq - [ @node_id ]
+    end
+
+    # The nodes that appeared are asked (once; again after they leave and
+    # come back).
+    def sync_profiles
+      @profiles.due(asterism_nodes).each { @profile_queue << [ _1, nil ] }
+    end
+
+    # A node's notice on asterism/<node>/@profile (the receiving thread):
+    # handed to the worker, which fetches the icon when it is new.
+    def profile_notice(sample)
+      node = sample.key.split("/")[1]
+      return if node.nil? || node == @node_id
+      pr = Asterism::Profile.check(MessagePack.unpack(sample.payload.to_s))
+      @profile_queue << [ node, pr ] if pr
+    rescue StandardError
+      nil # not MessagePack: not a profile
+    end
+
+    def start_profile_worker
+      Thread.new do
+        loop do
+          item = @profile_queue.pop
+          break if item == :stop
+          fetch_profile(*item)
+        rescue Asterism::Error, ActiveRecord::ActiveRecordError => e
+          say "bridge: profile #{item&.first}: #{e.class}: #{e.message}"
+        ensure
+          ActiveRecord::Base.connection_pool.release_connection
+        end
+      end
+    end
+
+    # Asks a node for its profile without the icon (or takes its notice),
+    # and once more with the icon when the store does not have it.
+    def fetch_profile(node, told)
+      pr = told || Asterism.profile_of(node, icon: false, timeout: GET_TIMEOUT)
+      hash = pr && pr["icon_hash"]
+      kept = false
+      if hash && !@profiles.icon?(hash)
+        full = Asterism.profile_of(node, timeout: GET_TIMEOUT)
+        if full && full["icon"] && full["icon_hash"] == hash
+          w, h, = Asterism::Profile.png_info(full["icon"])
+          @profiles.keep_icon(hash, full["icon"], w, h)
+          kept = true
+          say "bridge: profile #{node}: icon #{hash} kept (#{full['icon'].bytesize} B, #{w}x#{h})"
+        end
+      end
+      changed = told ? @profiles.told(node, pr) : @profiles.answered(node, pr)
+      @lock.synchronize { @dirty = true } if changed || kept
+      return unless changed
+      say "bridge: profile #{node}: #{pr ? Profiles.summary(pr).map { |k, v| "#{k}=#{v}" }.join(' ') : 'none (no answer)'}"
+    end
+
     # Called on the receiving thread, so the database (Action Cable's
     # adapter) is left to the main thread.
     def flush_outbox
@@ -907,6 +997,14 @@ module Bridge
     # --------------------------------------------------------------- shutdown
 
     def shutdown
+      if @profile_worker
+        @profile_queue.clear
+        @profile_queue << :stop
+        @profile_worker.join(GET_TIMEOUT * 2 + 1)
+        @profile_worker = nil
+      end
+      @profile_sub&.close rescue nil
+      @profile_sub = nil
       stop_recordings("the bridge stopped (or lost its router)")
       stop_players
       @workers.each { _1.join(3) }

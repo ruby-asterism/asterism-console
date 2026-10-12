@@ -65,8 +65,11 @@
 #     address (V2.4, Bridge::Gateways: a NAT, such as Docker's published
 #     ports) are not folded: the machine behind it is not known.
 #   - The marks (V2.2, Bridge::Marks): what each Asterism node runs on (data
-#     "machine"), the registered names not here in one box ("reg_box") with
-#     "expect" edges to the router the registry says they connect to.
+#     "machine"; V2.5: from its profile when it has one), the icon's URL, the
+#     registered names not here in one box ("reg_box") with "expect" edges to
+#     the router the registry says they connect to.
+#   - The profiles (V2.5, Bridge::Profiles): data "profile" on an Asterism
+#     node that told its profile (kind, host, name, icon_hash).
 module Bridge
   class Graph
     LAYERS = {
@@ -95,17 +98,21 @@ module Bridge
     attr_accessor :names
     # The configured gateway addresses (Bridge::Gateways).
     attr_accessor :gateways
+    # The icon hashes the store has (Bridge::Marks gives those nodes "icon").
+    attr_accessor :icons
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil, peer_links: [], cloud: nil, names: [], gateways: [])
+                   registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil)
       g = new
       g.cloud = cloud
+      g.icons = icons
       g.names = names
       g.gateways = gateways
       g.add_admin(admin, self_zids.map { norm_zid(_1) })
       g.add_own_links(own_links)
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
+      g.add_profiles(profiles)
       g.add_ros(ros)
       g.finish_ros
       g.link_tokens(admin)
@@ -321,6 +328,15 @@ module Bridge
       end
     end
 
+    # The profiles the nodes told (V2.5): data "profile" (kind, host, name,
+    # icon_hash) on the Asterism nodes that are here.
+    def add_profiles(profiles)
+      (profiles || {}).each do |nid, summary|
+        n = @nodes["a_node:#{nid}"]
+        n["data"]["profile"] = summary if n && summary
+      end
+    end
+
     def a_node(nid, self_node)
       node("a_node:#{nid}", "a_node", nid, "node" => nid, "self" => nid == self_node)
     end
@@ -475,15 +491,17 @@ module Bridge
     # (Bridge::Marks) added.
     def to_h
       self.class.derive({ "nodes" => @nodes.keys.sort.map { @nodes[_1] }, "edges" => @edges.keys.sort.map { @edges[_1] } },
-                        cloud: @cloud, names: @names, gateways: @gateways)
+                        cloud: @cloud, names: @names, gateways: @gateways, icons: @icons)
     end
 
     # The derived parts on a graph in to_h form (live, or recorded: the
     # rewind runs it again on recorded graphs, with today's names).
     # gateways: addresses to take as gateways besides the ones the graph
     # shows (Bridge::Gateways).
-    def self.derive(graph, cloud: nil, names: [], gateways: [])
-      Marks.apply(Groups.apply(Connections.apply(graph), names: names || [], gateways: gateways || []), cloud: cloud)
+    # icons: the icon hashes the store has (nil: none is linked).
+    def self.derive(graph, cloud: nil, names: [], gateways: [], icons: nil)
+      Marks.apply(Groups.apply(Connections.apply(graph), names: names || [], gateways: gateways || []), cloud: cloud,
+                                                                                                         icons: icons)
     end
 
     # What changed from old to new (both to_h): added / removed / changed.

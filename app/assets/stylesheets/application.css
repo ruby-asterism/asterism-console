@@ -109,6 +109,7 @@ details { margin-top: 8px; font-size: 12px; }
 .swatch { box-sizing: border-box; }
 img.mark { width: 14px; height: 14px; vertical-align: middle; }
 .mark-text { font-weight: 700; font-size: 13px; color: var(--text); }
+img.node-icon { width: 32px; height: 32px; vertical-align: middle; image-rendering: pixelated; }
 .swatch.line { width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; }
 .swatch.dashed-line { height: 0; border-top: 2px dashed; border-radius: 0; background: transparent; }
 table.sessions { border-collapse: collapse; font-size: 12px; }

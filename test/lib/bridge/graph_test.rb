@@ -253,7 +253,7 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_equal "reg_box", ghost["parent"]
     assert edge?(g, "expect", "reg:w2bot", "router:#{ROUTER}")
     assert_equal "console", c["machine"]
-    assert_equal "board", node(g, "a_node:fmruby-aaaaaa")["data"]["machine"]
+    assert_equal "family_mruby", node(g, "a_node:fmruby-aaaaaa")["data"]["machine"]
     refute g["nodes"].any? { _1["id"] == "reg:console" }
     # Sessions and ROS 2 nodes are not names of the registry: left as they are.
     assert_nil node(g, "session:#{BOARD}")["data"]["registry"]

@@ -2,15 +2,19 @@
 # to_h form, so the same code serves the live graph (Graph#to_h) and
 # recordings made before V2.2 (RecordingsController#graph):
 #
-#   - data "machine" on every Asterism node: "console" (this console),
-#     "board" (a Family mruby board or its Linux / browser build) or "ruby"
-#     (any other Ruby process, CRuby in practice). The network does not say
-#     what a node runs on (an Asterism node is a liveliness token with its
-#     name, nothing more), so this goes by the boards' naming: a board
-#     calls itself by its mDNS name fmruby-<6 hex digits>, a browser build
-#     by the ID its page made, wasm-<6 hex digits>, and the simulation falls
-#     back to "linux" (a browser build without its page, "wasm"). A board
-#     given another name in its node file shows as "ruby".
+#   - data "machine" on every Asterism node: what Ruby runs it, by the
+#     names of the profiles' kinds (V2.5): "family_mruby", "picoruby",
+#     "cruby", "console", or another kind a profile told; and data
+#     "machine_by", how that is known: "self" (this console), "profile" (the
+#     node told it, asterism 0.5.0 and later) or "name". A node without a
+#     profile (an older version) goes by the boards' naming, as in V2.2: a
+#     board calls itself by its mDNS name fmruby-<6 hex digits>, a browser
+#     build by the ID its page made, wasm-<6 hex digits>, and the simulation
+#     falls back to "linux" (a browser build without its page, "wasm"); those
+#     are "family_mruby", anything else "cruby" (any other Ruby process).
+#     Before V2.5 the values were "board", "ruby" and "console".
+#   - data "icon" on an Asterism node whose profile has an icon the store
+#     has (icons:): the URL /icons/<icon_hash>.
 #   - the relay registry's names that are not here (kind "registered") in
 #     one box, "reg_box" (label "Not connected (registry)"), instead of
 #     each on its own.
@@ -37,9 +41,18 @@ module Bridge
 
     module_function
 
-    def machine(node, self_node)
-      return "console" if self_node
-      BOARD_NAME.match?(node.to_s) ? "board" : "ruby"
+    # [machine, how it is known] of an Asterism node's data.
+    def machine(data, name = data["node"])
+      return %w[console self] if data["self"]
+      kind = data.dig("profile", "kind")
+      return [ kind.to_s, "profile" ] if kind
+      [ BOARD_NAME.match?(name.to_s) ? "family_mruby" : "cruby", "name" ]
+    end
+
+    def icon_url(data, icons)
+      hash = data.dig("profile", "icon_hash")
+      return nil unless hash && icons&.include?(hash)
+      "/icons/#{hash}"
     end
 
     # The router a registry entry connects to (by name), or nil when the
@@ -51,12 +64,16 @@ module Bridge
       cloud.to_s
     end
 
-    def apply(graph, cloud: nil)
+    def apply(graph, cloud: nil, icons: nil)
       nodes = graph["nodes"].to_a.reject { _1["kind"] == BOX }.map do |n|
         case n["kind"]
         when "a_node"
-          d = n["data"] || {}
-          n.merge("data" => d.merge("machine" => machine(d["node"] || n["label"], d["self"])))
+          d = (n["data"] || {}).except("icon")
+          m, by = machine(d, d["node"] || n["label"])
+          d = d.merge("machine" => m, "machine_by" => by)
+          url = icon_url(d, icons)
+          d["icon"] = url if url
+          n.merge("data" => d)
         when "registered"
           n.except("parent").merge("data" => (n["data"] || {}).except("expect"))
         else

@@ -162,7 +162,8 @@ class RecordingsController < ApplicationController
       if g
         g = g.merge("graph" => Bridge::Graph.derive(g["graph"], cloud: Relay::Settings.cloud_name,
                                                                 names: MachineName.for_graph,
-                                                                gateways: rewind_gateways(g["graph"])))
+                                                                gateways: rewind_gateways(g["graph"]),
+                                                                icons: rewind_icons(g["graph"])))
       end
       g ? relative(v, g, %w[at prev next]) : { "error" => "this recording has no network structure" }
     end
@@ -176,6 +177,14 @@ class RecordingsController < ApplicationController
   end
 
   private
+
+  # The icons of the recorded profiles (V2.5) that this console's store has.
+  # The recording keeps each node's profile without the icon (in the graph,
+  # data "profile"); the icon comes from the store by its hash, so a
+  # recording made on another console shows the marks without the icons.
+  def rewind_icons(graph)
+    NodeIcon.known(graph["nodes"].to_a.filter_map { _1.dig("data", "profile", "icon_hash") })
+  end
 
   def rewind_gateways(recorded)
     gws = Bridge::Gateways.configured

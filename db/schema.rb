@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_11_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_12_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -60,6 +60,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_11_120000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["created_by_id"], name: "index_machine_names_on_created_by_id"
+  end
+
+  create_table "node_icons", force: :cascade do |t|
+    t.string "icon_hash", null: false
+    t.binary "png", null: false
+    t.integer "width", null: false
+    t.integer "height", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["icon_hash"], name: "index_node_icons_on_icon_hash", unique: true
   end
 
   create_table "playbacks", force: :cascade do |t|

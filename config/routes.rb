@@ -45,6 +45,8 @@ Rails.application.routes.draw do
   # Names of machines of ROS 2 nodes (V2.3), from the graph's details.
   resources :machine_names, only: %i[index create update destroy]
   resources :calls, only: :index
+  # The icons of the nodes' profiles (V2.5).
+  get "icons/:hash", to: "icons#show", as: :icon, format: false
 
   # The relay: registry, certificates (through the signer), apply.
   namespace :relay do
