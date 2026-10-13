@@ -1,23 +1,60 @@
 <% if role.errors.any? %><p class="error"><%= role.errors.full_messages.to_sentence %></p><% end %>
-<%= form_with model: role, url: role.persisted? ? relay_role_path(role) : relay_roles_path, class: "grid-form" do |f| %>
-  <label>Name <%= f.text_field :name, required: true, pattern: "[a-z0-9][a-z0-9_\\-]{0,40}" %></label>
-  <label class="wide">Description <%= f.text_field :description %></label>
-  <label>Read and write (every message, both ways; one template per line)
-    <%= f.text_area :rw_templates, rows: 4, placeholder: "asterism/${node}/app/**" %></label>
-  <label>Read (subscribe and liveliness queries from it; everything on these keys towards it)
-    <%= f.text_area :read_templates, rows: 4, placeholder: "asterism/*/app/**" %></label>
-  <label>Ask (queries from it: an Asterism call or meta is a query)
-    <%= f.text_area :ask_templates, rows: 4, placeholder: "asterism/*/app/*/call/${node}" %></label>
-  <label>Watch (the liveliness watch from it)
-    <%= f.text_area :watch_templates, rows: 2, placeholder: "asterism/**" %></label>
+<%= form_with model: role, url: role.persisted? ? relay_role_path(role) : relay_roles_path, class: "grid-form role-form",
+              data: { controller: "role-form" } do |f| %>
+  <div class="wide role-helper">
+    <label for="role_app">App name <span class="field-help">Fills the four templates below with the usual pattern
+      for one app, and suggests a name and a description. Fields that already have something are kept unless you
+      agree to overwrite them. Nothing is saved until you press <%= role.persisted? ? "Save" : "Make" %>.</span></label>
+    <div class="row">
+      <input type="text" id="role_app" placeholder="demo" autocomplete="off" aria-describedby="role_app_message"
+             data-role-form-target="app" data-action="keydown->role-form#key">
+      <button type="button" data-action="role-form#fill">Fill in</button>
+    </div>
+    <p class="hint" id="role_app_message" data-role-form-target="message" aria-live="polite"></p>
+  </div>
+  <label>Name <%= f.text_field :name, required: true, pattern: "[a-z0-9][a-z0-9_\\-]{0,40}",
+                               data: { role_form_target: "name", label: "Name" } %></label>
+  <label class="wide">Description <span class="field-help">What the role is for, in a sentence: the registry shows it
+      next to the name.</span>
+    <%= f.text_field :description, data: { role_form_target: "description", label: "Description" } %></label>
+
+  <div class="wide template-help">
+    <p><strong>How to write a template:</strong> one key expression per line.</p>
+    <dl class="facts">
+      <dt><code>${node}</code></dt><dd>each node the row speaks for: its own name, or the boards behind a router.</dd>
+      <dt><code>*</code></dt><dd>exactly one part between slashes (any node, any object).</dd>
+      <dt><code>**</code></dt><dd>any number of parts, also none (everything below).</dd>
+      <dt><code>@</code></dt><dd>parts starting with <code>@</code> (like <code>@profile</code>) are matched by
+        neither <code>*</code> nor <code>**</code>: write them out.</dd>
+    </dl>
+  </div>
+  <label>Read and write
+    <span class="field-help">Everything on these keys, both ways: publish, subscribe, ask and answer. Usually the
+      node's own place, <code>asterism/${node}/&lt;app&gt;/**</code>.</span>
+    <%= f.text_area :rw_templates, rows: 4, placeholder: "asterism/${node}/app/**",
+                    data: { role_form_target: "rw", label: "Read and write" } %></label>
+  <label>Read
+    <span class="field-help">Subscribe to these keys and ask who is there; it sends nothing on them. Usually every
+      node's app, <code>asterism/*/&lt;app&gt;/**</code>.</span>
+    <%= f.text_area :read_templates, rows: 4, placeholder: "asterism/*/app/**",
+                    data: { role_form_target: "read", label: "Read" } %></label>
+  <label>Ask
+    <span class="field-help">Send queries on these keys (an Asterism call or meta is a query). Usually calls in its
+      own name only, <code>asterism/*/&lt;app&gt;/*/call/${node}</code>.</span>
+    <%= f.text_area :ask_templates, rows: 4, placeholder: "asterism/*/app/*/call/${node}",
+                    data: { role_form_target: "ask", label: "Ask" } %></label>
+  <label>Watch
+    <span class="field-help">Watch who joins and leaves. <code>asterism/**</code> is fine: what reaches it is still
+      cut by the other three.</span>
+    <%= f.text_area :watch_templates, rows: 2, placeholder: "asterism/**",
+                    data: { role_form_target: "watch", label: "Watch" } %></label>
   <label class="check wide"><%= f.check_box :for_browsers %> Browsers have this role (every ws/ session;
     <code>${node}</code> is <code><%= Relay::Settings.cloud_settings["browser_nodes"] %></code>)</label>
   <label class="wide">Opens in a browser page (optional: what the page opened from the console starts, for example
     an app's path) <%= f.text_field :browser_app %></label>
-  <p class="hint wide"><code>${node}</code> is put in for each node the row speaks for. A template without it is the
-    same for every row. Calls under the caller's own name only: put <code>asterism/*/&lt;app&gt;/*/call/${node}</code>
-    under Ask (with <code>asterism/*/&lt;app&gt;/*/meta</code> and <code>asterism/*/@profile</code>), not the
-    whole app. A subscription wider than the keys allowed is refused whole; keys starting with <code>@</code> are
-    not in <code>**</code>.</p>
+  <p class="hint wide">A template without <code>${node}</code> is the same for every row. For calls under the
+    caller's own name only, put <code>asterism/*/&lt;app&gt;/*/call/${node}</code> under Ask (with
+    <code>asterism/*/&lt;app&gt;/*/meta</code> and <code>asterism/*/@profile</code> when the app needs them), not the
+    whole app. A subscription wider than the keys allowed is refused whole.</p>
   <%= f.submit role.persisted? ? "Save" : "Make" %>
 <% end %>

@@ -10,7 +10,6 @@ module Relay
       @peers = RelayPeer.includes(:certificates, :roles).order(:kind, :name)
       @seen = Relay::Presence.seen(GraphState.current.graph)
       @cloud = Relay::Settings.cloud_name
-      @plan = Relay::Applier.new.plan
     end
 
     def show

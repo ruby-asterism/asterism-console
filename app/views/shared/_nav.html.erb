@@ -1,19 +1,46 @@
+<%# The menu, grouped by what the pages are for: watching the network, playing
+    on it (the browser build), administering it (admins only), and the account. %>
 <% if authenticated? %>
-  <nav class="nav" aria-label="Pages">
-    <%= link_to "Graph", root_path %>
-    <%= link_to "Plots", plots_path %>
-    <%= link_to "Logs", logs_path %>
-    <%= link_to "Call log", calls_path %>
-    <%= link_to "Browser passes", browser_passes_path %>
-    <% if current_user.admin? %>
-      <%= link_to "Recordings", recordings_path %>
-      <span class="nav-admin" title="Admin pages (/admin)">
-        <%= link_to "Call permissions", call_permissions_path %>
-        <%= link_to "Relay", relay_peers_path %>
-        <%= link_to "Users", admin_users_path %>
-      </span>
-    <% end %>
-    <span class="who"><%= link_to current_user.email_address, account_path %><%= " (admin)" if current_user.admin? %></span>
-    <%= button_to "Sign out", session_path, method: :delete, class: "small", form_class: "inline" %>
+  <nav class="nav" aria-label="Pages" data-controller="nav">
+    <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="nav-menu"
+            data-nav-target="toggle" data-action="nav#toggle">Menu</button>
+    <div class="nav-menu" id="nav-menu" data-nav-target="menu">
+      <div class="nav-group watch" role="group" aria-label="Watch">
+        <span class="nav-label">Watch</span>
+        <%= nav_link "Graph", root_path %>
+        <%= nav_link "Plots", plots_path %>
+        <%= nav_link "Logs", logs_path %>
+        <%= nav_link "Call log", calls_path %>
+        <%= nav_link "Recordings", recordings_path, under: recordings_path if current_user.admin? %>
+      </div>
+      <div class="nav-group play" role="group" aria-label="Play">
+        <span class="nav-label">Play</span>
+        <% if BrowserPage.enabled? && current_user.handle.present? %>
+          <%= form_with url: open_browser_passes_path, method: :post, class: "inline", data: { turbo: false },
+                        html: { target: "_blank" } do |f| %>
+            <%= f.hidden_field :app, value: "", id: nil %>
+            <%= f.submit "Open the browser build", class: "nav-open", name: nil,
+                         title: "Opens the browser build in a new tab with a fresh pass" %>
+          <% end %>
+        <% end %>
+        <%= nav_link "Browser passes", browser_passes_path %>
+      </div>
+      <% if current_user.admin? %>
+        <div class="nav-group admin" role="group" aria-label="Admin" title="Admin pages (/admin)">
+          <span class="nav-label">Admin</span>
+          <%= nav_link "Relay", relay_peers_path, under: "/admin/relay" %>
+          <%= nav_link "Call permissions", call_permissions_path %>
+          <%= nav_link "Users", admin_users_path, under: [ admin_users_path, admin_invitations_path, admin_browser_passes_path ] %>
+        </div>
+      <% end %>
+      <div class="nav-group account" role="group" aria-label="Account">
+        <%= link_to account_path, class: ["who", ("current" if request.path == account_path)],
+                    title: "#{current_user.email_address}#{' (admin)' if current_user.admin?}",
+                    aria: { current: ("page" if request.path == account_path) } do %>
+          <%= nav_who(current_user) %><%= tag.span("admin", class: "nav-role") if current_user.admin? %>
+        <% end %>
+        <%= button_to "Sign out", session_path, method: :delete, class: "small", form_class: "inline" %>
+      </div>
+    </div>
   </nav>
 <% end %>

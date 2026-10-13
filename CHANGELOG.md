@@ -18,8 +18,34 @@ before the update.
   `ASTERISM_BROWSER_PAGE` without `{node}` is not used, and
   `bin/asterism setup` stops on it (docs/g1_5.md, "Every link names the
   node").
+- Easier to read: larger type (16 px body, 14 px hints, tables and code)
+  with matching headings, spacing and buttons, on every page.
+- The menu is grouped by role: Watch (Graph, Plots, Logs, Call log,
+  Recordings), Play ("Open the browser build" when the user can, Browser
+  passes), Admin (Relay, Call permissions, Users; admins only, in their own
+  tint), then the account (the handle, or the email address) and Sign out.
+  The current page is marked. At phone width the groups fold behind a
+  "Menu" button.
+- Relay: Apply is no longer a tab (Registry and Roles are). While the
+  registry differs from the file the cloud router runs with, both pages show
+  a banner whose "Review and apply" opens the confirmation (now, when nobody
+  is connected, or at a time, as before); the history of applies is linked
+  from there. The old addresses still work.
+- Relay roles: an "App name" helper with "Fill in" fills the four templates
+  with the usual pattern for one app and suggests a name and a description
+  (only empty fields, unless overwriting is confirmed); each template field
+  says what it allows and what `${node}`, `*`, `**` and `@` mean. The
+  descriptions are shown in the roles list and next to the roles a registry
+  row picks. The example role "match" gets a description when it has none
+  (a migration for existing consoles, the seed for new ones).
+- The graph page: the watched keys moved to a panel under the graph and
+  Details, one row per key (key, latest value, time, Stop; a click on the
+  value shows it in full with the recent samples). The panel's height and
+  the Details column's width can be dragged, the panel collapsed to one
+  line; this browser remembers them.
 - Updating from 0.1.1: set `CONSOLE_VERSION=0.1.2` in `.env`, pull and
-  restart (docs/install.md, "Updating"). No migration. Check that
+  restart (docs/install.md, "Updating"). One migration (the description of
+  the role "match", only when it has none). Check that
   `ASTERISM_BROWSER_PAGE` has `{node}` (as in `env.example`), or there are
   no links and no button. Users who open browser pages need a handle
   (Account > Handle). Serve a browser build that refuses a pass without a

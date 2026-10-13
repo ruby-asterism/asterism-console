@@ -1,6 +1,6 @@
 <% content_for(:title, "Apply #{@apply.id} - Asterism Console") %>
 <% if @apply.running? || @apply.waiting? %><% content_for(:head) { tag.meta("http-equiv": "refresh", content: @apply.running? ? "2" : "10") } %><% end %>
-<%= render "relay/peers/tabs" %>
+<%= render "relay/peers/tabs", banner: false %>
 <section class="card">
   <h2>Apply <%= @apply.id %> <span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad' }[@apply.status] || 'warn' %>"><%= @apply.status %></span></h2>
   <p class="hint"><%= @apply.user&.email_address %>, <%= when_text(@apply.created_at) %><%= " to #{l(@apply.finished_at, format: '%H:%M:%S')}" if @apply.finished_at %>,

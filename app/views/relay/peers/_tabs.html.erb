@@ -1,9 +1,21 @@
+<%# The relay pages' tabs (Registry, Roles). Applying is not a tab: while the
+    registry differs from the cloud router's file, a banner leads to the
+    confirmation page (relay/applies/new), which links the history. The apply
+    pages pass banner: false. %>
+<% banner = local_assigns.fetch(:banner, true) %>
 <nav class="tabs" aria-label="Relay">
-  <%= link_to "Registry", relay_peers_path %>
-  <%= link_to "Roles", relay_roles_path %>
-  <%= link_to "Apply", new_relay_apply_path %>
-  <%= link_to "Applies", relay_applies_path %>
+  <%= nav_link "Registry", relay_peers_path, under: relay_peers_path %>
+  <%= nav_link "Roles", relay_roles_path, under: relay_roles_path %>
+  <% if banner && !relay_unapplied? %>
+    <span class="tabs-aside hint">The cloud router runs this registry.</span>
+  <% end %>
 </nav>
+<% if banner && relay_unapplied? %>
+  <div class="apply-banner" role="status">
+    <span>Changes not yet applied to the cloud router</span>
+    <%= link_to "Review and apply", new_relay_apply_path, class: "button primary" %>
+  </div>
+<% end %>
 <% if (waiting = RelayApply.waiting_one) %>
   <div class="notice-bar"><%= render "relay/applies/waiting", apply: waiting %></div>
 <% end %>

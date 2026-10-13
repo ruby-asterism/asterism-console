@@ -1,5 +1,6 @@
 require "test_helper"
 require Rails.root.join("db/migrate/20261013100000_relay_roles").to_s
+require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
 
 # A new console (db:prepare loads the schema and runs db/seeds.rb) and a
 # migrated one (the migration) start with the same role "match".
@@ -12,5 +13,26 @@ class RelayRoleSeedTest < ActiveSupport::TestCase
     assert_equal migrated.to_config, seeded.to_config
     load Rails.root.join("db/seeds.rb")
     assert_equal 1, RelayRole.count
+  end
+
+  test "the seeded role says what it is for" do
+    RelayRole.delete_all
+    load Rails.root.join("db/seeds.rb")
+    assert_match(/\AFor games on the app game: /, RelayRole.sole.description)
+  end
+
+  test "a match role without a description gets one, for its own app, only when blank" do
+    role = relay_roles(:match)
+    role.update!(description: "", rw_templates: "asterism/${node}\nasterism/${node}/othello/**")
+    RelayRoleMatchDescription.new.up
+    assert_equal RelayRoleMatchDescription.description("othello"), role.reload.description
+    assert_match(/\AFor games on the app othello: /, role.description)
+    role.update!(description: "Mine")
+    RelayRoleMatchDescription.new.up
+    load Rails.root.join("db/seeds.rb")
+    assert_equal "Mine", role.reload.description, "a description an admin wrote stays"
+    role.update!(description: nil)
+    load Rails.root.join("db/seeds.rb")
+    assert_match(/\AFor games on the app othello: /, role.reload.description, "the seed fills it too")
   end
 end

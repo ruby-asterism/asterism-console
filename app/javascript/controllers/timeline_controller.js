@@ -13,9 +13,9 @@ import uPlot from "uplot"
 // Times are nanoseconds from the first message (offsets): the server
 // takes and gives them so (RecordingsController).
 
-const ROW_H = 24
-const LABEL_W = 240
-const AXIS_H = 26
+const ROW_H = 32
+const LABEL_W = 280
+const AXIS_H = 30
 const KIND_COLORS = { ros: "#6a1b9a", key: "#2e7d32", graph: "#1f4e99", other: "#8a8f98" }
 const KIND_NAMES = { ros: "ROS 2", key: "Asterism", graph: "network", other: "" }
 const COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
@@ -114,7 +114,7 @@ export default class extends Controller {
     const line = css.getPropertyValue("--line") || "#ddd"
     g.fillStyle = css.getPropertyValue("--panel") || "#fff"
     g.fillRect(0, 0, w, h)
-    g.font = "11px system-ui, sans-serif"
+    g.font = "13px system-ui, sans-serif"
     // The time axis: seconds from the start, and the wall clock of the first.
     g.fillStyle = muted
     g.strokeStyle = line
@@ -133,11 +133,11 @@ export default class extends Controller {
         g.fillRect(0, y, w, ROW_H)
       }
       g.fillStyle = KIND_COLORS[ch.kind] || muted
-      g.fillRect(4, y + 7, 8, 8)
+      g.fillRect(4, y + 8, 9, 9)
       g.fillStyle = text
-      g.fillText(shorten(ch.topic, 30), 18, y + 12)
+      g.fillText(shorten(ch.topic, 32), 19, y + 14)
       g.fillStyle = muted
-      g.fillText(`${shorten(ch.schema || ch.message_encoding, 24)} - ${ch.count}`, 18, y + 22)
+      g.fillText(`${shorten(ch.schema || ch.message_encoding, 24)} - ${ch.count}`, 19, y + 28)
       g.strokeStyle = line
       g.beginPath(); g.moveTo(0, y + ROW_H - 0.5); g.lineTo(w, y + ROW_H - 0.5); g.stroke()
       const counts = this.ticks?.channels?.[ch.id]

@@ -5,16 +5,20 @@
 # app "game" against others. A console that was migrated from G0 gets the
 # same role from its migration (with the rows that were "Player"). An
 # admin may change or remove it, and it is not made again once any role
-# exists.
+# exists. A "match" role without a description gets one (also done for
+# existing consoles by db/migrate/*_relay_role_match_description.rb).
+require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
 if RelayRole.none?
   RelayRole.create!(
     name: "match",
-    description: "Play a game against others: write at your own nodes' game app, read every node's, " \
-                 "call others only under your own name.",
+    description: RelayRoleMatchDescription.description("game"),
     rw_templates: "asterism/${node}\nasterism/${node}/game/**\nasterism/${node}/@profile",
     read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/@profile",
     ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}",
     watch_templates: "asterism/**",
     for_browsers: true
   )
+end
+if (match = RelayRole.find_by(name: "match")) && match.description.blank?
+  match.update!(description: RelayRoleMatchDescription.description(RelayRoleMatchDescription.app_of(match.rw_templates)))
 end

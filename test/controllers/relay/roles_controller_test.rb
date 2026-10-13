@@ -33,6 +33,27 @@ class Relay::RolesControllerTest < ActionDispatch::IntegrationTest
     assert_equal %w[match], peer.reload.roles.map(&:name)
   end
 
+  test "the role form has the app helper, help for each template, and the descriptions are shown" do
+    sign_in_as(users(:admin))
+    get new_relay_role_path
+    assert_select "form.role-form[data-controller=role-form]" do
+      assert_select "input#role_app[data-role-form-target=app]:not([name])", 1, "the helper is not sent"
+      assert_select "button[type=button][data-action='role-form#fill']", "Fill in"
+      %w[name description rw read ask watch].each { assert_select "[data-role-form-target=#{_1}]", 1 }
+      assert_select "textarea[name='relay_role[rw_templates]'][data-role-form-target=rw]"
+      assert_select ".field-help", minimum: 5
+      assert_select ".template-help dt code", "${node}"
+      assert_select ".template-help dt code", "**"
+    end
+    get relay_roles_path
+    assert_select "th", "What it is for"
+    assert_select "td.role-desc", relay_roles(:match).description
+    peer = RelayPeer.create!(name: "home-a", kind: "router")
+    get edit_relay_peer_path(peer)
+    assert_select "label.role-pick strong", "match"
+    assert_select "label.role-pick .role-desc", relay_roles(:match).description
+  end
+
   test "a new router starts with no keys" do
     sign_in_as(users(:admin))
     get new_relay_peer_path(kind: "router")

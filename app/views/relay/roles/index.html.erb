@@ -9,11 +9,12 @@
     <p class="hint">No roles yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Rows</th><th>Browsers</th><th>Opens in a browser page</th></tr></thead>
+      <thead><tr><th>Name</th><th>What it is for</th><th>Rows</th><th>Browsers</th><th>Opens in a browser page</th></tr></thead>
       <tbody>
         <% @roles.each do |r| %>
           <tr>
-            <td><%= link_to r.name, relay_role_path(r) %><br><span class="hint"><%= r.description %></span></td>
+            <td class="nowrap"><strong><%= link_to r.name, relay_role_path(r) %></strong></td>
+            <td class="role-desc"><%= r.description.presence || tag.span("no description", class: "hint") %></td>
             <td><%= r.peers.any? ? r.peers.map(&:name).sort.join(", ") : tag.span("none", class: "hint") %></td>
             <td><%= r.for_browsers? ? (@browsers ? "yes" : "yes (no browsers are let in now)") : "-" %></td>
             <td><%= r.browser_app.present? ? tag.code(r.browser_app) : "-" %></td>

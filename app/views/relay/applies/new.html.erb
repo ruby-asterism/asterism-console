@@ -1,7 +1,8 @@
 <% content_for(:title, "Apply - Asterism Console") %>
-<%= render "relay/peers/tabs" %>
+<%= render "relay/peers/tabs", banner: false %>
 <section class="card">
   <h2>Apply the registry to the cloud router</h2>
+  <p class="hint"><%= link_to "Applies so far", relay_applies_path %> (the history: who applied what, when, and what came back).</p>
   <% if @plan["same_config"] %>
     <p class="hint">The file already holds this registry; applying again only restarts the router.</p>
   <% end %>

@@ -1,7 +1,8 @@
 <% content_for(:title, "Applies - Asterism Console") %>
-<%= render "relay/peers/tabs" %>
+<%= render "relay/peers/tabs", banner: false %>
 <section class="card">
   <h2>Applies</h2>
+  <p class="hint"><%= link_to "Review and apply", new_relay_apply_path %> the registry as it is now.</p>
   <% if @applies.empty? %>
     <p class="hint">None yet.</p>
   <% else %>

@@ -1,4 +1,5 @@
 require "test_helper"
+require "tmpdir"
 
 class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
   PARAMS = { relay_peer: { name: "w2bot", kind: "client", description: "a test node", rw_keys: "asterism/**\n",
@@ -28,6 +29,35 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_select "th", "Console sees"
     assert_select ".badge", "disabled"
     assert_difference("RelayPeer.count", -1) { delete relay_peer_path(peer) }
+  end
+
+  test "apply is not a tab: a banner leads to it while the cloud router's file differs" do
+    Dir.mktmpdir do |dir|
+      old = ENV["ASTERISM_RELAY_GENERATED_DIR"]
+      ENV["ASTERISM_RELAY_GENERATED_DIR"] = dir
+      sign_in_as(users(:admin))
+      get relay_peers_path
+      assert_select ".tabs a", 2
+      assert_select ".tabs a.current", "Registry"
+      assert_select ".tabs a[href=?]", new_relay_apply_path, 0
+      assert_select ".apply-banner", /Changes not yet applied to the cloud router/
+      assert_select ".apply-banner a[href=?]", new_relay_apply_path, "Review and apply"
+      get relay_roles_path
+      assert_select ".tabs a.current", "Roles"
+      assert_select ".apply-banner a[href=?]", new_relay_apply_path
+      get new_relay_apply_path
+      assert_response :success
+      assert_select ".apply-banner", 0, "not on the confirmation itself"
+      assert_select "a[href=?]", relay_applies_path, "Applies so far"
+      get relay_applies_path
+      assert_response :success
+      Relay::Applier.new.write(Relay::Applier.config_for.text(by: "admin@example.com"))
+      get relay_peers_path
+      assert_select ".apply-banner", 0
+      assert_select ".tabs .tabs-aside", /runs this registry/
+    ensure
+      ENV["ASTERISM_RELAY_GENERATED_DIR"] = old
+    end
   end
 
   test "bad names and keys are not saved" do

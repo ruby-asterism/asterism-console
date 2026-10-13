@@ -18,7 +18,9 @@
     <% roles = RelayRole.order(:name) %>
     <% if roles.empty? %><p class="hint">No roles yet.</p><% end %>
     <%= f.collection_check_boxes :role_ids, roles, :id, :name do |b| %>
-      <label class="check"><%= b.check_box %> <%= b.text %> <span class="hint"><%= b.object.description %></span></label>
+      <label class="check role-pick"><%= b.check_box %>
+        <span><strong><%= b.text %></strong>
+          <span class="role-desc"><%= b.object.description.presence || tag.span("no description", class: "hint") %></span></span></label>
     <% end %>
   </fieldset>
   <label class="wide">Description <%= f.text_field :description %></label>

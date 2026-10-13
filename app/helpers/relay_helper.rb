@@ -1,4 +1,11 @@
 module RelayHelper
+  # Whether the registry differs from the file the cloud router runs with
+  # (the banner of the Registry and Roles pages).
+  def relay_unapplied?
+    return @relay_unapplied if defined?(@relay_unapplied)
+    @relay_unapplied = !Relay::Applier.new.same_config?
+  end
+
   def presence_badge(peer, seen)
     if seen.include?(peer.name)
       peer.enabled? ? tag.span("connected", class: "badge ok") : tag.span("connected, disabled", class: "badge warn")

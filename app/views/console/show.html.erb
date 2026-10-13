@@ -28,25 +28,36 @@
     <span class="counts" data-console-target="counts"></span>
   </nav>
 
-  <main class="body">
-    <section class="graph" data-console-target="graph" aria-label="Network graph"></section>
-
-    <aside class="side">
-      <section class="panel details" data-console-target="details">
-        <h2>Details</h2>
-        <p class="hint">Click a node or a topic edge in the graph.</p>
-      </section>
-
-      <section class="panel watches">
+  <%# The graph and its Details side by side, the watched keys in a panel
+      below both; the borders between them can be dragged (panes_controller). %>
+  <main class="body graph-body" data-controller="panes">
+    <div class="upper">
+      <section class="graph" data-console-target="graph" aria-label="Network graph"></section>
+      <div class="splitter splitter-x" role="separator" aria-orientation="vertical" aria-label="Resize the details"
+           title="Drag to change the width of the details" data-action="pointerdown->panes#startSide"></div>
+      <aside class="side" data-panes-target="side">
+        <section class="panel details" data-console-target="details">
+          <h2>Details</h2>
+          <p class="hint">Click a node or a topic edge in the graph.</p>
+        </section>
+      </aside>
+    </div>
+    <div class="splitter splitter-y" role="separator" aria-orientation="horizontal" aria-label="Resize the watched keys"
+         title="Drag to change the height of the watched keys" data-action="pointerdown->panes#startDock"></div>
+    <section class="dock watches empty" data-panes-target="dock" data-console-target="dock" aria-label="Watched keys">
+      <div class="dock-head">
+        <button type="button" class="small dock-toggle" data-action="panes#toggleDock" data-panes-target="toggle"
+                aria-expanded="true" aria-label="Collapse the watched keys">&#9662;</button>
         <h2>Watch a key</h2>
+        <span class="hint dock-count" data-console-target="watchCount">none watched</span>
         <form data-action="console#addWatch" class="watch-form">
           <input type="text" name="key" placeholder="fmrb/test/out" aria-label="Key expression" required>
           <button type="submit">Watch</button>
         </form>
-        <p class="error" data-console-target="watchError"></p>
-        <div data-console-target="watchList"></div>
-      </section>
-    </aside>
+      </div>
+      <p class="error" data-console-target="watchError"></p>
+      <div class="watch-list" data-console-target="watchList"></div>
+    </section>
   </main>
 
   <footer class="legend" data-console-target="legend"></footer>

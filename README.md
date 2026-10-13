@@ -335,7 +335,8 @@ applies it.
   read-only keys only subscribing and querying from the peer). The file
   starts with a line saying it is generated; the database is the source.
   `bin/rails relay:show` prints it, `relay:generate` writes it.
-- **Apply** ("Relay" > "Apply"): shows who joins and leaves the ACL, the
+- **Apply** ("Relay", the banner "Review and apply" while the registry
+  differs from the router's file): shows who joins and leaves the ACL, the
   sessions and router links on the cloud router that the restart will cut,
   and the file; then writes `storage/relay/generated/cloud.json5`
   (`ASTERISM_RELAY_GENERATED_DIR`) and asks the router to restart, and

@@ -34,14 +34,3 @@
        <%= link_to "Register a router", new_relay_peer_path(kind: "router") %></p>
   <% end %>
 </section>
-
-<section class="card">
-  <h2>Next apply</h2>
-  <% if @plan["same_config"] %>
-    <p>The cloud router's file already holds this registry.</p>
-  <% else %>
-    <p>The registry differs from the file the cloud router runs with
-      (<%= @plan["written_before"] ? "written by the console" : "not written by the console yet" %>).
-      <%= link_to "Look at the plan and apply", new_relay_apply_path %>.</p>
-  <% end %>
-</section>

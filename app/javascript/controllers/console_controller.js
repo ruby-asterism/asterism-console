@@ -170,7 +170,7 @@ function globMatch(pattern, value) {
 }
 
 export default class extends Controller {
-  static targets = ["graph", "details", "bridge", "counts", "watchList", "watchError", "legend", "rateStatus"]
+  static targets = ["graph", "details", "bridge", "counts", "watchList", "watchError", "watchCount", "dock", "legend", "rateStatus"]
   static values = { state: Object, watches: Array, replay: Boolean, admin: Boolean }
 
   connect() {
@@ -192,6 +192,7 @@ export default class extends Controller {
     this.pending = new Map()     // request id -> handler
     this.samples = new Map()     // watch id -> [sample, ...]
     this.watches = new Map()
+    this.openWatches = new Set() // watch ids whose full content is shown
     this.selected = null
     this.lastBeat = 0
     // The bars first: the graph is fitted to the room they leave.
@@ -215,6 +216,7 @@ export default class extends Controller {
   disconnect() {
     clearInterval(this.beatTimer)
     clearInterval(this.leaseTimer)
+    this.graphObserver?.disconnect()
     this.subscription?.unsubscribe()
     this.consumer?.disconnect()
     this.cy?.destroy()
@@ -239,6 +241,12 @@ export default class extends Controller {
     this.applyView()
     this.layoutAll()
     this.updateCounts()
+    // The panes around the graph can be resized (panes_controller): the
+    // graph follows its container's size.
+    if (window.ResizeObserver) {
+      this.graphObserver = new ResizeObserver(() => { if (this.cy && !this.cy.destroyed()) this.cy.resize() })
+      this.graphObserver.observe(this.graphTarget)
+    }
     window.consoleGraph = this.cy // for the headless checks
     window.consoleController = this
   }
@@ -1641,6 +1649,7 @@ export default class extends Controller {
     await fetch(`/watches/${id}`, { method: "DELETE", headers: { "X-CSRF-Token": csrf() } })
     this.watches.delete(id)
     this.samples.delete(id)
+    this.openWatches.delete(id)
     this.renderWatches()
   }
 
@@ -1652,6 +1661,9 @@ export default class extends Controller {
     this.renderWatch(msg.watch_id)
   }
 
+  // The watched keys, one row each (key, latest value, time, Stop); a
+  // click on the value shows its full content (and the recent samples)
+  // below the row.
   renderWatches() {
     this.watchListTarget.innerHTML = ""
     for (const w of this.watches.values()) {
@@ -1661,6 +1673,9 @@ export default class extends Controller {
       this.watchListTarget.append(div)
       this.renderWatch(w.id)
     }
+    const n = this.watches.size
+    if (this.hasWatchCountTarget) this.watchCountTarget.textContent = n ? `${n} watched` : "none watched"
+    if (this.hasDockTarget) this.dockTarget.classList.toggle("empty", n === 0)
   }
 
   renderWatch(id) {
@@ -1668,14 +1683,30 @@ export default class extends Controller {
     const div = this.watchListTarget.querySelector(`[data-watch-id="${id}"]`)
     if (!w || !div) return
     const list = this.samples.get(id) || []
-    const dropped = list[0]?.dropped ? ` <span class="hint">(${list[0].dropped} skipped)</span>` : ""
-    div.innerHTML = `<div class="watch-head"><code>${esc(w.key)}</code>${dropped}
-        <button type="button" class="small" aria-label="Stop watching ${esc(w.key)}">Stop</button></div>` +
-      (w.error ? `<p class="error">${esc(w.error)}</p>` : "") +
-      (list.length ? `${imageTag(list[0].image)}<ol class="samples">${list.map((s) =>
-        `<li><span class="at">${esc(s.at)}</span> <code class="k" title="${esc(s.key)}">${esc(shorten(s.key, 48))}</code> <span class="fmt">${esc(s.format)}</span> <span class="v">${esc(s.text)}</span></li>`).join("")}</ol>`
-        : `<p class="hint">Nothing yet.</p>`)
-    div.querySelector("button").addEventListener("click", () => this.removeWatch(id))
+    const last = list[0]
+    const open = this.openWatches.has(id)
+    const dropped = last?.dropped ? ` <span class="hint">(${last.dropped} skipped)</span>` : ""
+    const value = w.error
+      ? `<span class="error">${esc(w.error)}</span>`
+      : last
+        ? `${imageTag(last.image, "msg-thumb")}<span class="fmt">${esc(last.format)}</span> <span class="v">${esc(last.text)}</span>`
+        : `<span class="hint">Nothing yet.</span>`
+    div.classList.toggle("open", open)
+    div.innerHTML = `<div class="watch-row">
+        <code class="watch-key" title="${esc(w.key)}">${esc(w.key)}</code>
+        <button type="button" class="watch-value" aria-expanded="${open}" ${last ? "" : "disabled"}
+          title="${open ? "Hide" : "Show"} the full value">${value}</button>
+        <span class="at">${last ? esc(last.at) : ""}${dropped}</span>
+        <button type="button" class="small stop" aria-label="Stop watching ${esc(w.key)}">Stop</button></div>` +
+      (open && last ? `<div class="watch-more">${imageTag(last.image)}<ol class="samples">${list.map((s) =>
+        `<li><span class="at">${esc(s.at)}</span> <code class="k" title="${esc(s.key)}">${esc(shorten(s.key, 64))}</code> <span class="fmt">${esc(s.format)}</span> <span class="v">${esc(s.text)}</span></li>`).join("")}</ol></div>`
+        : "")
+    div.querySelector("button.stop").addEventListener("click", () => this.removeWatch(id))
+    div.querySelector("button.watch-value").addEventListener("click", () => {
+      if (this.openWatches.has(id)) this.openWatches.delete(id)
+      else this.openWatches.add(id)
+      this.renderWatch(id)
+    })
   }
 }
 

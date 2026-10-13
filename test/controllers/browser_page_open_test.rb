@@ -26,6 +26,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       sign_in_as(users(:user))
       get browser_passes_path
       assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select ".nav-group.play form", 0
       post open_browser_passes_path, params: { app: "" }
       assert_response :not_found
     end
@@ -46,6 +47,8 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       get browser_passes_path
       assert_select "form[target=_blank] select[name=app] option[value='/app/test/othello.app.rb']"
       assert_select "code", "wasm-pat"
+      assert_select ".nav-group.play form[target=_blank][action=?] input[type=hidden][name=app][value='']", "/passes/open"
+      assert_select ".nav-group.play input[type=submit][value='Open the browser build']"
       io = StringIO.new
       old = Rails.logger
       Rails.logger = ActionController::Base.logger = ActiveSupport::TaggedLogging.logger(io)
@@ -80,6 +83,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       sign_in_as(users(:admin))
       get browser_passes_path
       assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select ".nav-group.play form", 0
       assert_select "button, input[type=submit]", { text: "Make a pass", count: 0 }
       assert_select "a[href=?]", account_path(anchor: "handle"), "Choose your handle"
       post open_browser_passes_path, params: { app: "" }

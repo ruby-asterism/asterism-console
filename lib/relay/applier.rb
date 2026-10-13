@@ -45,6 +45,12 @@ module Relay
       File.exist?(@path) ? File.read(@path) : nil
     end
 
+    # Whether the file the cloud router runs with already holds this
+    # registry (the relay pages show a banner until it does).
+    def same_config?
+      current_text.to_s.include?("digest #{@config.digest}.")
+    end
+
     # What would change and what the restart cuts (from the graph now).
     def plan
       old = CloudConfig.subjects_of(current_text)
@@ -52,7 +58,7 @@ module Relay
       on_cloud = cloud_view(@graph.call.graph)
       {
         "config_path" => @path, "written_before" => !old.nil?,
-        "same_config" => current_text.to_s.include?("digest #{@config.digest}."),
+        "same_config" => same_config?,
         "subjects" => new, "joining" => old ? new - old : new, "leaving" => old ? old - new : [],
         "cloud_seen" => on_cloud[:seen], "cut" => on_cloud[:sessions], "router_links" => on_cloud[:routers],
         "command" => @command.join(" "), "notes" => NOTES

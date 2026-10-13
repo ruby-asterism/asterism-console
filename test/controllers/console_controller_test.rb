@@ -16,7 +16,14 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     get root_path
     assert_response :success
     assert_select "h1", "Asterism Console"
-    assert_select ".nav .who", /user@example.com/
+    assert_select ".nav .who", /pat/
+    assert_select ".nav .who[title=?]", "user@example.com"
+    assert_select ".dock.watches.empty form.watch-form input[name=key]"
+    assert_select ".dock [data-console-target=watchCount]"
+    assert_select ".graph-body .upper .side .details"
+    assert_select ".side .watches", 0, "the watched keys are in the panel below, not the right column"
+    assert_select ".splitter-x[role=separator]"
+    assert_select ".splitter-y[role=separator]"
     assert_select "input[type=checkbox][data-layer]", 4
     %w[topic_nodes hide_debug show_hz measure_all].each { assert_select "input[type=checkbox][name=#{_1}]" }
     assert_select "[data-controller=console]" do |el|

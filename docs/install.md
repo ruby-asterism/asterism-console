@@ -324,7 +324,7 @@ Under Admin > Relay:
    (`zenoh.json5`) and `asterism.json` (the name, the router, until when).
    The key is shown once: if it is lost, revoke and issue again. Hand the
    file over like a private key, and keep it `chmod 600`.
-5. **Apply** (Admin > Relay > Apply): writes the ACL and restarts the router
+5. **Apply** (Admin > Relay, the banner "Review and apply"): writes the ACL and restarts the router
    (everyone connected comes back by themselves within seconds). "When
    nobody is connected" and "at a time" wait instead.
 
@@ -561,7 +561,7 @@ server, `CONSOLE_IMAGE_TAG` in `.env`):
 - **"Blocked hosts"** in the console's log: `CONSOLE_HOSTS` must be the name
   in the browser's address bar.
 - **The router waits** (`run.sh: waiting for /generated/cloud.json5`): run
-  `bin/asterism setup` (or Admin > Relay > Apply).
+  `bin/asterism setup` (or Admin > Relay, "Review and apply").
 - **The bridge does not join** (`bridge: ...` errors): the router's
   certificate must name `zenohd` (setup does this) and the bridge's
   certificate must be from the same CA (`bin/asterism setup` again).
