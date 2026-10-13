@@ -5,6 +5,9 @@ class AccountsController < ApplicationController
 
   def show
     @user = current_user
+    # While a secret waits for its confirming code the page shows it (and
+    # its QR code): keep it out of the browser's and any proxy's cache.
+    response.headers["Cache-Control"] = "no-store" if @user.otp_secret.present? && !@user.otp_enabled?
   end
 
   def update_password

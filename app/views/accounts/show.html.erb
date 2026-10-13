@@ -16,7 +16,9 @@
       <%= f.submit "Turn off" %>
     <% end %>
   <% elsif @user.otp_secret.present? %>
-    <p>Add this secret to your authenticator app (it is shown until you confirm it), then type the code it shows.</p>
+    <p>Scan this code with your authenticator app, or type the secret into it (both are shown until you confirm), then type the code it shows.</p>
+    <% turbo_exempts_page_from_cache # no snapshot of the secret for the back button %>
+    <%= otp_qr_svg(@user.otp_uri) %>
     <dl class="facts">
       <dt>Secret</dt><dd><code><%= @user.otp_secret.scan(/.{1,4}/).join(" ") %></code></dd>
       <dt>URI</dt><dd><code class="wrap"><%= @user.otp_uri %></code></dd>

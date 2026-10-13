@@ -63,6 +63,22 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "the TOTP setup page shows the URI as a QR code, and is not stored" do
+    sign_in_as(users(:user))
+    get account_path
+    assert_select "svg.qr", 0
+    post start_otp_account_path
+    get account_path
+    assert_response :success
+    assert_select "svg.qr path", 1
+    assert_select "code.wrap", text: users(:user).reload.otp_uri
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_select "meta[name='turbo-cache-control'][content='no-cache']"
+    post otp_confirm_account_path, params: { code: ROTP::TOTP.new(users(:user).otp_secret).now }
+    get account_path
+    assert_select "svg.qr", 0, "the code is gone once the second factor is on"
+  end
+
   test "only admins invite" do
     sign_in_as(users(:user))
     assert_no_difference("Invitation.count") { post admin_invitations_path }

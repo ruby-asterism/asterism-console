@@ -154,6 +154,7 @@ input[type=submit]:disabled, button:disabled { opacity: 0.45; cursor: not-allowe
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; word-break: break-all; }
 code.wrap { white-space: pre-wrap; word-break: break-all; }
+svg.qr { display: block; width: 232px; height: 232px; margin: 0 0 10px; }
 table.list { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.list th, table.list td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.list th { color: var(--muted); font-weight: 600; }
