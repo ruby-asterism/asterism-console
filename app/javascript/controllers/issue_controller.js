@@ -1,11 +1,14 @@
 import { Controller } from "@hotwired/stimulus"
+import { credentialsTar } from "lib/credentials_tar"
 
 // Issuing a relay certificate with the key made in this browser (W4).
 // Web Crypto makes an ECDSA P-256 key pair; only the public key
 // (SubjectPublicKeyInfo, DER, base64) is sent; the console has the signer
 // sign a certificate for it and answers with the certificate and the CA.
 // The private key (PKCS#8 PEM) is shown here, once, next to them. It is
-// never sent, stored or shown again: leaving the page loses it.
+// never sent, stored or shown again: leaving the page loses it. "Save all
+// (.tar)" saves the key, the certificate, the CA, the example configuration
+// and asterism.json as one tar made here (lib/credentials_tar.js, O1).
 export default class extends Controller {
   static targets = ["button", "insecure", "result", "facts", "key", "cert", "ca", "config", "command", "error"]
   static values = { url: String, name: String }
@@ -50,13 +53,14 @@ export default class extends Controller {
       this.certTarget.value = ans.certificate
       this.caTarget.value = ans.ca
       this.configTarget.value = ans.zenoh_config
+      this.info = ans.info
       this.factsTarget.innerHTML = ""
       for (const [k, v] of [["Serial", ans.serial], ["Until", ans.not_after], ["Fingerprint (SHA-256)", ans.fingerprint]]) {
         const dt = document.createElement("dt"); dt.textContent = k
         const dd = document.createElement("dd"); dd.textContent = v
         this.factsTarget.append(dt, dd)
       }
-      this.commandTarget.textContent = `A CRuby node with these files: ${ans.command}`
+      this.commandTarget.textContent = `With the .tar: ${ans.command}`
       this.resultTarget.hidden = false
       this.holdsKey = true
     } catch (e) {
@@ -78,7 +82,18 @@ export default class extends Controller {
   }
 
   save({ params: { which, file } }) {
-    const blob = new Blob([this[`${which}Target`].value], { type: "application/octet-stream" })
+    this.download(new Blob([this[`${which}Target`].value], { type: "application/octet-stream" }), file)
+  }
+
+  // Everything in one tar, <name>.tar (extracts to <name>/), the key 0600.
+  saveAll() {
+    if (!this.holdsKey) return
+    const tar = credentialsTar({ name: this.nameValue, key: this.keyTarget.value, cert: this.certTarget.value,
+                                 ca: this.caTarget.value, config: this.configTarget.value, info: this.info })
+    this.download(new Blob([tar], { type: "application/x-tar" }), `${this.nameValue}.tar`)
+  }
+
+  download(blob, file) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -91,6 +106,7 @@ export default class extends Controller {
 
   wipe() {
     if (this.hasKeyTarget) this.keyTarget.value = ""
+    this.info = null
     this.holdsKey = false
   }
 }

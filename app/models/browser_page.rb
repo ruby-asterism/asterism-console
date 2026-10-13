@@ -10,7 +10,7 @@
 #                            {pass}    the pass (one connection); MUST be in the fragment
 #                            {node}    the node ID the page joins as (Relay::BrowserNode)
 #                            {app}     what the page starts ("" for nothing)
-#                          e.g. https://studio.example.org/?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}
+#                          e.g. https://play.example.org/?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}
 #
 # A fragment is never sent to the server that serves the page, so its log
 # never sees the pass (nor the node and app, when they are there too). The

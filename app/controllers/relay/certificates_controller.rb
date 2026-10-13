@@ -16,7 +16,8 @@ module Relay
       render json: { "name" => @peer.name, "serial" => record.serial,
                      "not_after" => record.not_after.utc.iso8601, "fingerprint" => record.fingerprint,
                      "certificate" => cert_pem, "ca" => ca_pem,
-                     "zenoh_config" => issuer.zenoh_config(@peer), "command" => issuer.command(@peer) },
+                     "zenoh_config" => issuer.zenoh_config(@peer), "command" => issuer.command(@peer),
+                     "info" => issuer.credentials_info(@peer, record, console: request.base_url) },
              status: :created
     rescue Relay::Issuer::Error => e
       render json: { "error" => e.message }, status: :unprocessable_content

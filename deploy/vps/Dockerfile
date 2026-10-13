@@ -1,6 +1,9 @@
-# The console's image for deploy/vps: Rails (Puma), the bridge and the
-# signer run from it, each as its own service. Built from the repository's
-# root:  docker compose -f deploy/vps/docker-compose.yml build
+# The console's image (ghcr.io/ruby-asterism/asterism-console, published
+# for each version by .github/workflows/image.yml, amd64 and arm64): Rails
+# (Puma), the bridge, the signer and the browsers' door run from it, each
+# as its own service of deploy/vps/docker-compose.yml. Built by hand from
+# the repository's root:
+#   docker build -f deploy/vps/Dockerfile -t asterism-console-local:0.1.0 .
 #
 # The Asterism gems come from rubygems.org (ASTERISM_GEMS=rubygems in the
 # Gemfile); asterism-zenoh compiles its C extension against the zenoh-c
@@ -26,6 +29,13 @@ COPY . .
 RUN SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile && bundle exec bootsnap precompile app/ lib/
 
 FROM ruby:${RUBY_VERSION}-slim
+
+ARG CONSOLE_VERSION=dev
+LABEL org.opencontainers.image.title="asterism-console" \
+      org.opencontainers.image.description="Asterism Console: the graph, the relay registry and the router's ACL of an Asterism network" \
+      org.opencontainers.image.source="https://github.com/ruby-asterism/asterism-console" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${CONSOLE_VERSION}"
 
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y libsqlite3-0 libyaml-0-2 ca-certificates && \

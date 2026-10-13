@@ -1,9 +1,10 @@
-# The rehearsal of deploy/vps on one PC (G0 / W4): the same compose, with an
-# nginx container standing in for the server's own nginx (self-signed
-# certificate, the names *.localtest), a home router for the boards, and a
-# web network whose fixed addresses stand in for the admin's and a
-# stranger's addresses. Layered on deploy/vps/docker-compose.yml under a
-# project name of its own (nothing here meets other compose projects):
+# The rehearsal of docs/install.md on one PC: deploy/vps/docker-compose.yml
+# as it is, with an nginx container standing in for the server's web
+# server (self-signed certificate, the names *.localtest), a home router
+# run from the .tar the console hands out, and a web network whose fixed
+# addresses stand in for the admin's and a stranger's addresses. Layered
+# on deploy/vps under a project name of its own (never "asterism", so
+# nothing here meets a real installation's volumes):
 #
 #   deploy/local/rehearse up      # (the script runs the line below)
 #   docker compose -p asterism-rehearsal -f deploy/vps/docker-compose.yml \
@@ -12,12 +13,19 @@
 # What differs from the server, and why:
 #   - nginx is a container on the compose networks, so its upstreams are
 #     service names (nginx/asterism-upstreams.conf) instead of loopback
-#     ports; the server blocks and snippets are deploy/vps/nginx's own.
-#   - no host ports but the router's mutual-TLS port on 127.0.0.1:17448
-#     (CRuby on this PC), nginx's 443 / 7443 on 127.0.0.1:18443 / 17443,
-#     and the home router's tcp/7447 on ${HOME_ROUTER_BIND}:${HOME_ROUTER_PORT} (a board
-#     on the LAN; the AtomS3R's /home/zenoh_echo.txt points there).
-#   - the CA is a new one in the rehearsal's own signer volume.
+#     ports; the server blocks and snippets are deploy/vps/nginx's own. It
+#     also stands for the server's address: it answers for every *.localtest
+#     name on the web network and hands the router's 7448 on to zenohd
+#     (nginx/router-stream.conf), as docker's published port does on a server.
+#   - host ports: only the router's mutual TLS on 127.0.0.1:17448 (CRuby on
+#     this PC; the certificate names localhost through
+#     ASTERISM_RELAY_EXTRA_DNS), nginx's 443 / 7443 on 127.0.0.1:18443 /
+#     17443, and the home router's tcp/7447 on
+#     ${HOME_ROUTER_BIND}:${HOME_ROUTER_PORT} (a board on the LAN).
+#   - play.localtest serves a browser build (PLAY_DIST) for "Open the
+#     browser build".
+#   - the home router (profile "home") runs from certs/<HOME_ROUTER_NAME>/,
+#     the .tar of that row extracted as it is (zenohd -c zenoh.json5 there).
 services:
   zenohd:
     ports: !override
@@ -36,18 +44,20 @@ services:
     restart: "no"
     depends_on: [console, zenohd, door]
     volumes:
+      - ../local/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../local/nginx/router-stream.conf:/etc/nginx/router-stream.conf:ro
       - ./nginx/asterism-http.conf:/etc/nginx/conf.d/10-asterism-http.conf:ro
       - ../local/nginx/asterism-upstreams.conf:/etc/nginx/conf.d/00-asterism-upstreams.conf:ro
       - ./nginx/asterism-console.conf:/etc/nginx/conf.d/asterism-console.conf:ro
       - ./nginx/asterism-router.conf:/etc/nginx/conf.d/asterism-router.conf:ro
-      - ../local/nginx/studio.conf:/etc/nginx/conf.d/studio.conf:ro
+      - ../local/nginx/play.conf:/etc/nginx/conf.d/play.conf:ro
       - ./nginx/asterism-proxy.conf:/etc/nginx/snippets/asterism-proxy.conf:ro
       - ../local/nginx/asterism-ssl-console.conf:/etc/nginx/snippets/asterism-ssl-console.conf:ro
       - ../local/nginx/asterism-ssl-router.conf:/etc/nginx/snippets/asterism-ssl-router.conf:ro
       - ../local/nginx/asterism-admin-allow.conf:/etc/nginx/snippets/asterism-admin-allow.conf:ro
       - ../local/nginx/asterism-door-allow.conf:/etc/nginx/snippets/asterism-door-allow.conf:ro
       - ../local/certs:/etc/nginx/rehearsal-certs:ro
-      - ${STUDIO_DIST:-../local/certs/no-studio}:/srv/studio:ro
+      - ${PLAY_DIST:-../local/certs/no-play}:/srv/play:ro
     ports:
       - "127.0.0.1:18443:443"
       - "127.0.0.1:17443:7443"
@@ -55,20 +65,21 @@ services:
       router: {}
       web:
         ipv4_address: 172.31.240.2
-        aliases: [asterism.localtest, router.localtest, studio.localtest]
+        aliases: [asterism.localtest, router.localtest, play.localtest]
 
   zenohd-home:
     image: eclipse/zenoh:1.10.1
     init: true
     restart: "no"
     profiles: [home]
-    command: ["-c", "/home.json5"]
+    working_dir: /home-router
+    command: ["-c", "zenoh.json5"]
     volumes:
-      - ../local/zenohd/home.json5:/home.json5:ro
-      - ../local/certs/home:/certs:ro
+      - ../local/certs/${HOME_ROUTER_NAME:-home-a}:/home-router:ro
     ports:
       - "${HOME_ROUTER_BIND:-127.0.0.1}:${HOME_ROUTER_PORT:-17447}:7447"
-    networks: [router]
+    networks:
+      web: {}
 
 networks:
   web:

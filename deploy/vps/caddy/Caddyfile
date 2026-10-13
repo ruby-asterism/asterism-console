@@ -1,0 +1,60 @@
+# An example of the web server in front of deploy/vps with Caddy 2 instead
+# of nginx (docs/install.md, "The web server"). Caddy gets and renews the
+# certificates itself. The same two things as the nginx example:
+#
+#   https://asterism.example.org        the console (127.0.0.1:CONSOLE_PORT);
+#                                       /admin only from the admins' addresses
+#   wss://router.example.org:7443       the browsers' door (127.0.0.1:ROUTER_WS_PORT),
+#                                       only after the console says the pass is live
+#
+# Replace the names, the addresses and the ports (.env). Caddy logs no
+# requests unless a "log" directive asks it to; if you add one, the door's
+# URL carries the pass (?pass=), so keep the query out of it.
+
+asterism.example.org {
+	encode gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+	}
+	request_body {
+		max_size 300MB
+	}
+
+	# The pass check is the door's question, never asked from outside.
+	respond /passes/check 404
+
+	@admin_outside {
+		path /admin /admin/*
+		not remote_ip 192.0.2.10
+	}
+	respond @admin_outside 403
+
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+router.example.org:7443 {
+	@ws {
+		path /
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	# In this order (route): the check sees the pass, the door does not.
+	route @ws {
+		# The console answers 204 (open) or 401; it reads the pass from the
+		# original URI (X-Forwarded-Uri) and says until when (X-Asterism-Until,
+		# handed on to the door, which closes the connection then).
+		forward_auth 127.0.0.1:3000 {
+			uri /passes/check
+			header_up Host asterism.example.org
+			header_up X-Forwarded-Proto https
+			copy_headers X-Asterism-Until
+		}
+		uri query -pass
+		uri query -page
+		reverse_proxy 127.0.0.1:7449
+	}
+	respond 404
+}

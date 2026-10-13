@@ -46,7 +46,7 @@ class Bridge::ProfilesTest < ActiveSupport::TestCase
     data = g["nodes"].select { _1["kind"] == "a_node" }.to_h { [ _1["label"], _1["data"] ] }
     assert_equal [ "family_mruby", "profile", "/icons/0a1b2c3d", "atoms3r" ],
                  data["fmruby-aaaaaa"].values_at("machine", "machine_by", "icon").push(data["fmruby-aaaaaa"]["profile"]["host"])
-    assert_equal [ "cruby", "name", nil ], data["old"].values_at("machine", "machine_by", "icon")
+    assert_equal [ nil, "none", nil ], data["old"].values_at("machine", "machine_by", "icon")
     assert_equal [ "console", "self", nil ], data["console"].values_at("machine", "machine_by", "icon")
     refute data.key?("gone")
   end

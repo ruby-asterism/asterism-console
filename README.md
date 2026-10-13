@@ -20,8 +20,7 @@ calls the methods that Asterism nodes expose.
   dashed box, an object a small Ruby red dot (docs/v2_2.md). A node of
   asterism 0.5.0 or later tells its profile: the mark comes from its kind,
   its icon is drawn before its name, its host and display name are in the
-  details; an older node keeps the mark guessed from its name
-  (docs/v2_5.md). A display name also goes before the ID in the label, and
+  details; an older node (no profile) has no mark (docs/v2_5.md). A display name also goes before the ID in the label, and
   a ROS 2 node on the same Zenoh session as an Asterism node (asterism
   0.6.0's `Asterism.session`) is drawn inside that node's box
   (docs/g1b.md). Since asterism 0.7.0 (wire protocol 1, docs/x1.md) every
@@ -79,12 +78,19 @@ Everything needs a signed-in user: the graph, the values, the calls and
 the WebSocket. What the page may call is limited to the combinations an
 admin allowed, and every call is logged (see [Security](#security)).
 
-On a server, next to an internet router, behind the server's nginx:
-`deploy/vps/README.md` (and its rehearsal on one PC, `deploy/local/`);
-the design (the router's ACL, browser passes, the admin pages):
-`docs/g0_w4.md`; roles and opening the browser build: `docs/g1_5.md`.
+**Install it on your own server** (with an internet router of your own,
+from the published image): [docs/install.md](docs/install.md). One
+server and one domain name are enough; nothing in it assumes anybody
+else's network. The version is in `VERSION` (and on the account page),
+the changes in [CHANGELOG.md](CHANGELOG.md). The design notes of each
+stage are in `docs/` ([docs/README.md](docs/README.md)): the router's
+ACL, browser passes and the admin pages `docs/g0_w4.md`, roles and
+opening a browser page `docs/g1_5.md`, the installable form `docs/o1.md`.
 
-## Running it
+The rest of this README is about running it from the source (development)
+and how it works.
+
+## Running it from the source
 
 Needs Ruby 3.2+, a zenohd router (1.x; the admin space is readable with
 the default configuration) and the two Asterism gems.
@@ -252,11 +258,11 @@ script/relay_certs --rogue               # also a second CA (to see the cloud ro
 script/relay_certs mybot                 # one more name from the same CA
 ```
 
-The family-mruby repository has the routers (`docker-compose.relay.yml`,
-`docker/zenoh-relay/`): a home router for the boards (plain TCP 7447) that
-connects out to a cloud router over mutual TLS (7448). The cloud router's
-ACL lets the console, and only it, read the admin space (`@/**`). The bridge
-then connects to the cloud router:
+Run two zenohd 1.10.1 with these certificates: a home router for the
+boards (plain TCP 7447) that connects out to a cloud router over mutual
+TLS (7448), the cloud router reading the configuration the console writes
+(below). The cloud router's ACL lets the console, and only it, read the
+admin space (`@/**`). The bridge then connects to the cloud router:
 
 ```
 C=storage/relay/certs
@@ -331,17 +337,16 @@ applies it.
   `bin/rails relay:show` prints it, `relay:generate` writes it.
 - **Apply** ("Relay" > "Apply"): shows who joins and leaves the ACL, the
   sessions and router links on the cloud router that the restart will cut,
-  and the file; then writes `storage/relay/generated/cloud.json5` and runs
-  `docker compose -f docker-compose.yml -f docker-compose.relay.yml restart
-  zenohd-cloud` in the family-mruby directory (`ASTERISM_RELAY_GENERATED_DIR`,
-  `ASTERISM_RELAY_COMPOSE_DIR`, `ASTERISM_RELAY_RESTART`), and reports what
-  came back. The cloud router must have been created reading that file:
-
-  ```
-  ASTERISM_RELAY_GENERATED=./asterism-console/storage/relay/generated \
-  ASTERISM_RELAY_CLOUD_CONFIG=/generated/cloud.json5 \
-    docker compose -f docker-compose.yml -f docker-compose.relay.yml up -d zenohd zenohd-cloud
-  ```
+  and the file; then writes `storage/relay/generated/cloud.json5`
+  (`ASTERISM_RELAY_GENERATED_DIR`) and asks the router to restart, and
+  reports what came back. Asking is `bin/relay_restart_request` by
+  default: it writes `restart.request` next to the file, which the
+  router's container of deploy/vps watches (`deploy/vps/zenohd/run.sh`:
+  any zenohd started that way works). For a router of your own, set
+  `ASTERISM_RELAY_RESTART` to the command that restarts it (run in
+  `ASTERISM_RELAY_COMPOSE_DIR`, the console's directory by default), e.g.
+  `docker compose restart zenohd-cloud` in the directory of your compose
+  file. The router must read that file (`zenohd -c .../cloud.json5`).
 
   What a restart does to the others: the home router and the bridge connect
   again by themselves; Asterism nodes on the cloud router (CRuby) lose their
@@ -499,6 +504,10 @@ even on a LAN. What it does, and what it assumes:
 ```
 bin/rails test
 ```
+
+`test/lib/relay/credentials_tar_test.rb` runs the browser's tar module
+(`app/javascript/lib/credentials_tar.js`) with Node and reads the result
+with Ruby's tar reader (skipped when `node` is not installed).
 
 `test/lib/bridge/` covers the graph (from inputs shaped like zenohd 1.10.1
 and rmw_zenoh 0.2.11 give them, and the busy fixture: services as

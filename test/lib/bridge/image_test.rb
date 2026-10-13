@@ -5,7 +5,7 @@ require "test_helper"
 class Bridge::ImageTest < ActiveSupport::TestCase
   LE = "\x00\x01\x00\x00".b
   TYPE = "sensor_msgs/msg/CompressedImage"
-  # A frame of the MuJoCo rover's camera (160x120 JPEG, family-mruby S1).
+  # A frame of a simulated rover's camera (160x120 JPEG, from the S1 tests).
   JPEG = File.binread(File.expand_path("../../fixtures/files/camera_160x120.jpg", __dir__))
   # The smallest PNG header: signature, IHDR of 3x2.
   PNG = "\x89PNG\r\n\x1a\n".b + [ 13 ].pack("N") + "IHDR".b + [ 3, 2 ].pack("NN") + "\x08\x02\x00\x00\x00".b

@@ -25,7 +25,7 @@ module ConsoleExposure
 
   def self.check!(host = listen_host)
     return :loopback if loopback?(host)
-    raise "CONSOLE_BIND=#{host}: listening beyond this machine needs a user (bin/rails console:user)" unless User.exists?
+    raise "CONSOLE_BIND=#{host}: listening beyond this machine needs a user (bin/asterism setup, or bin/rails console:user)" unless User.exists?
     Rails.logger.warn("console: listening on #{host}; sign-in is required. Put TLS in front (README).")
     :exposed
   end

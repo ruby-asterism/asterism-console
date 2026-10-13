@@ -5,7 +5,7 @@
 # check is the proxy's question (nginx auth_request in front of the
 # router's ws/ listener, deploy/vps/nginx): the pass is the "pass" query
 # parameter of the WebSocket URL, which nginx hands over as X-Original-URI
-# (or the X-Asterism-Pass header); the answer is 204 (open the connection)
+# (Caddy's forward_auth as X-Forwarded-Uri; or the X-Asterism-Pass header); the answer is 204 (open the connection)
 # or 401. A pass opens one connection: the first 204 consumes it, and
 # later checks with it get 401 (BrowserPass#consume!). It needs no session, and the
 # public server block of the console does not pass it on (only the
@@ -62,9 +62,11 @@ class BrowserPassesController < ApplicationController
     redirect_to back, status: :see_other, notice: "Revoked pass #{pass.id}. Connections it opened stay until they close."
   end
 
-  # [pass, page key] from the headers nginx sets.
+  # [pass, page key] from the headers the web server sets (nginx's
+  # auth_request: X-Original-URI; Caddy's forward_auth: X-Forwarded-Uri).
   private def pass_from_request
-    query = URI.decode_www_form(URI.parse(request.headers["X-Original-URI"].to_s).query.to_s).to_h
+    uri = request.headers["X-Original-URI"].presence || request.headers["X-Forwarded-Uri"]
+    query = URI.decode_www_form(URI.parse(uri.to_s).query.to_s).to_h
     [ request.headers["X-Asterism-Pass"].presence || query["pass"].to_s,
       request.headers["X-Asterism-Page"].presence || query["page"] ]
   rescue URI::InvalidURIError, ArgumentError

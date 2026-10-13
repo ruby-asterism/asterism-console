@@ -5,14 +5,12 @@
 #   - data "machine" on every Asterism node: what Ruby runs it, by the
 #     names of the profiles' kinds (V2.5): "family_mruby", "picoruby",
 #     "cruby", "console", or another kind a profile told; and data
-#     "machine_by", how that is known: "self" (this console), "profile" (the
-#     node told it, asterism 0.5.0 and later) or "name". A node without a
-#     profile (an older version) goes by the boards' naming, as in V2.2: a
-#     board calls itself by its mDNS name fmruby-<6 hex digits>, a browser
-#     build by the ID its page made, wasm-<6 hex digits>, and the simulation
-#     falls back to "linux" (a browser build without its page, "wasm"); those
-#     are "family_mruby", anything else "cruby" (any other Ruby process).
-#     Before V2.5 the values were "board", "ruby" and "console".
+#     "machine_by", how that is known: "self" (this console) or "profile"
+#     (the node told it, asterism 0.5.0 and later). A node without a
+#     profile (an older version) has no "machine" and "machine_by" "none":
+#     nothing is guessed from its name (O1; from V2.2 to G1.5 the names of
+#     one family of boards were taken as a hint). Before V2.5 the values
+#     were "board", "ruby" and "console".
 #   - data "icon" on an Asterism node whose profile has an icon the store
 #     has (icons:): the URL /icons/<icon_hash>.
 #   - the relay registry's names that are not here (kind "registered") in
@@ -34,19 +32,15 @@ module Bridge
   module Marks
     BOX = "reg_box".freeze
     BOX_LABEL = "Not connected (registry)".freeze
-    # A board's node name: its mDNS name, the browser build's own ID
-    # (wasm-<6 hex>, kept by its page since fmruby-core's B2), or the
-    # fallback of the simulation (linux) and of the browser build (wasm).
-    BOARD_NAME = /\A(fmruby-[0-9a-f]{6}|wasm-[0-9a-f]{6}|linux|wasm)\z/
-
     module_function
 
-    # [machine, how it is known] of an Asterism node's data.
-    def machine(data, name = data["node"])
+    # [machine, how it is known] of an Asterism node's data ([nil, "none"]
+    # without a profile).
+    def machine(data, _name = data["node"])
       return %w[console self] if data["self"]
       kind = data.dig("profile", "kind")
       return [ kind.to_s, "profile" ] if kind
-      [ BOARD_NAME.match?(name.to_s) ? "family_mruby" : "cruby", "name" ]
+      [ nil, "none" ]
     end
 
     def icon_url(data, icons)

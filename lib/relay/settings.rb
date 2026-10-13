@@ -1,12 +1,17 @@
 # Where the relay's generated configuration goes and how the cloud router
-# is restarted (the environment; the defaults fit the family-mruby
-# repository with this one inside it, docker-compose.relay.yml).
+# is restarted (the environment). The defaults are the layout of
+# deploy/vps: the console writes the file and asks for a restart by
+# writing restart.request next to it (bin/relay_restart_request), which the
+# router's container watches (deploy/vps/zenohd/run.sh). Any router that
+# reads the file and restarts on the request works the same way; or set
+# ASTERISM_RELAY_RESTART to a command that restarts yours.
 #
 #   ASTERISM_RELAY_CLOUD_NAME     zenohd-cloud (its metadata/name and certificate name)
-#   ASTERISM_RELAY_GENERATED_DIR  storage/relay/generated (cloud.json5 is written there;
-#                                 docker-compose.relay.yml mounts it with ASTERISM_RELAY_GENERATED)
-#   ASTERISM_RELAY_COMPOSE_DIR    .. (the directory docker compose runs in)
-#   ASTERISM_RELAY_RESTART        docker compose -f docker-compose.yml -f docker-compose.relay.yml restart zenohd-cloud
+#   ASTERISM_RELAY_GENERATED_DIR  storage/relay/generated (cloud.json5 is written there)
+#   ASTERISM_RELAY_CERTS_DIR      storage/relay/certs (this server's own router and bridge
+#                                 certificates: relay:issue_local, bin/asterism setup)
+#   ASTERISM_RELAY_COMPOSE_DIR    the console's directory (where the restart command runs)
+#   ASTERISM_RELAY_RESTART        bin/relay_restart_request (e.g. "docker compose restart zenohd")
 #
 # What goes into the cloud router's configuration (Relay::CloudConfig):
 #
@@ -54,17 +59,20 @@ module Relay
       File.expand_path(env["ASTERISM_RELAY_GENERATED_DIR"].presence || "storage/relay/generated", root)
     end
 
+    def certs_dir(env = ENV, root: Rails.root)
+      File.expand_path(env["ASTERISM_RELAY_CERTS_DIR"].presence || "storage/relay/certs", root)
+    end
+
     def config_path(env = ENV, root: Rails.root)
       File.join(generated_dir(env, root: root), "cloud.json5")
     end
 
     def compose_dir(env = ENV, root: Rails.root)
-      File.expand_path(env["ASTERISM_RELAY_COMPOSE_DIR"].presence || "..", root)
+      File.expand_path(env["ASTERISM_RELAY_COMPOSE_DIR"].presence || ".", root)
     end
 
-    def restart_command(env = ENV)
-      cmd = env["ASTERISM_RELAY_RESTART"].presence ||
-            "docker compose -f docker-compose.yml -f docker-compose.relay.yml restart #{cloud_name(env)}"
+    def restart_command(env = ENV, root: Rails.root)
+      cmd = env["ASTERISM_RELAY_RESTART"].presence or return [ File.join(root.to_s, "bin/relay_restart_request") ]
       Shellwords.split(cmd)
     end
   end

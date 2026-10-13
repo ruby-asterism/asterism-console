@@ -17,8 +17,9 @@ class RelayRole < ApplicationRecord
   # A key template: a key expression, where ${node} stands for one chunk.
   TEMPLATE = %r{\A[A-Za-z0-9_\-.*@~%:+=/${}]{1,200}\z}
   VARIABLE = "${node}".freeze
-  # A Family-mruby-style app path or any page-relative app name; free text
-  # within these characters (it travels in a URL fragment).
+  # What the browser page starts: whatever the page understands (an app's
+  # path or name); free text within these characters (it travels in a URL
+  # fragment).
   APP = %r{\A[A-Za-z0-9_./-]{1,200}\z}
 
   has_many :peer_roles, class_name: "RelayPeerRole", dependent: :destroy

@@ -13,7 +13,10 @@
 # that send "Authorization: Bearer <token>" (the token: --token-file or
 # SIGNER_TOKEN; the console reads the same one):
 #
-#   GET  /ca     the CA certificate (PEM)
+#   GET  /ca     the CA certificate (PEM); 404 while there is none
+#   POST /init   {"name": "Asterism Relay CA"}: makes a CA when there is none
+#                (the console's first setup, bin/asterism setup); 409 when one
+#                is there. -> {"subject", "not_after", "fingerprint"}
 #   POST /sign   {"name": "cruby", "csr": "<PEM>", "dns": [], "ips": [], "days": 90}
 #            or  {"name": "cruby", "spki": "<base64 DER>", ...}
 #                -> {"certificate": "<PEM>", "serial": "<hex>", "not_before", "not_after", "fingerprint"}
@@ -33,6 +36,7 @@ require "socket"
 require "json"
 require "time"
 require "openssl"
+require "fileutils"
 require_relative "../lib/relay/cert_authority"
 
 module Signer
@@ -52,9 +56,15 @@ module Signer
 
   def init(dir)
     abort "#{dir} already has a CA" if File.exist?(File.join(dir, "ca.key"))
-    ca = Relay::CertAuthority.create(dir)
+    make_ca(dir)
+  end
+
+  def make_ca(dir, common_name: "Asterism Relay CA")
+    FileUtils.mkdir_p(dir, mode: 0o700)
+    ca = Relay::CertAuthority.create(dir, common_name: common_name)
     File.chmod(0o700, dir)
     log("made a CA in #{dir}: #{ca.cert.subject} until #{ca.cert.not_after.utc.iso8601}")
+    ca
   end
 
   def import(dir, pem)
@@ -69,17 +79,20 @@ module Signer
     log("took the CA #{cert.subject} into #{dir}")
   end
 
+  # Serves with the CA in dir, or, while there is none, waits for POST
+  # /init (the first setup) and answers 404 to the rest.
   def serve(dir, listen, token)
     abort "no token (--token-file or SIGNER_TOKEN)" if token.to_s.size < 16
-    ca = Relay::CertAuthority.load(dir)
+    @ca = File.exist?(File.join(dir, "ca.key")) ? Relay::CertAuthority.load(dir) : nil
+    @lock = Mutex.new
     host, port = listen.rpartition(":").values_at(0, 2)
     server = TCPServer.new(host.delete_prefix("[").delete_suffix("]"), Integer(port))
-    log("serving #{ca.cert.subject} on #{listen}")
+    log(@ca ? "serving #{@ca.cert.subject} on #{listen}" : "no CA in #{dir} yet: waiting for POST /init on #{listen}")
     %w[INT TERM].each { |s| Signal.trap(s) { server.close rescue nil; exit } }
     loop do
       client = server.accept
       Thread.new(client) do |c|
-        handle(c, ca, dir, token)
+        handle(c, dir, token)
       rescue StandardError => e
         log("#{e.class}: #{e.message}")
       ensure
@@ -110,7 +123,7 @@ module Signer
             "Cache-Control: no-store\r\nConnection: close\r\n\r\n#{text}")
   end
 
-  def handle(c, ca, dir, token)
+  def handle(c, dir, token)
     verb, path, headers, body = read_request(c)
     return unless verb
     given = headers["authorization"].to_s.delete_prefix("Bearer ")
@@ -118,17 +131,37 @@ module Signer
       log("refused #{verb} #{path}: bad token")
       return reply(c, "401 Unauthorized", { "error" => "bad token" })
     end
+    ca = @ca
     case [ verb, path ]
-    when [ "GET", "/ca" ]
-      reply(c, "200 OK", ca.cert.to_pem, "application/x-pem-file")
-    when [ "POST", "/sign" ]
-      sign(c, ca, dir, JSON.parse(body))
+    when [ "POST", "/init" ]
+      init_once(c, dir, body.to_s.empty? ? {} : JSON.parse(body))
+    when [ "GET", "/ca" ], [ "POST", "/sign" ]
+      return reply(c, "404 Not Found", { "error" => "no CA yet (bin/asterism setup makes one)" }) unless ca
+      if path == "/ca"
+        reply(c, "200 OK", ca.cert.to_pem, "application/x-pem-file")
+      else
+        sign(c, ca, dir, JSON.parse(body))
+      end
     else
       reply(c, "404 Not Found", { "error" => "no such thing" })
     end
   rescue JSON::ParserError, ArgumentError, OpenSSL::X509::RequestError => e
     log("refused: #{e.message}")
     reply(c, "400 Bad Request", { "error" => e.message })
+  end
+
+  # POST /init: a CA, only when there is none (one at a time).
+  def init_once(c, dir, req)
+    name = req["name"].to_s.strip
+    name = "Asterism Relay CA" if name.empty?
+    raise ArgumentError, "the CA's name is too long" if name.size > 64
+    made = @lock.synchronize do
+      next nil if @ca || File.exist?(File.join(dir, "ca.key"))
+      @ca = make_ca(dir, common_name: name)
+    end
+    return reply(c, "409 Conflict", { "error" => "there is a CA already" }) unless made
+    reply(c, "201 Created", { "subject" => made.cert.subject.to_s, "not_after" => made.cert.not_after.utc.iso8601,
+                              "fingerprint" => Relay::CertAuthority.fingerprint(made.cert) })
   end
 
   # A bare ECDSA P-256 public key (base64 of SubjectPublicKeyInfo DER).

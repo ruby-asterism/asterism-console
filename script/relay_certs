@@ -4,8 +4,8 @@
 #
 #   script/relay_certs [--out DIR] [--force] [--rogue] [NAME[:dns,dns][@ip,ip] ...]
 #
-# Without names it issues the set the family-mruby relay overlay
-# (docker-compose.relay.yml) uses: zenohd-cloud (also valid as localhost and
+# Without names it issues a set for a development relay on one PC (two
+# routers and a few clients): zenohd-cloud (also valid as localhost and
 # 127.0.0.1, for clients on the host), zenohd-home, console, cruby and
 # ros2-cloud. The CA in DIR is kept when it is there; a name already issued
 # is kept unless --force. --rogue also makes DIR/rogue/: another CA and a

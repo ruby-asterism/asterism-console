@@ -1,0 +1,178 @@
+#!/usr/bin/env ruby
+# The console's first setup and its version, in one command (O1). On a
+# server it runs in the console's container, next to the signer:
+#
+#   docker compose run --rm console bin/asterism setup
+#   docker compose run --rm console bin/asterism version
+#
+# setup does, in order, and only what is not done yet (run it again any
+# time; it changes nothing that is in place):
+#
+#   1. checks the settings (.env): the secrets, the names, the enrollment
+#   2. the databases (db:prepare: made, or migrated)
+#   3. the CA: asks the signer to make one when it has none (the CA's key
+#      stays in the signer's volume; back it up, docs/install.md)
+#   4. the example role "match" (when there is no role at all)
+#   5. the first admin, when there is none: ADMIN_EMAIL and CONSOLE_PASSWORD
+#      from the environment, else asked for on the terminal
+#   6. this server's own certificates: the cloud router's (ROUTER_NAME,
+#      valid for the router's public name and for "zenohd") and the bridge's
+#      ("console"); issued again when missing, from another CA, ending
+#      within 30 days or not naming the router's public name
+#   7. the cloud router's configuration from the registry (cloud.json5)
+#
+# Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
+require "io/console"
+
+ROOT = File.expand_path("..", __dir__)
+Dir.chdir(ROOT)
+
+def say(text) = puts(text)
+def step(text) = puts("\n== #{text}")
+def done(text) = puts("   #{text}")
+def fail!(text) = abort("\nasterism setup: #{text}")
+
+def version
+  File.read(File.join(ROOT, "VERSION")).strip
+end
+
+def ask(prompt, secret: false)
+  fail!("no terminal to ask on: set the value in the environment instead (#{prompt})") unless $stdin.tty?
+  $stdout.print(prompt)
+  ans = secret ? $stdin.noecho(&:gets).tap { puts } : $stdin.gets
+  ans.to_s.strip
+end
+
+def check_settings
+  step "Settings"
+  production = ENV.fetch("RAILS_ENV", "development") == "production"
+  problems = []
+  if production
+    problems << "SECRET_KEY_BASE is empty (openssl rand -hex 64)" if ENV["SECRET_KEY_BASE"].to_s.size < 32
+    problems << "ASTERISM_SIGNER_TOKEN is empty or short (openssl rand -hex 32)" if ENV["ASTERISM_SIGNER_TOKEN"].to_s.size < 16
+    problems << "CONSOLE_HOSTS is empty (the console's name)" if ENV["CONSOLE_HOSTS"].to_s.strip.empty?
+  end
+  endpoint = ENV["ASTERISM_RELAY_PUBLIC_ENDPOINT"].to_s
+  problems << "ASTERISM_RELAY_PUBLIC_ENDPOINT is not tls/<name>:<port>" if production && !endpoint.match?(%r{\Atls/[^:]+:\d+\z})
+  %w[CONSOLE_HOSTS ASTERISM_RELAY_PUBLIC_ENDPOINT ASTERISM_PASS_ROUTER].each do |k|
+    problems << "#{k} still names example.org (put your own names in .env)" if ENV[k].to_s.include?("example.org")
+  end
+  fail!("fix .env first:\n  - #{problems.join("\n  - ")}") if problems.any?
+  done "console #{version}, RAILS_ENV=#{ENV.fetch('RAILS_ENV', 'development')}"
+  done "console's name: #{ENV['CONSOLE_HOSTS'].to_s.empty? ? '(any, development)' : ENV['CONSOLE_HOSTS']}"
+  done "router for others: #{endpoint.empty? ? '(not set)' : endpoint}"
+end
+
+def prepare_databases
+  step "Databases"
+  system(File.join(ROOT, "bin/rails"), "db:prepare", exception: true)
+  done "ready"
+rescue RuntimeError => e
+  fail!("db:prepare failed: #{e.message}")
+end
+
+def ensure_ca
+  step "CA (in the signer)"
+  client = Relay::SignerClient.from_env(root: ROOT)
+  last = nil
+  30.times do
+    return ca_ready(client) if client.ca?
+    made = client.init(name: ENV["ASTERISM_CA_NAME"].presence || "Asterism Relay CA")
+    done "made a new CA: #{made['subject']} until #{made['not_after']}"
+    done "fingerprint (SHA-256) #{made['fingerprint']}"
+    done "Back up the CA now (docs/install.md, \"Backups\"): its key exists only in the signer's volume."
+    return client.ca_pem
+  rescue Relay::SignerClient::Error => e
+    last = e
+    fail!("the signer refused: #{e.message}") unless e.message.include?("did not answer")
+    sleep 1
+  end
+  fail!("the signer does not answer (#{last&.message}); is it running? (docker compose up -d signer)")
+end
+
+def ca_ready(client)
+  pem = client.ca_pem
+  cert = OpenSSL::X509::Certificate.new(pem)
+  done "the signer has its CA: #{cert.subject} until #{cert.not_after.utc.to_date}"
+  done "fingerprint (SHA-256) #{Relay::CertAuthority.fingerprint(cert)}"
+  pem
+end
+
+def ensure_roles
+  step "Roles"
+  Rails.application.load_seed
+  done "roles: #{RelayRole.order(:name).pluck(:name).join(', ').presence || '(none)'}"
+end
+
+def ensure_admin
+  step "First admin"
+  if (admin = User.where(admin: true).order(:id).first)
+    done "there is an admin already (#{admin.email_address}); add users from the console (Admin > Users)"
+    return
+  end
+  email = ENV["ADMIN_EMAIL"].presence || ask("The admin's email address: ")
+  password = ENV["CONSOLE_PASSWORD"].presence
+  unless password
+    password = ask("Password (12 characters or more): ", secret: true)
+    fail!("the two did not match") unless ask("Again: ", secret: true) == password
+  end
+  user = User.new(email_address: email.strip.downcase, password: password, admin: true)
+  fail!(user.errors.full_messages.to_sentence) unless user.save
+  done "made #{user.email_address} (admin). Signing in asks for a TOTP app first#{' (CONSOLE_ADMIN_TOTP=required)' unless ENV['CONSOLE_ADMIN_TOTP'] == 'optional'}."
+end
+
+def ensure_identities(ca_pem)
+  step "This server's own certificates"
+  out = Relay::Settings.certs_dir
+  router = Relay::Settings.cloud_name
+  host = ENV["ASTERISM_RELAY_PUBLIC_ENDPOINT"].to_s[%r{\Atls/(.+):\d+\z}, 1]
+  dns = [ "zenohd", host, *ENV["ASTERISM_RELAY_EXTRA_DNS"].to_s.split(",").map(&:strip) ].compact.reject(&:empty?).uniq
+  ips = ENV["ASTERISM_RELAY_EXTRA_IPS"].to_s.split(",").map(&:strip).reject(&:empty?)
+  { router => { kind: "router", dns: dns, ips: ips },
+    "console" => { kind: "client", rw: [ "asterism/**" ], admin_space: true } }.each do |name, how|
+    why = Relay::LocalIdentity.stale?(name: name, out: out, ca_pem: ca_pem, dns: how[:dns] || [])
+    if why.nil?
+      done "#{name}: in place (#{out})"
+      next
+    end
+    rec = Relay::LocalIdentity.issue(name: name, out: out, description: "this server's own (bin/asterism setup)", **how)
+    done "#{name}: issued serial #{rec.serial} until #{rec.not_after.utc.to_date} (#{why})"
+  end
+end
+
+def write_router_config
+  step "The cloud router's configuration"
+  config = Relay::Applier.config_for
+  path = Relay::Settings.config_path
+  if File.exist?(path) && File.read(path).include?("digest #{config.digest}.")
+    done "#{path} is up to date"
+  else
+    Relay::Applier.new(config: config).write(config.text(by: "bin/asterism setup"))
+    done "wrote #{path} (Apply in the console restarts a running router on it)"
+  end
+end
+
+case ARGV.first
+when "version", "--version", "-v"
+  puts "asterism-console #{version}"
+when "setup"
+  say "asterism-console #{version}: setup"
+  check_settings
+  prepare_databases
+  require File.join(ROOT, "config/environment")
+  done "enrollment: #{AsterismConsole.enrollment} (an admin registers routers and nodes and invites users)"
+  ca_pem = ensure_ca
+  ensure_roles
+  ensure_admin
+  ensure_identities(ca_pem)
+  write_router_config
+  say <<~TEXT
+
+    Done. Next (docs/install.md):
+      docker compose up -d          # the router, the console, the bridge, the door
+      then TLS in front of the console and the browsers' door, and sign in as the admin.
+  TEXT
+else
+  puts File.read(__FILE__).lines[1..22].join.gsub(/^# ?/, "")
+  exit(ARGV.empty? ? 0 : 2)
+end

@@ -34,6 +34,14 @@ class Relay::CertificatesControllerTest < ActionDispatch::IntegrationTest
 
   def spki(key = @key) = [ key.public_to_der ].pack("m0")
 
+  def with_env(vars)
+    old = vars.keys.to_h { [ _1, ENV[_1] ] }
+    vars.each { ENV[_1] = _2 }
+    yield
+  ensure
+    old.each { ENV[_1] = _2 }
+  end
+
   setup { @key = OpenSSL::PKey::EC.generate("prime256v1") }
 
   test "issuing takes the public key only and answers with the certificate, never a key" do
@@ -60,6 +68,35 @@ class Relay::CertificatesControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-controller=issue]"
     assert_select "td code", rec.serial
     assert_select ".badge", "in the ACL"
+  end
+
+  test "what the .tar is made of (O1): asterism.json, a client's or a home router's configuration, Save all" do
+    with_env("ASTERISM_RELAY_PUBLIC_ENDPOINT" => "tls/router.example.org:7448") do
+      post relay_peer_certificates_path(@peer), params: { spki: spki }, as: :json
+      assert_response :created
+      ans = response.parsed_body
+      rec = @peer.certificates.sole
+      assert_equal({ "format" => 1, "name" => "w2bot", "kind" => "client", "router" => "tls/router.example.org:7448",
+                     "serial" => rec.serial, "not_after" => rec.not_after.utc.iso8601, "fingerprint" => rec.fingerprint,
+                     "console" => "http://www.example.com" }, ans["info"].except("issued_at"))
+      refute_includes ans["info"].to_s, "PRIVATE"
+      assert_includes ans["zenoh_config"], 'mode: "client"'
+      assert_includes ans["zenoh_config"], "credentials: \"w2bot.tar\""
+
+      home = RelayPeer.create!(name: "home-a", kind: "router", cert_days: 10)
+      post relay_peer_certificates_path(home), params: { spki: spki }, as: :json
+      cfg = response.parsed_body["zenoh_config"]
+      assert_includes cfg, 'mode: "router"'
+      assert_includes cfg, 'listen: { endpoints: ["tcp/[::]:7447"] }'
+      assert_includes cfg, 'connect: { endpoints: ["tls/router.example.org:7448"] }'
+      assert_includes cfg, 'connect_private_key: "home-a.key"'
+      assert_includes cfg, 'metadata: { name: "home-a" }'
+      assert_equal "router", response.parsed_body.dig("info", "kind")
+
+      get relay_peer_path(home)
+      assert_select "button[data-action='issue#saveAll']", "Save all (.tar)"
+      assert_select "button[data-action='issue#save']", 4
+    end
   end
 
   test "a private key sent by mistake is refused and not kept" do

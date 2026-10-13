@@ -4,7 +4,7 @@ require "test_helper"
 # pass, a node ID tied to the user, an app the roles name; the URL reaches
 # the new tab in the body (never a redirect or the log).
 class BrowserPageOpenTest < ActionDispatch::IntegrationTest
-  PAGE = "https://studio.example.org/?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}".freeze
+  PAGE = "https://play.example.org/?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}".freeze
   setup do
     RateLimits::STORE.clear
   end
@@ -32,7 +32,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
   end
 
   test "a template without the pass in its fragment is not used" do
-    with_env("ASTERISM_BROWSER_PAGE" => "https://studio.example.org/?pass={pass}") do
+    with_env("ASTERISM_BROWSER_PAGE" => "https://play.example.org/?pass={pass}") do
       refute BrowserPage.enabled?
     end
   end
@@ -53,7 +53,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       pass = BrowserPass.order(:id).last
       token = url[/zenoh_pass=([^&]+)/, 1]
       assert_equal BrowserPass.digest(token), pass.token_digest
-      assert_equal "https://studio.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}" \
+      assert_equal "https://play.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}" \
                    "&zenoh_node=wasm-pat&app=%2Fapp%2Ftest%2Fothello.app.rb", url
       assert_equal [ "wasm-pat", "/app/test/othello.app.rb" ], [ pass.node, pass.app ]
       refute_includes io.string, token
@@ -95,13 +95,13 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
 
   test "the plain pass link uses the page too, with no node or app" do
     with_env("ASTERISM_BROWSER_PAGE" => PAGE, "ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443") do
-      assert_equal "https://studio.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=abc&zenoh_node=&app=",
+      assert_equal "https://play.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=abc&zenoh_node=&app=",
                    PassLink.url("abc")
     end
   end
 
-  test "no page and no studio URL: the pass is shown without a link" do
-    with_env("ASTERISM_BROWSER_PAGE" => nil, "ASTERISM_STUDIO_URL" => nil) do
+  test "no page: the pass is shown without a link (ASTERISM_STUDIO_URL is no longer read)" do
+    with_env("ASTERISM_BROWSER_PAGE" => nil, "ASTERISM_STUDIO_URL" => "https://play.example.org/") do
       assert_nil PassLink.url("abc")
       sign_in_as(users(:user))
       post browser_passes_path

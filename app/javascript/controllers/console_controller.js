@@ -37,8 +37,7 @@ cytoscape.use(fcose)
 // icon (data "icon", /icons/<hash>) before its name in place of the mark;
 // the mark of its kind is shown only when it has no icon. Its host and
 // display name are in the details, and the display name also goes before
-// the ID in the label (G1b). A node without a profile keeps the mark
-// by its name (V2.2). The icon is a background image placed left of the
+// the ID in the label (G1b). A node without a profile has no mark. The icon is a background image placed left of the
 // label (applyIcons), since a label cannot hold an image.
 //
 // Machines (V2.3, lib/bridge/groups.rb): the ROS 2 nodes that come from the
@@ -100,7 +99,7 @@ const MACHINES = {
 const OTHER_MACHINE = { mark: "\u25C7", label: "another Ruby" }
 const machineOf = (kind) => MACHINES[kind] || (kind ? { ...OTHER_MACHINE, label: kind } : null)
 // How the mark is known (data "machine_by").
-const MACHINE_BY = { profile: "told by its profile", name: "guessed from its name: no profile", self: "this console" }
+const MACHINE_BY = { profile: "told by its profile", none: "no profile", self: "this console" }
 // The size of a profile icon in the graph, and the room between it and the
 // name.
 const ICON_SIZE = 16

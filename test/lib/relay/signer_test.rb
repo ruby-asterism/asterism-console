@@ -116,11 +116,44 @@ class Relay::SignerTest < ActiveSupport::TestCase
   end
 
   test "issue_local: this server's own key, made here" do
-    peer = RelayPeer.create!(name: "zenohd-vps", kind: "router", dns_names: "router.example.org", cert_days: 30)
+    peer = RelayPeer.create!(name: "zenohd-cloud", kind: "router", dns_names: "router.example.org", cert_days: 30)
     record, key, cert_pem, = Relay::Issuer.new(signer: @client).issue_local(peer)
     cert = OpenSSL::X509::Certificate.new(cert_pem)
     assert cert.check_private_key(key)
     assert_includes cert.extensions.find { _1.oid == "subjectAltName" }.value, "DNS:router.example.org"
     assert_equal record.serial, cert.serial.to_s(16).downcase
+  end
+
+  test "a signer without a CA waits for init (the first setup, O1), makes one once" do
+    dir = File.join(@dir, "empty", "ca")
+    port = self.class.free_port
+    pid = Process.spawn({ "SIGNER_TOKEN" => TOKEN }, Rails.root.join("bin/signer").to_s, "serve",
+                        "--ca-dir", dir, "--listen", "127.0.0.1:#{port}", out: File::NULL)
+    client = Relay::SignerClient.new("http://127.0.0.1:#{port}", TOKEN)
+    50.times do
+      TCPSocket.new("127.0.0.1", port).close
+      break
+    rescue SystemCallError
+      sleep 0.1
+    end
+    refute client.ca?
+    key = OpenSSL::PKey::EC.generate("prime256v1")
+    e = assert_raises(Relay::SignerClient::Error) { client.sign(name: "early", spki: OpenSSL::PKey.read(key.public_to_der)) }
+    assert_match(/404/, e.message)
+    assert_raises(Relay::SignerClient::Error) { Relay::SignerClient.new("http://127.0.0.1:#{port}", "x" * 32).init }
+    refute File.exist?(File.join(dir, "ca.key")), "a bad token makes nothing"
+    made = client.init(name: "Test CA")
+    assert_equal "/CN=Test CA", made["subject"]
+    assert client.ca?
+    assert_equal made["fingerprint"], Relay::CertAuthority.fingerprint(OpenSSL::X509::Certificate.new(client.ca_pem))
+    e = assert_raises(Relay::SignerClient::Error) { client.init }
+    assert_match(/409/, e.message)
+    assert_equal "700", format("%o", File.stat(dir).mode & 0o777)
+    assert_equal "600", format("%o", File.stat(File.join(dir, "ca.key")).mode & 0o777)
+    ans = client.sign(name: "later", spki: OpenSSL::PKey.read(key.public_to_der), days: 2)
+    assert_equal "/CN=later", OpenSSL::X509::Certificate.new(ans["certificate"]).subject.to_s
+  ensure
+    Process.kill("TERM", pid) rescue nil
+    Process.wait(pid) rescue nil
   end
 end

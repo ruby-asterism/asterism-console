@@ -187,7 +187,7 @@ class RecordingsControllerTest < ActionDispatch::IntegrationTest
     end
     get graph_recording_path(r, t: 5), as: :json
     graph = response.parsed_body["graph"]
-    assert_equal "family_mruby", graph["nodes"].find { _1["id"] == "a_node:linux" }["data"]["machine"]
+    assert_equal "none", graph["nodes"].find { _1["id"] == "a_node:linux" }["data"]["machine_by"]
     assert_equal "reg_box", graph["nodes"].find { _1["id"] == "reg:w2bot" }["parent"]
     assert graph["nodes"].any? { _1["kind"] == "reg_box" }
     assert graph["edges"].any? { _1["kind"] == "expect" && _1["source"] == "reg:w2bot" && _1["target"] == "router:r1" }

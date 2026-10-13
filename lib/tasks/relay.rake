@@ -3,30 +3,20 @@
 #   bin/rails relay:import [CERTS=storage/relay/certs]   # certificates made before the signer
 #   bin/rails relay:generate                             # write the cloud router's file (no restart)
 #   bin/rails relay:show                                 # print what would be written
-#   bin/rails relay:issue_local NAME=zenohd-vps [KIND=router] [DNS=a,b] [IPS=..] [OUT=/certs]
+#   bin/rails relay:issue_local NAME=zenohd-cloud [KIND=router] [DNS=a,b] [IPS=..] [OUT=/certs]
 #                               [RW=asterism/**] [ADMIN_SPACE=1] [DAYS=365]
 #                                     # this server's own router / bridge: key made here
 namespace :relay do
   desc "Issue a certificate for this server's own router or bridge (the key is written to OUT, 0600)"
   task issue_local: :environment do
     name = ENV.fetch("NAME")
-    out = File.expand_path(ENV.fetch("OUT", "storage/relay/certs"), Rails.root)
-    peer = RelayPeer.find_or_initialize_by(name: name)
-    if peer.new_record?
-      peer.kind = ENV.fetch("KIND", name.start_with?("zenohd-") ? "router" : "client")
-      peer.description = "this server's own (relay:issue_local)"
-      peer.cert_days = Integer(ENV.fetch("DAYS", 365))
-    end
-    peer.dns_names = ENV["DNS"].split(",").join("\n") if ENV["DNS"]
-    peer.ip_addresses = ENV["IPS"].split(",").join("\n") if ENV["IPS"]
-    peer.rw_keys = ENV["RW"].split(",").join("\n") if ENV["RW"]
-    peer.admin_space = ENV["ADMIN_SPACE"] == "1" if ENV["ADMIN_SPACE"]
-    peer.save!
-    record, key, cert_pem, ca_pem = Relay::Issuer.new.issue_local(peer)
-    FileUtils.mkdir_p(out)
-    Relay::CertAuthority.write(File.join(out, "#{name}.key"), key.private_to_pem, 0o600)
-    Relay::CertAuthority.write(File.join(out, "#{name}.pem"), cert_pem, 0o644)
-    Relay::CertAuthority.write(File.join(out, "ca.pem"), ca_pem, 0o644)
+    out = File.expand_path(ENV.fetch("OUT", Relay::Settings.certs_dir), Rails.root)
+    record = Relay::LocalIdentity.issue(
+      name: name, out: out, kind: ENV["KIND"], days: Integer(ENV.fetch("DAYS", 365)),
+      description: "this server's own (relay:issue_local)",
+      dns: ENV["DNS"]&.split(","), ips: ENV["IPS"]&.split(","), rw: ENV["RW"]&.split(","),
+      admin_space: ENV.key?("ADMIN_SPACE") ? ENV["ADMIN_SPACE"] == "1" : nil
+    )
     puts "issued #{name} serial #{record.serial} until #{record.not_after.utc.strftime('%Y-%m-%d')} -> #{out}"
   end
 

@@ -1,0 +1,16 @@
+# Build the console's image here instead of pulling the published one
+# (docs/install.md, "Building the image yourself"):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose up -d
+#
+# The image gets the name of docker-compose.yml (CONSOLE_IMAGE and
+# CONSOLE_VERSION from .env); set CONSOLE_IMAGE to a name of your own
+# (e.g. asterism-console-local) so a later pull does not replace it.
+services:
+  console:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/Dockerfile
+      args:
+        CONSOLE_VERSION: ${CONSOLE_VERSION:-0.1.0}

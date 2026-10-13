@@ -30,10 +30,10 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
 
   test "a pass is shown once, as a link with the router; only its digest is kept" do
     with_env("ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443",
-             "ASTERISM_STUDIO_URL" => "https://studio.example.org/index.html") do
+             "ASTERISM_BROWSER_PAGE" => "https://play.example.org/index.html?zenoh={router}#zenoh_pass={pass}") do
       token = make_pass
       assert_includes response.headers["Cache-Control"], "no-store"
-      assert_select "a[href=?]", "https://studio.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}"
+      assert_select "a[href=?]", "https://play.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}"
       pass = BrowserPass.sole
       assert_equal BrowserPass.digest(token), pass.token_digest
       refute_includes BrowserPass.all.map(&:attributes).to_s, token
@@ -41,6 +41,15 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
       get browser_passes_path
       refute_includes response.body, token, "not shown again"
     end
+  end
+
+  test "Caddy's forward_auth hands the original URI over as X-Forwarded-Uri" do
+    token = make_pass
+    sign_out
+    get check_browser_passes_path, headers: { "X-Forwarded-Uri" => "/?pass=#{token}&page=#{PAGE_A}",
+                                              "X-Forwarded-For" => "198.51.100.9" }
+    assert_response :no_content
+    assert response.headers["X-Asterism-Until"].present?
   end
 
   test "the proxy's check: 204 for a live pass, 401 without, expired or revoked" do

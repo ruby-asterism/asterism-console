@@ -40,6 +40,15 @@
       <div data-issue-target="result" hidden>
         <p class="flash alert" role="alert">Copy or save the private key now. Leaving this page loses it for good.</p>
         <dl class="facts" data-issue-target="facts"></dl>
+        <p class="row">
+          <button type="button" data-action="issue#saveAll" data-test="save-all">Save all (.tar)</button>
+          <span class="hint"><code><%= @peer.name %>.tar</code>: the key (0600), the certificate, the CA,
+            <%= @peer.kind == "router" ? "a home router's configuration" : "a client's configuration" %> (zenoh.json5)
+            and asterism.json, made in this browser. It extracts to <code><%= @peer.name %>/</code>;
+            <% if @peer.kind == "router" %>run <code>zenohd -c zenoh.json5</code> there.<% else %>CRuby takes the file as it
+            is: <code>Asterism.connect(credentials: "<%= @peer.name %>.tar", app: ...)</code>.<% end %>
+            Keep it like a private key (<code>chmod 600</code>).</span>
+        </p>
         <% [ [ "key", "#{@peer.name}.key", "Private key (PKCS#8)" ], [ "cert", "#{@peer.name}.pem", "Certificate" ],
              [ "ca", "ca.pem", "CA" ], [ "config", "zenoh.json5", "Example configuration" ] ].each do |id, file, label| %>
           <section class="pem">

@@ -35,6 +35,23 @@ module Relay
       OpenSSL::X509::Certificate.new(res.body).to_pem
     end
 
+    # Whether the signer has a CA (false while it waits for init).
+    def ca?
+      ca_pem
+      true
+    rescue Error => e
+      raise unless e.message.include?("said 404")
+      false
+    end
+
+    # Asks the signer to make its CA (the first setup). Returns its
+    # subject, not_after and fingerprint; Error when it has one already.
+    def init(name: "Asterism Relay CA")
+      req = Net::HTTP::Post.new("/init", "Content-Type" => "application/json")
+      req.body = JSON.generate("name" => name)
+      JSON.parse(request(req).body)
+    end
+
     # Signs, for name, either csr (OpenSSL::X509::Request, a key made on
     # this side) or spki (an OpenSSL::PKey public key, e.g. made in a
     # browser: only the public key travels). Returns the parsed answer with

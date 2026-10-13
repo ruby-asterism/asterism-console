@@ -64,27 +64,66 @@ module Relay
       raise Error, "not a public key (SubjectPublicKeyInfo, DER)"
     end
 
+    # The example configuration handed out with a certificate (zenoh.json5
+    # in the .tar). For a router: a home router, listening for the boards
+    # on the LAN (plain TCP 7447) and connecting out to the cloud router
+    # with this certificate, so `zenohd -c zenoh.json5` runs as it is in
+    # the directory the .tar makes. For a client: the same connection for
+    # any zenoh client (CRuby takes the .tar itself, credentials:). Paths
+    # are relative to where the process runs.
     def zenoh_config(peer)
-      <<~JSON5
-        // zenoh configuration for #{peer.name} (#{peer.kind}): mutual TLS to the cloud router.
-        // Paths are relative to where the process runs; adjust them.
-        {
-          mode: "#{peer.kind == 'router' ? 'router' : 'client'}",
-          connect: { endpoints: ["#{@endpoint}"] },
-          transport: { link: { tls: {
+      tls = <<~JSON5.chomp
+        transport: { link: { tls: {
             root_ca_certificate: "ca.pem",
             connect_certificate: "#{peer.name}.pem",
             connect_private_key: "#{peer.name}.key",
             enable_mtls: true,
             close_link_on_expiration: true,
           } } },
-        }
       JSON5
+      if peer.kind == "router"
+        <<~JSON5
+          // zenoh configuration for #{peer.name}, a home router: the boards on its
+          // network connect to it (tcp/7447, no TLS: keep that port inside the LAN),
+          // and it connects to the cloud router #{@endpoint} with mutual TLS.
+          // Run it where the files are: zenohd -c zenoh.json5
+          {
+            mode: "router",
+            metadata: { name: "#{peer.name}" },
+            listen: { endpoints: ["tcp/[::]:7447"] },
+            connect: { endpoints: ["#{@endpoint}"] },
+            scouting: { multicast: { enabled: false } },
+            #{tls}
+          }
+        JSON5
+      else
+        <<~JSON5
+          // zenoh configuration for #{peer.name} (a client): mutual TLS to the cloud
+          // router. Paths are relative to where the process runs. CRuby (the
+          // asterism gem) needs none of this: Asterism.connect(credentials: "#{peer.name}.tar", app: ...)
+          {
+            mode: "client",
+            connect: { endpoints: ["#{@endpoint}"] },
+            #{tls}
+          }
+        JSON5
+      end
+    end
+
+    # asterism.json in the .tar: what the files are for (no secret in it).
+    def credentials_info(peer, record, console: nil)
+      { "format" => 1, "name" => peer.name, "kind" => peer.kind, "router" => @endpoint,
+        "serial" => record.serial, "not_after" => record.not_after.utc.iso8601,
+        "fingerprint" => record.fingerprint, "console" => console,
+        "issued_at" => Time.now.utc.iso8601 }.compact
     end
 
     def command(peer)
-      "ruby examples/node.rb --router #{@endpoint} --node #{peer.name} " \
-        "--ca ca.pem --cert #{peer.name}.pem --key #{peer.name}.key"
+      if peer.kind == "router"
+        "tar xf #{peer.name}.tar && cd #{peer.name} && zenohd -c zenoh.json5"
+      else
+        "ruby -rasterism -e 'Asterism.connect(credentials: \"#{peer.name}.tar\", app: \"demo\") { |net| p net.nodes }'"
+      end
     end
 
     private

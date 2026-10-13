@@ -29,16 +29,15 @@ class Bridge::MarksTest < ActiveSupport::TestCase
     g["edges"].select { _1["kind"] == "expect" }.map { [ _1["source"], _1["target"] ] }.sort
   end
 
-  test "what an Asterism node runs on, by its name" do
+  test "nothing is guessed from a node's name without a profile (O1)" do
     g = Bridge::Marks.apply({ "nodes" => [ a_node("console", true), a_node("fmruby-aaaaaa"), a_node("linux"), a_node("wasm"),
-                                           a_node("wasm-0a1b2c"), a_node("wasm-board"), a_node("cruby"), a_node("fmruby-board"), a_node("mujoco") ],
+                                           a_node("wasm-0a1b2c"), a_node("cruby"), a_node("mujoco") ],
                               "edges" => [] })
-    assert_equal({ "console" => "console", "fmruby-aaaaaa" => "family_mruby", "linux" => "family_mruby", "wasm" => "family_mruby",
-                   "wasm-0a1b2c" => "family_mruby", "wasm-board" => "cruby", "cruby" => "cruby", "fmruby-board" => "cruby",
-                   "mujoco" => "cruby" },
+    assert_equal({ "console" => "console", "fmruby-aaaaaa" => nil, "linux" => nil, "wasm" => nil,
+                   "wasm-0a1b2c" => nil, "cruby" => nil, "mujoco" => nil },
                  g["nodes"].to_h { [ _1["label"], _1["data"]["machine"] ] })
     assert_equal [ "self" ], g["nodes"].select { _1["data"]["self"] }.map { _1["data"]["machine_by"] }
-    assert_equal [ "name" ], g["nodes"].reject { _1["data"]["self"] }.map { _1["data"]["machine_by"] }.uniq
+    assert_equal [ "none" ], g["nodes"].reject { _1["data"]["self"] }.map { _1["data"]["machine_by"] }.uniq
   end
 
   def with_profile(n, profile)
@@ -59,7 +58,7 @@ class Bridge::MarksTest < ActiveSupport::TestCase
                    "pico" => [ "picoruby", "profile", nil ],
                    "jr" => [ "jruby", "profile", nil ],
                    "console" => [ "console", "self", "/icons/0a1b2c3d" ],
-                   "old-cruby" => [ "cruby", "name", nil ] }, got)
+                   "old-cruby" => [ nil, "none", nil ] }, got)
     # Without the store's hashes (a recording's rewind on another console):
     # no icon, the marks the same.
     g2 = Bridge::Marks.apply(g)
