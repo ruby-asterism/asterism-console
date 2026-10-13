@@ -13,13 +13,32 @@
 class BrowserPassesController < ApplicationController
   allow_unauthenticated_access only: :check
   skip_forgery_protection only: :check
-  rate_limit to: 10, within: 10.minutes, only: :create, by: -> { current_user.id }, store: RateLimits::STORE,
+  rate_limit to: 10, within: 10.minutes, only: %i[create open], by: -> { current_user.id }, store: RateLimits::STORE,
              with: -> { redirect_to browser_passes_path, alert: "Too many passes: wait a few minutes." }
   rate_limit to: 60, within: 1.minute, only: :check, store: RateLimits::STORE, with: -> { head :too_many_requests }
   layout "plain"
 
   def index
     @passes = current_user.browser_passes.order(id: :desc).limit(20)
+    @next_node = Relay::BrowserNode.pick(current_user) if BrowserPage.enabled?
+  end
+
+  # Opens the browser build in the tab this form targets: a fresh pass, the
+  # node ID for this user (Relay::BrowserNode) and the app chosen (one the
+  # roles name, or nothing). The URL goes to the tab in the body of a page
+  # that is not kept, never in a redirect (the log would show it).
+  def open
+    return head :not_found unless BrowserPage.enabled?
+    app = params[:app].to_s
+    return head :unprocessable_content unless BrowserPage.apps.any? { _1[1] == app }
+    node = Relay::BrowserNode.pick(current_user)
+    pass = BrowserPass.issue!(current_user, ip: request.remote_ip, node: node, app: app)
+    Rails.logger.info("pass: #{pass.id} made for #{current_user.email_address} to open the browser build as #{node}")
+    @url = BrowserPage.url(pass: pass.token, node: node, app: app)
+    @node = node
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    render :open, layout: false
   end
 
   def create

@@ -31,12 +31,13 @@ class BrowserPass < ApplicationRecord
 
   # Makes a pass for user; the pass (token) is readable once, on the
   # returned record.
-  def self.issue!(user, ip: nil, ttl: TTL)
+  def self.issue!(user, ip: nil, ttl: TTL, node: nil, app: nil)
     token = SecureRandom.urlsafe_base64(32)
     transaction do
       live = user.browser_passes.live.order(:id).to_a
       live.first([ live.size - (PER_USER - 1), 0 ].max).each { _1.revoke!(user) }
-      create!(user: user, token_digest: digest(token), created_ip: ip, expires_at: ttl.from_now).tap do |p|
+      create!(user: user, token_digest: digest(token), created_ip: ip, expires_at: ttl.from_now,
+              node: node, app: app.presence).tap do |p|
         p.instance_variable_set(:@token, token)
       end
     end

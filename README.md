@@ -81,8 +81,8 @@ admin allowed, and every call is logged (see [Security](#security)).
 
 On a server, next to an internet router, behind the server's nginx:
 `deploy/vps/README.md` (and its rehearsal on one PC, `deploy/local/`);
-the design (the router's ACL for players and browsers, browser passes, the
-admin pages): `docs/g0_w4.md`.
+the design (the router's ACL, browser passes, the admin pages):
+`docs/g0_w4.md`; roles and opening the browser build: `docs/g1_5.md`.
 
 ## Running it
 
@@ -295,9 +295,12 @@ applies it.
   (one key expression per line), whether it reads the admin space (a
   client) or has its admin space read through (a router), enabled,
   certificate lifetime, extra DNS names / IPs for a router that listens,
-  and "Player" (the game rules of the internet router, with the node IDs
-  it speaks for; docs/g0_w4.md). Reading a key also lets it query it, and
-  an Asterism call is a query.
+  its roles and the node IDs it speaks for (docs/g1_5.md). Reading a key
+  also lets it query it, and an Asterism call is a query.
+- **Roles** (admins only, `/admin/relay/roles`): a name and key templates
+  (read and write, read, ask, watch), `${node}` standing for each node a
+  row speaks for; optionally given to the browsers, and an app a browser
+  page starts with. "match" is seeded as an example.
 - **The signer** (`bin/signer`, plain Ruby) is the only process that holds
   the CA's private key. **The peer's key is made in the admin's browser**
   (Web Crypto, ECDSA P-256): the page sends the public key only, the signer
@@ -409,7 +412,10 @@ even on a LAN. What it does, and what it assumes:
   Recordings are for admins only.
 - **Browser passes**: a signed-in user makes a short-lived pass for the
   browser build's `wss://` to the internet router; the proxy asks the
-  console about it once per connection (docs/g0_w4.md).
+  console about it once per connection (docs/g0_w4.md). With a page
+  configured (`ASTERISM_BROWSER_PAGE`, a URL template), "Open the browser
+  build" makes the pass and opens the page in a new tab as a node named
+  after the user, starting an app a role names (docs/g1_5.md).
 - **Limits**: sign-in 10 tries per address in 3 minutes and 20 per email
   address in an hour; the watch panel sends a camera picture (over 16 KB)
   at most twice a second per key.

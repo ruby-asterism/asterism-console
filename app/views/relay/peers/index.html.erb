@@ -10,13 +10,15 @@
     <p class="hint">Nobody is registered yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Kind</th><th>Keys (read and write / read only)</th><th>Console sees</th>
+      <thead><tr><th>Name</th><th>Kind</th><th>Roles (for)</th><th>Other keys (read and write / read only)</th><th>Console sees</th>
                  <th>Certificate until</th><th>ACL (next apply)</th><th>Now</th></tr></thead>
       <tbody>
         <% @peers.each do |p| %>
           <tr>
             <td><%= link_to p.name, relay_peer_path(p) %><br><span class="hint"><%= p.description %></span></td>
             <td><%= p.kind %><%= tag.span(" (this router)", class: "hint") if p.name == @cloud %></td>
+            <td><%= p.roles.any? ? safe_join(p.roles.map { link_to _1.name, relay_role_path(_1) }, ", ") : tag.span("none", class: "hint") %>
+              <% if p.roles.any? %><br><span class="hint">for <%= p.speaks_for.join(", ") %></span><% end %></td>
             <td><%= keys_list(p.rw_keys) %><% if p.ro_list.any? %><br><span class="hint">read only:</span><br><%= keys_list(p.ro_keys) %><% end %></td>
             <td><%= console_sees(p) %></td>
             <td><%= when_text(p.cert_expires_at) %></td>

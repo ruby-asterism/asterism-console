@@ -13,7 +13,9 @@
 #   ASTERISM_RELAY_LISTEN         tls/[::]:7448 (comma separated for more)
 #   ASTERISM_RELAY_BROWSERS       a ws/ endpoint (ws/[::]:7449) lets the browser build in,
 #                                 behind the proxy that checks passes (W4); unset: none
-#   ASTERISM_RELAY_GAME           game (the app whose keys players use, G0)
+#   ASTERISM_BROWSER_NODE_PREFIX  wasm- (the browsers' node IDs start with it: ${node} of the
+#                                 roles for browsers is <prefix>$*, and the console names a
+#                                 browser page it opens <prefix><user>, Relay::BrowserNode)
 #   ASTERISM_RELAY_MAX_SESSIONS   64    (transport/unicast/max_sessions)
 #   ASTERISM_RELAY_ACCEPT_PENDING 16    (transport/unicast/accept_pending)
 #   ASTERISM_RELAY_ACCEPT_TIMEOUT 5000  (ms, transport/unicast/accept_timeout)
@@ -34,12 +36,18 @@ module Relay
         "name" => cloud_name(env),
         "listen" => env["ASTERISM_RELAY_LISTEN"].presence&.split(",")&.map(&:strip),
         "browsers" => env["ASTERISM_RELAY_BROWSERS"].presence,
-        "game" => env["ASTERISM_RELAY_GAME"].presence,
+        "browser_nodes" => "#{browser_node_prefix(env)}$*",
         "max_sessions" => int.("ASTERISM_RELAY_MAX_SESSIONS"),
         "accept_pending" => int.("ASTERISM_RELAY_ACCEPT_PENDING"),
         "accept_timeout_ms" => int.("ASTERISM_RELAY_ACCEPT_TIMEOUT"),
         "max_message_size" => int.("ASTERISM_RELAY_MAX_MESSAGE")
       }.compact
+    end
+
+    def browser_node_prefix(env = ENV)
+      prefix = env["ASTERISM_BROWSER_NODE_PREFIX"].presence || "wasm-"
+      raise ArgumentError, "ASTERISM_BROWSER_NODE_PREFIX: #{prefix.inspect}" unless prefix.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]{0,20}\z/)
+      prefix
     end
 
     def generated_dir(env = ENV, root: Rails.root)

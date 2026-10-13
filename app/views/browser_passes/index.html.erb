@@ -1,7 +1,18 @@
 <% content_for(:title, "Browser passes - Asterism Console") %>
+<% if BrowserPage.enabled? %>
+  <section class="card">
+    <h2>Open the browser build</h2>
+    <p>Opens <code><%= BrowserPage.origin %></code> in a new tab, connected to this console's router with a fresh
+      pass, as the node <code><%= @next_node %></code> (yours; a second page open at the same time gets the next name).</p>
+    <%= form_with url: open_browser_passes_path, method: :post, data: { turbo: false }, html: { target: "_blank" } do |f| %>
+      <label>Start <%= f.select :app, BrowserPage.apps %></label>
+      <%= f.submit "Open the browser build" %>
+    <% end %>
+  </section>
+<% end %>
 <section class="card">
   <h2>Browser passes</h2>
-  <p>A pass lets the browser build of Family mruby connect to this console's router over <code>wss://</code>
+  <p>A pass lets a browser build (a page that joins the network from a browser) connect to this console's router over <code>wss://</code>
     once, within <%= (BrowserPass::TTL / 60).to_i %> minutes. It is yours: the connection it opens is logged with your name.
     A pass opens one connection; the router closes a connection after a few hours at most, and a page that
     has to connect again (that, or a reload) needs a new pass.</p>
@@ -15,7 +26,7 @@
       <dt>Until</dt><dd><%= when_text(@new_pass.expires_at) %></dd>
       <dt>Pass</dt><dd><code class="wrap"><%= @new_pass.token %></code></dd>
       <dt>Router</dt><dd><code><%= PassLink.router || "(ASTERISM_PASS_ROUTER is not set)" %></code></dd>
-      <dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd>
+      <% if @link %><dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd><% end %>
     </dl>
     <p class="hint">Do not share the link: whoever opens it first connects as you (once, until it expires). Revoke it below when you will not use it.</p>
   </section>
@@ -27,11 +38,12 @@
     <p class="hint">None yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>#</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Last used</th><th>Refused</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Node</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Last used</th><th>Refused</th><th></th></tr></thead>
       <tbody>
         <% @passes.each do |p| %>
           <tr>
             <td><%= p.id %></td>
+            <td><%= p.node ? tag.code(p.node) : "-" %><%= tag.span(" #{p.app}", class: "hint") if p.app %></td>
             <td class="nowrap"><%= when_text(p.created_at) %></td>
             <td class="nowrap"><%= when_text(p.expires_at) %></td>
             <td><span class="badge <%= p.status == 'live' ? 'ok' : 'bad' %>"><%= p.status %></span></td>

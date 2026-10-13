@@ -1,0 +1,36 @@
+<% content_for(:title, "#{@role.name} - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2><%= @role.name %> <span class="hint">role</span></h2>
+  <dl class="facts">
+    <dt>Description</dt><dd><%= @role.description.presence || "-" %></dd>
+    <dt>Read and write</dt><dd><%= keys_list(@role.rw_templates) %></dd>
+    <dt>Read</dt><dd><%= keys_list(@role.read_templates) %></dd>
+    <dt>Ask (calls, meta)</dt><dd><%= keys_list(@role.ask_templates) %></dd>
+    <dt>Watch</dt><dd><%= keys_list(@role.watch_templates) %></dd>
+    <dt>Browsers</dt><dd><%= @role.for_browsers? ? "have this role#{' (no browsers are let in now)' unless @browsers_listen}" : "no" %></dd>
+    <dt>Opens in a browser page</dt><dd><%= @role.browser_app.present? ? tag.code(@role.browser_app) : "-" %></dd>
+  </dl>
+  <p><%= link_to "Edit", edit_relay_role_path(@role) %></p>
+</section>
+
+<section class="card">
+  <h2>What it becomes</h2>
+  <% if @rows.empty? && !@browsers %>
+    <p class="hint">No row has this role.</p>
+  <% end %>
+  <% @rows.each do |peer, expansion| %>
+    <h3><%= link_to peer.name, relay_peer_path(peer) %> <span class="hint">for <%= peer.speaks_for.join(", ") %>
+      <%= "(not in the ACL now: #{peer.enabled? ? 'no valid certificate' : 'disabled'})" unless peer.in_acl? %></span></h3>
+    <%= render "relay/roles/expansion", expansion: expansion %>
+  <% end %>
+  <% if @browsers %>
+    <h3>Browsers <span class="hint">every ws/ session, one subject</span></h3>
+    <%= render "relay/roles/expansion", expansion: @browsers %>
+  <% end %>
+</section>
+
+<section class="card">
+  <%= button_to "Remove the role #{@role.name}", relay_role_path(@role), method: :delete, class: "small",
+                form: { data: { turbo_confirm: "Remove the role #{@role.name}? Rows that have it lose it." } } %>
+</section>

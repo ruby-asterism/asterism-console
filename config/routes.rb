@@ -53,9 +53,12 @@ Rails.application.routes.draw do
   # Passes for the browser build's wss:// (W4): a signed-in user makes one;
   # the proxy in front of the router asks check (no session: the proxy's
   # subrequest) whether a pass may open a connection.
+  # "Open the browser build" (G1.5): a pass, a node ID for the user and the
+  # app to start, handed to a page configured by ASTERISM_BROWSER_PAGE.
   resources :browser_passes, path: "passes", only: %i[index create] do
     patch :revoke, on: :member
     get :check, on: :collection
+    post :open, on: :collection
   end
 
   # Joining by invitation (there is no sign-up page).
@@ -67,13 +70,14 @@ Rails.application.routes.draw do
   # apply, the call permissions, the users and invitations, every pass.
   scope "admin" do
     resources :call_permissions, only: %i[index create destroy]
-    # The relay: registry, certificates (through the signer, or imported), apply.
+    # The relay: registry, roles, certificates (through the signer, or imported), apply.
     namespace :relay do
       resources :peers do
         resources :certificates, only: :create do
           patch :revoke, on: :member
         end
       end
+      resources :roles
       resources :applies, only: %i[index new create show]
       get "/", to: redirect("/admin/relay/peers")
     end

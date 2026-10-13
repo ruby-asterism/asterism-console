@@ -1,0 +1,23 @@
+<% if role.errors.any? %><p class="error"><%= role.errors.full_messages.to_sentence %></p><% end %>
+<%= form_with model: role, url: role.persisted? ? relay_role_path(role) : relay_roles_path, class: "grid-form" do |f| %>
+  <label>Name <%= f.text_field :name, required: true, pattern: "[a-z0-9][a-z0-9_\\-]{0,40}" %></label>
+  <label class="wide">Description <%= f.text_field :description %></label>
+  <label>Read and write (every message, both ways; one template per line)
+    <%= f.text_area :rw_templates, rows: 4, placeholder: "asterism/${node}/app/**" %></label>
+  <label>Read (subscribe and liveliness queries from it; everything on these keys towards it)
+    <%= f.text_area :read_templates, rows: 4, placeholder: "asterism/*/app/**" %></label>
+  <label>Ask (queries from it: an Asterism call or meta is a query)
+    <%= f.text_area :ask_templates, rows: 4, placeholder: "asterism/*/app/*/call/${node}" %></label>
+  <label>Watch (the liveliness watch from it)
+    <%= f.text_area :watch_templates, rows: 2, placeholder: "asterism/**" %></label>
+  <label class="check wide"><%= f.check_box :for_browsers %> Browsers have this role (every ws/ session;
+    <code>${node}</code> is <code><%= Relay::Settings.cloud_settings["browser_nodes"] %></code>)</label>
+  <label class="wide">Opens in a browser page (optional: what the page opened from the console starts, for example
+    an app's path) <%= f.text_field :browser_app %></label>
+  <p class="hint wide"><code>${node}</code> is put in for each node the row speaks for. A template without it is the
+    same for every row. Calls under the caller's own name only: put <code>asterism/*/&lt;app&gt;/*/call/${node}</code>
+    under Ask (with <code>asterism/*/&lt;app&gt;/*/meta</code> and <code>asterism/*/@profile</code>), not the
+    whole app. A subscription wider than the keys allowed is refused whole; keys starting with <code>@</code> are
+    not in <code>**</code>.</p>
+  <%= f.submit role.persisted? ? "Save" : "Make" %>
+<% end %>

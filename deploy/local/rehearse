@@ -33,7 +33,8 @@ def prepare
     text = text.sub(/^CONSOLE_HOSTS=.*/, "CONSOLE_HOSTS=asterism.localtest")
                .sub(/^ASTERISM_PASS_ROUTER=.*/, "ASTERISM_PASS_ROUTER=ws/router.localtest:7443")
                .sub(/^ASTERISM_RELAY_PUBLIC_ENDPOINT=.*/, "ASTERISM_RELAY_PUBLIC_ENDPOINT=tls/localhost:17448")
-               .sub(/^ASTERISM_STUDIO_URL=.*/, "ASTERISM_STUDIO_URL=https://studio.localtest/index.html")
+               .sub(/^# ASTERISM_BROWSER_PAGE=.*/, "ASTERISM_BROWSER_PAGE=https://studio.localtest/index.html" \
+                                                   "?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}")
                .sub(/^CONSOLE_ADMIN_NETS=.*/, "CONSOLE_ADMIN_NETS=172.31.240.50/32")
                .sub(/^SECRET_KEY_BASE=.*/, "SECRET_KEY_BASE=#{SecureRandom.hex(64)}")
                .sub(/^ASTERISM_SIGNER_TOKEN=.*/, "ASTERISM_SIGNER_TOKEN=#{SecureRandom.hex(32)}")

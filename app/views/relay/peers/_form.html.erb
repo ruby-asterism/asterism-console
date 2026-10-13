@@ -13,14 +13,22 @@
     <label class="check wide"><%= f.check_box :admin_space %> May read the cloud router's status: every session connected to
       it and its address. Only for the console</label>
   <% end %>
-  <label class="check"><%= f.check_box :player %> Player (the game rules: writes only at its own nodes)</label>
+  <fieldset class="wide roles">
+    <legend>Roles (<%= link_to "what they allow", relay_roles_path %>)</legend>
+    <% roles = RelayRole.order(:name) %>
+    <% if roles.empty? %><p class="hint">No roles yet.</p><% end %>
+    <%= f.collection_check_boxes :role_ids, roles, :id, :name do |b| %>
+      <label class="check"><%= b.check_box %> <%= b.text %> <span class="hint"><%= b.object.description %></span></label>
+    <% end %>
+  </fieldset>
   <label class="wide">Description <%= f.text_field :description %></label>
-  <label>Keys it may read and write (one per line)
-    <%= f.text_area :rw_keys, rows: 5, placeholder: "asterism/**" %></label>
-  <label>Keys it may only read (one per line)
-    <%= f.text_area :ro_keys, rows: 5, placeholder: "demo/**" %></label>
-  <label>Nodes it speaks for, as a player (one node ID per line; empty: its own name. A home router lists the boards behind it)
-    <%= f.text_area :player_nodes, rows: 3, placeholder: "fmruby-aaaaaa" %></label>
+  <label>Other keys it may read and write, outside its roles (one per line)
+    <%= f.text_area :rw_keys, rows: 4 %></label>
+  <label>Other keys it may only read, outside its roles (one per line)
+    <%= f.text_area :ro_keys, rows: 4 %></label>
+  <label>Nodes it speaks for (<code>${node}</code> of its roles; one node ID per line; empty: its own name.
+    A router lists the nodes behind it)
+    <%= f.text_area :nodes, rows: 3, placeholder: "node-a" %></label>
   <label>DNS names in its certificate (a router that listens; one per line)
     <%= f.text_area :dns_names, rows: 3 %></label>
   <label>IP addresses in its certificate (one per line)
@@ -28,8 +36,7 @@
   <p class="hint wide">Reading a key also lets it query that key, and an Asterism method call is a query:
     read-only on <code>asterism/**</code> still lets it call methods. A wider subscription than the keys
     allowed is refused whole. Keys starting with <code>@</code> are not in <code>**</code>.
-    A player needs no keys here: it may write at <code>asterism/&lt;node&gt;</code>,
-    <code>asterism/&lt;node&gt;/<%= Relay::Settings.cloud_settings["game"] || "game" %>/**</code> and
-    <code>asterism/&lt;node&gt;/@profile</code> of its nodes, and read the game's keys of every node.</p>
+    Most rows need no keys here: their roles say what they may do. Keys here are for what is not a role
+    (the console's own <code>asterism/**</code>, for example); they are not limited to its nodes.</p>
   <%= f.submit peer.persisted? ? "Save" : "Register" %>
 <% end %>

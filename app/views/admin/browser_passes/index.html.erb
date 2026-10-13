@@ -5,12 +5,13 @@
     <p class="hint">None yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>#</th><th>User</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Last used</th><th>Refused</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>User</th><th>Node</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Last used</th><th>Refused</th><th></th></tr></thead>
       <tbody>
         <% @passes.each do |p| %>
           <tr>
             <td><%= p.id %></td>
             <td><%= p.user.email_address %></td>
+            <td><%= p.node ? tag.code(p.node) : "-" %></td>
             <td class="nowrap"><%= when_text(p.created_at) %> from <%= p.created_ip %></td>
             <td class="nowrap"><%= when_text(p.expires_at) %></td>
             <td><span class="badge <%= p.status == 'live' ? 'ok' : 'bad' %>"><%= p.status %></span>

@@ -1,0 +1,6 @@
+<% content_for(:title, "#{@role.name} - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2>Edit the role <%= @role.name %></h2>
+  <%= render "form", role: @role %>
+</section>

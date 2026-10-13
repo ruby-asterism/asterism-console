@@ -1,0 +1,16 @@
+<%# expansion: [{ "role", "section", "keys" }] (Relay::CloudConfig#expansion_for) %>
+<% labels = { "rw" => "read and write (every message, both ways)", "read" => "read (subscribe, liveliness queries; everything towards it)",
+              "ask" => "ask (queries: calls and meta)", "watch" => "watch (the liveliness watch)" } %>
+<% if expansion.empty? %>
+  <p class="hint">Nothing from roles.</p>
+<% else %>
+  <table class="list">
+    <thead><tr><th>Role</th><th>Access</th><th>Keys in the ACL</th></tr></thead>
+    <tbody>
+      <% expansion.each do |e| %>
+        <tr><td><%= e["role"] %></td><td><%= labels[e["section"]] %></td>
+          <td><%= safe_join(e["keys"].map { tag.code(_1) }, tag.br) %></td></tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

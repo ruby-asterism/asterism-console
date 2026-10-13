@@ -1,0 +1,10 @@
+# The role the migration seeds (db/migrate/*_relay_roles.rb), app "game".
+match:
+  name: match
+  description: Play a game against others
+  rw_templates: "asterism/${node}\nasterism/${node}/game/**\nasterism/${node}/@profile"
+  read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/@profile"
+  ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}"
+  watch_templates: "asterism/**"
+  browser_app: /app/test/othello.app.rb
+  for_browsers: true

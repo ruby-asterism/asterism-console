@@ -1,27 +1,28 @@
-# A CRuby player for checking the server after it is set up (README,
+# A CRuby node for checking the server after it is set up (README,
 # "Check that it works"): connects to the router over mutual TLS with a
-# player's certificate, joins the app the players may use ("game",
-# ASTERISM_RELAY_GAME), exposes game/board, lists the game objects it sees
-# and calls board.move on every other player's board. Run two of them
-# (two players) to see a call cross the router. Needs the asterism gem
+# row's certificate, joins an app its roles allow (default "game", the app
+# of the seeded role "match"), exposes <app>/board, lists the objects of
+# the app it sees and calls board.move on every other node's board. Run two
+# of them to see a call cross the router. Needs the asterism gem
 # (gem install asterism -v '~> 0.7.0').
 #
-#   ruby check_player.rb --router tls/router.example.org:7448 --node alice \
+#   ruby check_node.rb --router tls/router.example.org:7448 --node alice \
 #     --ca ca.pem --cert alice.pem --key alice.key [--app game] [--serve 60]
 #
-# examples/node.rb of the asterism repository joins the app "demo", which
-# the players' ACL does not let through: use this one against the server.
+# With a role that allows calls only under the caller's own name, a --node
+# other than the certificate's name (or a node the row does not speak for)
+# can still read, but its calls get no answer (nobody answers).
 require "asterism"
 require "optparse"
 
 opt = { app: "game", serve: 30.0 }
 OptionParser.new do |o|
   o.on("--router LOC") { |v| opt[:router] = v }
-  o.on("--node ID", "the player's name (its certificate's name)") { |v| opt[:node] = v }
+  o.on("--node ID", "the node ID (its certificate's name, or a node its row speaks for)") { |v| opt[:node] = v }
   o.on("--ca FILE") { |v| opt[:ca] = v }
   o.on("--cert FILE") { |v| opt[:cert] = v }
   o.on("--key FILE") { |v| opt[:key] = v }
-  o.on("--app NAME", "the players' app (default game)") { |v| opt[:app] = v }
+  o.on("--app NAME", "the app (default game)") { |v| opt[:app] = v }
   o.on("--serve SECONDS", Float, "stay this long answering calls (default 30)") { |v| opt[:serve] = v }
 end.parse!
 %i[router node ca cert key].each { |k| abort "--#{k} is required" unless opt[k] }

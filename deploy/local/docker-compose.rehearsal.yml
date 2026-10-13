@@ -45,7 +45,7 @@ services:
       - ../local/nginx/asterism-ssl-console.conf:/etc/nginx/snippets/asterism-ssl-console.conf:ro
       - ../local/nginx/asterism-ssl-router.conf:/etc/nginx/snippets/asterism-ssl-router.conf:ro
       - ../local/nginx/asterism-admin-allow.conf:/etc/nginx/snippets/asterism-admin-allow.conf:ro
-      - ../local/nginx/asterism-players-allow.conf:/etc/nginx/snippets/asterism-players-allow.conf:ro
+      - ../local/nginx/asterism-door-allow.conf:/etc/nginx/snippets/asterism-door-allow.conf:ro
       - ../local/certs:/etc/nginx/rehearsal-certs:ro
       - ${STUDIO_DIST:-../local/certs/no-studio}:/srv/studio:ro
     ports:

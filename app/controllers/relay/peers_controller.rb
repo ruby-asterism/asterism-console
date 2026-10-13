@@ -7,7 +7,7 @@ module Relay
     layout "plain"
 
     def index
-      @peers = RelayPeer.includes(:certificates).order(:kind, :name)
+      @peers = RelayPeer.includes(:certificates, :roles).order(:kind, :name)
       @seen = Relay::Presence.seen(GraphState.current.graph)
       @cloud = Relay::Settings.cloud_name
       @plan = Relay::Applier.new.plan
@@ -16,15 +16,16 @@ module Relay
     def show
       response.headers["Cache-Control"] = "no-store" # the issuing page holds a key while open
       @seen = Relay::Presence.seen(GraphState.current.graph)
+      @expansion = Relay::Applier.config_for.expansion_for(@peer.to_config)
     end
 
     # A router starts with its admin space read through (the graph shows what
     # is behind it); a client starts without reading the cloud router's, which
-    # lists every session and its address.
+    # lists every session and its address. Nothing is allowed until roles or
+    # keys are chosen (G1.5: no asterism/** by default).
     def new
       kind = params[:kind].presence_in(RelayPeer::KINDS) || "client"
-      @peer = RelayPeer.new(kind: kind, name: params[:name], rw_keys: "asterism/**\n", cert_days: 90,
-                            admin_space: kind == "router")
+      @peer = RelayPeer.new(kind: kind, name: params[:name], cert_days: 90, admin_space: kind == "router")
     end
 
     def create
@@ -59,8 +60,8 @@ module Relay
     end
 
     def peer_params
-      params.expect(relay_peer: %i[ name kind description rw_keys ro_keys admin_space enabled
-                                   dns_names ip_addresses cert_days player player_nodes ])
+      params.expect(relay_peer: [ :name, :kind, :description, :rw_keys, :ro_keys, :admin_space, :enabled,
+                                  :dns_names, :ip_addresses, :cert_days, :nodes, { role_ids: [] } ])
     end
   end
 end

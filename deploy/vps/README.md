@@ -6,11 +6,12 @@ services behind its own nginx. Everything is added next to what is there;
 nothing that runs now is changed. The names and addresses below are
 placeholders: `router.example.org` (the server's existing main name),
 `asterism.example.org` (a new name for the console), `192.0.2.10` (an
-admin's address), `192.0.2.20` (a player's address). Use your own, and do
+admin's address), `192.0.2.20` (the address of someone who uses it). Use your own, and do
 not write the real ones into this repository.
 
 The same layout runs on one PC for a rehearsal: `deploy/local/README.md`.
-Design notes (the ACL, passes, the admin pages): `docs/g0_w4.md`.
+Design notes (the ACL, passes, the admin pages): `docs/g0_w4.md`; roles
+and opening the browser build: `docs/g1_5.md`.
 
 ## What runs
 
@@ -132,7 +133,7 @@ Copy the files (Debian / Ubuntu layout; adjust to the server's):
 
 ```
 sudo cp nginx/asterism-http.conf nginx/asterism-upstreams.conf /etc/nginx/conf.d/
-sudo cp nginx/asterism-proxy.conf nginx/asterism-admin-allow.conf nginx/asterism-players-allow.conf \
+sudo cp nginx/asterism-proxy.conf nginx/asterism-admin-allow.conf nginx/asterism-door-allow.conf \
         nginx/asterism-ssl-console.conf nginx/asterism-ssl-router.conf /etc/nginx/snippets/
 sudo cp nginx/asterism-console.conf nginx/asterism-router.conf /etc/nginx/sites-available/
 ```
@@ -140,8 +141,8 @@ sudo cp nginx/asterism-console.conf nginx/asterism-router.conf /etc/nginx/sites-
 Edit them: the names (`asterism.example.org`, `router.example.org`), the
 loopback ports in `asterism-upstreams.conf` (same as `.env`), the wss port
 (7443), the certificate paths in the two `asterism-ssl-*.conf`, the admins'
-addresses in `asterism-admin-allow.conf` and the players' in
-`asterism-players-allow.conf`.
+addresses in `asterism-admin-allow.conf` and the addresses that may open
+the browsers' door in `asterism-door-allow.conf`.
 
 The console's certificate (Certbot, a new name). Enable only the port-80
 part first, so the HTTP-01 challenge can be answered:
@@ -193,7 +194,7 @@ it does not filter:
   every port the server's services need now from
   `~/asterism-ports-before.txt` (the web sites, the mail server, the game
   server, the other apps' TLS ports, SSH from the admin's address) and keep
-  each one allowed. Then add: TCP 7448 and TCP 7443 from the players'
+  each one allowed. Then add: TCP 7448 and TCP 7443 from the users'
   addresses (one entry per address or range). Check the other services
   from outside afterwards.
 
@@ -207,7 +208,7 @@ the packet filter, the certificates and the passes.
 - For nginx's own wss port (nginx is not in docker, so ufw sees it):
 
   ```
-  sudo ufw allow from 192.0.2.20 to any port 7443 proto tcp comment 'asterism wss: player'
+  sudo ufw allow from 192.0.2.20 to any port 7443 proto tcp comment 'asterism wss: user'
   sudo ufw status numbered
   ```
 
@@ -243,21 +244,23 @@ curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H '
 ```
 
 Then sign in (the admin is asked to turn on TOTP first), register a
-player under Admin > Relay, issue its certificate (the key is made in your
-browser), apply, and connect a CRuby player with it (`check_player.rb` next
-to this file; `gem install asterism -v '~> 0.7.0'`):
+client under Admin > Relay with a role that allows an app (the seeded
+"match" allows `game`), issue its certificate (the key is made in your
+browser), apply, and connect a CRuby node with it (`check_node.rb` next to
+this file; `gem install asterism -v '~> 0.7.0'`):
 
 ```
-ruby check_player.rb --router tls/router.example.org:7448 --node alice \
+ruby check_node.rb --router tls/router.example.org:7448 --node alice \
   --ca ca.pem --cert alice.pem --key alice.key --serve 120
-# a second player, in another terminal: it calls alice's board
-ruby check_player.rb --router tls/router.example.org:7448 --node bob \
+# a second node, in another terminal: it calls alice's board
+ruby check_node.rb --router tls/router.example.org:7448 --node bob \
   --ca ca.pem --cert bob.pem --key bob.key
 ```
 
 (The asterism repository's `examples/node.rb` joins the app `demo`, which
-the players' ACL refuses; `check_player.rb` joins `game`.) The graph shows
-them. A browser pass (Browser passes > Make a pass) opens
+"match" does not allow; `check_node.rb` joins `game`.) The graph shows
+them. A browser pass (Browser passes > Make a pass, or "Open the browser
+build" when `ASTERISM_BROWSER_PAGE` is set) opens
 the browser build on `wss://router.example.org:7443` (the link carries the
 pass in its fragment, `#zenoh_pass=`). A pass opens one connection; the
 door closes a connection after `WS_DOOR_MAX_SECONDS` (4 h), and the user
@@ -314,7 +317,23 @@ docker compose build
 docker compose up -d
 ```
 
-The console migrates its databases on start.
+The console migrates its databases on start. Back up the console's data
+first (section 9). Notes for particular updates:
+
+- **Roles (G1.5)**: the migration makes the role "match" (for the app in
+  `ASTERISM_RELAY_GAME`, else `game`) and gives it to every row that was
+  "Player"; "Nodes it speaks for" stays. Check Admin > Relay > Roles and the
+  rows, then Apply (the configuration changes: calls only under the
+  caller's own name). Remove `ASTERISM_RELAY_GAME` from `.env` afterwards.
+  The nginx snippet `asterism-players-allow.conf` is now
+  `asterism-door-allow.conf`:
+
+  ```
+  sudo cp /etc/nginx/snippets/asterism-players-allow.conf /etc/nginx/snippets/asterism-door-allow.conf
+  sudo sed -i 's/asterism-players-allow\.conf/asterism-door-allow.conf/' /etc/nginx/sites-available/asterism-router.conf
+  sudo nginx -t && sudo systemctl reload nginx
+  sudo rm /etc/nginx/snippets/asterism-players-allow.conf
+  ```
 
 ## 11. Under systemd (optional)
 
@@ -381,18 +400,23 @@ for a roll back (set it again and restart). A restart takes down the
 whole stack, **zenohd too**, so every link drops: home routers reconnect by
 themselves, browsers need a fresh pass (section 7).
 
-## Players and passes (what the admin does)
+## Roles, rows and passes (what the admin does)
 
-- **A player with a board at home**: register the home router as a peer of
-  kind router, tick "Player" and list the boards' node IDs
-  (`fmruby-xxxxxx`) under "Nodes it speaks for". Issue its certificate (the
-  key is made in your browser and shown once: save the key, the
-  certificate and the CA), give the three files to the player for the home
-  router's `connect_certificate` / `connect_private_key` /
-  `root_ca_certificate`, and apply.
-- **A CRuby player**: a client peer with "Player" ticked; its name is its
-  node ID.
-- **A browser**: the player signs in to the console (by an invitation) and
-  makes a pass; the pass opens one connection, within 10 minutes.
+- **Roles** (Admin > Relay > Roles): a name and key templates, `${node}`
+  standing for each node a row speaks for. "match" is seeded as an example
+  (the app `game`: write at your own nodes, read everyone's, call others
+  only under your own name). Make your own for your apps.
+- **A home router with nodes behind it**: register it as a row of kind
+  router, pick its roles and list the node IDs behind it under "Nodes it
+  speaks for". Issue its certificate (the key is made in your browser and
+  shown once: save the key, the certificate and the CA), give the three
+  files to its owner for the home router's `connect_certificate` /
+  `connect_private_key` / `root_ca_certificate`, and apply.
+- **A node that connects directly (CRuby)**: a client row with its roles;
+  its name is its node ID.
+- **A browser**: the user signs in to the console (by an invitation) and
+  opens the browser build (or makes a pass); the pass opens one
+  connection, within 10 minutes. Browsers get the roles marked "Browsers
+  have this role".
 - **Invitations**: Admin > Users > Make an invitation link (works once, 72
   hours).

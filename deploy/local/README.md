@@ -31,6 +31,8 @@ old browsers but answers nobody else.
   `asterism-rehearsal_web` with `--ip 172.31.240.50` (the admin's address)
   or another; the names resolve to the nginx container there.
 - The home router reads `certs/home/` (its certificate, key and the CA):
-  issue `zenohd-home` (a router, "Player", its boards under "Nodes it
-  speaks for") in the console and save the three files there.
+  issue `zenohd-home` (a router with the role "match", its boards under
+  "Nodes it speaks for") in the console and save the three files there.
+- `.env` sets `ASTERISM_BROWSER_PAGE` to the studio served here, so the
+  Browser passes page has "Open the browser build".
 - `.env` and `certs/` are ignored by git.

@@ -1,6 +1,6 @@
 // The rehearsal's home router (W1's shape): boards on the LAN connect to it
 // over plain TCP; it connects out to the internet router over mutual TLS
-// with its own certificate (zenohd-home, a player router).
+// with its own certificate (zenohd-home, a router with the role "match").
 {
   mode: "router",
   metadata: { name: "zenohd-home" },

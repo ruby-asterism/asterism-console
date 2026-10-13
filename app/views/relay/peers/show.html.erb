@@ -4,9 +4,10 @@
   <h2><%= @peer.name %> <span class="hint"><%= @peer.kind %></span> <%= acl_badge(@peer) %> <%= presence_badge(@peer, @seen) %></h2>
   <dl class="facts">
     <dt>Description</dt><dd><%= @peer.description.presence || "-" %></dd>
-    <dt>Read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
-    <dt>Read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
-    <dt>Player</dt><dd><%= @peer.player? ? "yes, for #{(@peer.player_node_list.presence || [ @peer.name ]).join(', ')}" : "no" %></dd>
+    <dt>Roles</dt><dd><%= @peer.roles.any? ? safe_join(@peer.roles.map { link_to _1.name, relay_role_path(_1) }, ", ") : tag.span("none", class: "hint") %></dd>
+    <dt>Speaks for</dt><dd><%= @peer.speaks_for.join(", ") %><%= tag.span(" (its own name)", class: "hint") if @peer.node_list.empty? %></dd>
+    <dt>Other keys, read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
+    <dt>Other keys, read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
     <dt>Console sees</dt><dd><%= console_sees(@peer, long: true) %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
@@ -15,6 +16,11 @@
   <% if current_user.admin? %>
     <p><%= link_to "Edit", edit_relay_peer_path(@peer) %></p>
   <% end %>
+</section>
+
+<section class="card">
+  <h2>What its roles allow</h2>
+  <%= render "relay/roles/expansion", expansion: @expansion %>
 </section>
 
 <section class="card">

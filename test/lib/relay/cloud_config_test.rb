@@ -74,51 +74,71 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
   end
 
   test "the connection limits (zenoh 1.10.1 names)" do
-    h = Relay::CloudConfig.new([], "max_sessions" => 8).to_h
+    h = Relay::CloudConfig.new([], { "max_sessions" => 8 }).to_h
     assert_equal({ "max_sessions" => 8, "accept_pending" => 16, "accept_timeout" => 5000 }, h["transport"]["unicast"])
     assert_equal 4 * 1024 * 1024, h["transport"]["link"]["rx"]["max_message_size"]
   end
 
-  test "a player writes only at its own nodes and reads the game of every node" do
+  MATCH = { "name" => "match", "for_browsers" => true,
+            "templates" => { "rw" => %w[asterism/${node} asterism/${node}/game/** asterism/${node}/@profile],
+                             "read" => %w[asterism/* asterism/*/game/** asterism/*/@profile],
+                             "ask" => %w[asterism/*/@profile asterism/*/game/*/meta asterism/*/game/*/call/${node}],
+                             "watch" => %w[asterism/**] } }.freeze
+
+  test "a role: node-bound templates per row, expanded to the nodes it speaks for; the rest shared" do
     peers = [
-      { "name" => "alice", "kind" => "client", "player" => true, "in_acl" => true },
-      { "name" => "home-bob", "kind" => "router", "player" => true, "player_nodes" => %w[fmruby-aaaaaa fmruby-bbbbbb],
+      { "name" => "alice", "kind" => "client", "roles" => %w[match], "in_acl" => true },
+      { "name" => "home-bob", "kind" => "router", "roles" => %w[match], "nodes" => %w[fmruby-aaaaaa fmruby-bbbbbb],
         "in_acl" => true }
     ]
-    h = Relay::CloudConfig.new(peers).to_h
-    assert_equal %w[asterism/alice asterism/alice/game/** asterism/alice/@profile], rule(h, "alice_own")["key_exprs"]
-    assert_equal Relay::CloudConfig::ALL, rule(h, "alice_own")["messages"]
-    assert_equal %w[asterism/fmruby-aaaaaa asterism/fmruby-aaaaaa/game/** asterism/fmruby-aaaaaa/@profile
-                    asterism/fmruby-bbbbbb asterism/fmruby-bbbbbb/game/** asterism/fmruby-bbbbbb/@profile],
-                 rule(h, "home_bob_own")["key_exprs"]
-    game_in = rule(h, "game_in")
-    assert_equal %w[ingress], game_in["flows"]
-    refute_includes game_in["messages"], "put"
-    assert_equal %w[asterism/* asterism/*/game/** asterism/*/@profile], game_in["key_exprs"]
-    assert_equal %w[egress], rule(h, "game_out")["flows"]
-    assert_equal [ "asterism/**" ], rule(h, "game_watch")["key_exprs"]
-    assert_equal %w[declare_liveliness_subscriber], rule(h, "game_watch")["messages"]
+    h = Relay::CloudConfig.new(peers, {}, roles: [ MATCH ]).to_h
+    assert_equal %w[asterism/alice asterism/alice/game/** asterism/alice/@profile], rule(h, "alice__match_rw")["key_exprs"]
+    assert_equal Relay::CloudConfig::ALL, rule(h, "alice__match_rw")["messages"]
+    assert_equal %w[asterism/fmruby-aaaaaa asterism/fmruby-bbbbbb asterism/fmruby-aaaaaa/game/** asterism/fmruby-bbbbbb/game/**
+                    asterism/fmruby-aaaaaa/@profile asterism/fmruby-bbbbbb/@profile],
+                 rule(h, "home_bob__match_rw")["key_exprs"]
+    assert_equal %w[asterism/*/game/*/call/fmruby-aaaaaa asterism/*/game/*/call/fmruby-bbbbbb],
+                 rule(h, "home_bob__match_ask")["key_exprs"], "calls only under its own nodes' names"
+    assert_equal %w[query], rule(h, "home_bob__match_ask")["messages"]
+    assert_equal %w[asterism/*/@profile asterism/*/game/*/meta], rule(h, "role__match_ask")["key_exprs"]
+    read_in = rule(h, "role__match_read_in")
+    assert_equal [ %w[ingress], %w[declare_subscriber liveliness_query] ], read_in.values_at("flows", "messages")
+    assert_equal %w[egress], rule(h, "role__match_read_out")["flows"]
+    assert_equal [ "asterism/**" ], rule(h, "role__match_watch")["key_exprs"]
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[alice_own game_in game_out game_watch], pol["alice"]
-    assert_equal 1, h["access_control"]["rules"].count { _1["id"] == "game_in" }, "shared rules once"
+    assert_equal %w[alice__match_rw role__match_read_in role__match_read_out alice__match_ask role__match_ask
+                    role__match_watch], pol["alice"]
+    assert_equal 1, h["access_control"]["rules"].count { _1["id"] == "role__match_read_in" }, "shared rules once"
     refute h["access_control"]["rules"].any? { _1["key_exprs"].any? { |k| k.include?("demo") } }
   end
 
-  test "another game app" do
-    h = Relay::CloudConfig.new([ { "name" => "alice", "player" => true, "in_acl" => true } ], "game" => "othello").to_h
-    assert_includes rule(h, "alice_own")["key_exprs"], "asterism/alice/othello/**"
-    assert_raises(ArgumentError) { Relay::CloudConfig.new([], "game" => "a/b") }
+  test "an unknown role and a role with nothing give nothing" do
+    peers = [ { "name" => "alice", "roles" => %w[gone empty], "in_acl" => true } ]
+    h = Relay::CloudConfig.new(peers, {}, roles: [ { "name" => "empty", "templates" => {} } ]).to_h
+    assert_equal [], h["access_control"]["subjects"]
   end
 
-  test "browsers: a ws/ listener, one subject by link protocol, wasm-* nodes only" do
-    c = Relay::CloudConfig.new([], "listen" => [ "tls/[::]:7448" ], "browsers" => "ws/[::]:7449")
+  test "what a row gets, for the pages" do
+    c = Relay::CloudConfig.new([], {}, roles: [ MATCH ])
+    e = c.expansion_for("name" => "home-a", "roles" => %w[match], "nodes" => %w[fmruby-aaaaaa])
+    assert_equal %w[rw read ask watch], e.map { _1["section"] }
+    assert_includes e.find { _1["section"] == "ask" }["keys"], "asterism/*/game/*/call/fmruby-aaaaaa"
+    assert_equal [], c.expansion_for("name" => "x", "roles" => [])
+  end
+
+  test "browsers: a ws/ listener, one subject by link protocol, the roles for browsers on wasm-* nodes" do
+    c = Relay::CloudConfig.new([], { "listen" => [ "tls/[::]:7448" ], "browsers" => "ws/[::]:7449" }, roles: [ MATCH ])
     h = c.to_h
     assert_equal [ "tls/[::]:7448", "ws/[::]:7449" ], h["listen"]["endpoints"]
     assert_includes h["access_control"]["subjects"], { "id" => "browsers", "link_protocols" => [ "ws" ] }
-    assert_equal %w[asterism/wasm-$* asterism/wasm-$*/game/** asterism/wasm-$*/@profile], rule(h, "browsers_own")["key_exprs"]
-    pol = h["access_control"]["policies"].find { _1["id"] == "browsers" }
-    assert_equal %w[browsers_own game_in game_out game_watch], pol["rules"]
+    assert_equal %w[asterism/wasm-$* asterism/wasm-$*/game/** asterism/wasm-$*/@profile], rule(h, "browsers__match_rw")["key_exprs"]
+    assert_equal %w[asterism/*/game/*/call/wasm-$*], rule(h, "browsers__match_ask")["key_exprs"]
     assert_equal [], c.subject_names, "no certificate names for the browsers"
-    refute Relay::CloudConfig.new([]).to_h["access_control"]["subjects"].any?, "none without the setting"
+    refute Relay::CloudConfig.new([], {}, roles: [ MATCH ]).to_h["access_control"]["subjects"].any?, "none without the setting"
+    other = Relay::CloudConfig.new([], { "browsers" => "ws/[::]:7449", "browser_nodes" => "web-$*" },
+                                   roles: [ MATCH.merge("for_browsers" => false) ]).to_h
+    refute other["access_control"]["subjects"].any?, "no role for browsers: no subject"
+    prefixed = Relay::CloudConfig.new([], { "browsers" => "ws/[::]:7449", "browser_nodes" => "web-$*" }, roles: [ MATCH ]).to_h
+    assert_includes rule(prefixed, "browsers__match_rw")["key_exprs"], "asterism/web-$*/game/**"
   end
 end

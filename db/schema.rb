@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -47,6 +47,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "used_at"
+    t.string "node"
+    t.string "app"
     t.index ["expires_at"], name: "index_browser_passes_on_expires_at"
     t.index ["revoked_by_id"], name: "index_browser_passes_on_revoked_by_id"
     t.index ["token_digest"], name: "index_browser_passes_on_token_digest", unique: true
@@ -196,6 +198,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
     t.index ["serial"], name: "index_relay_certificates_on_serial", unique: true
   end
 
+  create_table "relay_peer_roles", force: :cascade do |t|
+    t.integer "relay_peer_id", null: false
+    t.integer "relay_role_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["relay_peer_id", "relay_role_id"], name: "index_relay_peer_roles_on_relay_peer_id_and_relay_role_id", unique: true
+    t.index ["relay_peer_id"], name: "index_relay_peer_roles_on_relay_peer_id"
+    t.index ["relay_role_id"], name: "index_relay_peer_roles_on_relay_role_id"
+  end
+
   create_table "relay_peers", force: :cascade do |t|
     t.string "name", null: false
     t.string "kind", default: "client", null: false
@@ -209,9 +221,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
     t.integer "cert_days", default: 90, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.boolean "player", default: false, null: false
-    t.text "player_nodes"
+    t.text "nodes"
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
+  end
+
+  create_table "relay_roles", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "description"
+    t.text "rw_templates"
+    t.text "read_templates"
+    t.text "ask_templates"
+    t.text "watch_templates"
+    t.string "browser_app"
+    t.boolean "for_browsers", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_relay_roles_on_name", unique: true
   end
 
   create_table "sessions", force: :cascade do |t|
@@ -272,6 +297,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_12_220000) do
   add_foreign_key "relay_certificates", "relay_peers"
   add_foreign_key "relay_certificates", "users", column: "issued_by_id"
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
+  add_foreign_key "relay_peer_roles", "relay_peers", on_delete: :cascade
+  add_foreign_key "relay_peer_roles", "relay_roles", on_delete: :cascade
   add_foreign_key "sessions", "users"
   add_foreign_key "stream_leases", "users"
 end
