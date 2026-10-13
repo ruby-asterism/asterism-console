@@ -108,7 +108,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.1.0 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.1.1 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -128,7 +128,7 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.1.0`).
+- `CONSOLE_VERSION`: the version you install (`0.1.1`).
 - `CONSOLE_HOSTS=asterism.example.org`
 - `ASTERISM_RELAY_PUBLIC_ENDPOINT=tls/router.example.org:7448` (what routers
   and CRuby connect to; it goes into every certificate's `asterism.json`)

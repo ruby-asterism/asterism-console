@@ -7,7 +7,15 @@ number). Each version says what an update needs (docs/install.md,
 to an older version across a migration means restoring the backup made
 before the update.
 
-## 0.1.0 (unreleased)
+## 0.1.1
+
+- The asterism gem 0.7.1 (with asterism-zenoh 0.4.1) in the image: the
+  bridge keeps its connection across a router restart (an apply, an update,
+  a dropped line) instead of reconnecting from scratch.
+- Updating from 0.1.0: set `CONSOLE_VERSION=0.1.1` in `.env`, pull and
+  restart (docs/install.md, "Updating"). No migration.
+
+## 0.1.0
 
 The first version installable by anyone on their own server
 (docs/install.md, design in docs/o1.md).
