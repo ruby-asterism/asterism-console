@@ -108,7 +108,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.1.1 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.1.2 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -128,7 +128,7 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.1.1`).
+- `CONSOLE_VERSION`: the version you install (`0.1.2`).
 - `CONSOLE_HOSTS=asterism.example.org`
 - `ASTERISM_RELAY_PUBLIC_ENDPOINT=tls/router.example.org:7448` (what routers
   and CRuby connect to; it goes into every certificate's `asterism.json`)
@@ -362,13 +362,17 @@ extract the file and give the three files (README of the asterism gem,
 
 A page that joins the network from a browser (for example a web build of
 an Asterism app) connects to `wss://router.example.org:7443` with a pass. A
-signed-in user makes one under "Browser passes". With
-`ASTERISM_BROWSER_PAGE` set (a URL template, `env.example`), the same page
-has "Open the browser build": a fresh pass, the user's node ID
-(`wasm-<handle>`) and the app to start (the roles' "Opens in a browser
-page") go to the page in the URL's fragment, which never reaches the
-page's server. Browsers get the roles marked "Browsers have this role".
-Without the setting there is no button and passes are shown alone.
+signed-in user makes one under "Browser passes", for the node named after
+their handle (`wasm-<handle>`); a user without a handle is asked to choose
+one first. With `ASTERISM_BROWSER_PAGE` set (a URL template with `{pass}`
+after the `#` and `{node}`, `env.example`), every pass comes with a link
+that carries the pass and the node, and the same page has "Open the
+browser build": a fresh pass, the user's node ID and the app to start (the
+roles' "Opens in a browser page") go to the page in the URL's fragment,
+which never reaches the page's server. Browsers get the roles marked
+"Browsers have this role". Without the setting there is no button and a
+pass is shown with its node, without a link. The browser build refuses a
+link with a pass but no node.
 
 ## 13. Check
 

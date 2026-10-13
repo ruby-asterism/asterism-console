@@ -7,6 +7,25 @@ number). Each version says what an update needs (docs/install.md,
 to an older version across a migration means restoring the backup made
 before the update.
 
+## 0.1.2
+
+- Every link the console gives a browser names the node: the pass and the
+  node ID from the user's handle (`wasm-<handle>`), and the app when one is
+  chosen. "Make a pass" now makes a pass for that node and shows its link
+  in the same form as "Open the browser build" (the app empty); before, it
+  carried the pass alone and the page joined under an ID of its own. A
+  user without a handle is asked to choose one before any pass is made.
+  `ASTERISM_BROWSER_PAGE` without `{node}` is not used, and
+  `bin/asterism setup` stops on it (docs/g1_5.md, "Every link names the
+  node").
+- Updating from 0.1.1: set `CONSOLE_VERSION=0.1.2` in `.env`, pull and
+  restart (docs/install.md, "Updating"). No migration. Check that
+  `ASTERISM_BROWSER_PAGE` has `{node}` (as in `env.example`), or there are
+  no links and no button. Users who open browser pages need a handle
+  (Account > Handle). Serve a browser build that refuses a pass without a
+  node (fmruby-core after 2026-10-14); an older one still opens a hand-made
+  pass-only link under an ID of its own.
+
 ## 0.1.1
 
 - The asterism gem 0.7.1 (with asterism-zenoh 0.4.1) in the image: the

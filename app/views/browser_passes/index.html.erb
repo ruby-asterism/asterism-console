@@ -22,7 +22,13 @@
     <%= (BrowserPass::TTL / 60).to_i %> minutes, takes it: for <%= (BrowserPass::LIFETIME / 3600.0).round(1) %> hours from then
     that page may connect again (after the router restarts, or the line drops), and no other page can use it.
     After that, or after a reload (a new page), it needs a new pass.</p>
-  <%= button_to "Make a pass", browser_passes_path, data: { turbo: false } %>
+  <% if current_user.handle.blank? %>
+    <p>A pass is for a node named after your handle (<code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>).
+      <%= link_to "Choose your handle", account_path(anchor: "handle") %> first.</p>
+  <% else %>
+    <p>The next pass is for the node <code><%= @next_node %></code>: the page joins the network under that name.</p>
+    <%= button_to "Make a pass", browser_passes_path, data: { turbo: false } %>
+  <% end %>
 </section>
 
 <% if @new_pass %>
@@ -31,9 +37,13 @@
     <dl class="facts">
       <dt>Until</dt><dd><%= when_text(@new_pass.expires_at) %></dd>
       <dt>Pass</dt><dd><code class="wrap"><%= @new_pass.token %></code></dd>
+      <dt>Node</dt><dd><code class="node"><%= @new_pass.node %></code></dd>
       <dt>Router</dt><dd><code><%= PassLink.router || "(ASTERISM_PASS_ROUTER is not set)" %></code></dd>
       <% if @link %><dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd><% end %>
     </dl>
+    <% unless @link %>
+      <p class="hint">Give the page both the pass and the node: a page with a pass but no node does not connect.</p>
+    <% end %>
     <p class="hint">Do not share the link: whoever opens it first connects as you (and keeps it for that page). Revoke it below when you will not use it.</p>
   </section>
 <% end %>

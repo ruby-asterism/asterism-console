@@ -28,13 +28,16 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
   PAGE_A = "pageAAAAAAAAAAAAAAAAAAAA".freeze
   PAGE_B = "pageBBBBBBBBBBBBBBBBBBBB".freeze
 
-  test "a pass is shown once, as a link with the router; only its digest is kept" do
+  test "a pass is shown once, as a link with the router and the user's node; only its digest is kept" do
     with_env("ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443",
-             "ASTERISM_BROWSER_PAGE" => "https://play.example.org/index.html?zenoh={router}#zenoh_pass={pass}") do
+             "ASTERISM_BROWSER_PAGE" => "https://play.example.org/index.html?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}") do
       token = make_pass
       assert_includes response.headers["Cache-Control"], "no-store"
-      assert_select "a[href=?]", "https://play.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}"
+      assert_select "a[href=?]", "https://play.example.org/index.html?zenoh=ws%2Frouter.example.org%3A7443" \
+                                 "#zenoh_pass=#{token}&zenoh_node=wasm-pat"
+      assert_select "code.node", "wasm-pat"
       pass = BrowserPass.sole
+      assert_equal "wasm-pat", pass.node
       assert_equal BrowserPass.digest(token), pass.token_digest
       refute_includes BrowserPass.all.map(&:attributes).to_s, token
       assert_in_delta BrowserPass::TTL.from_now, pass.expires_at, 5
@@ -145,6 +148,7 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "revoking: the owner or an admin, nobody else" do
+    users(:admin).update!(handle: "ada")
     make_pass(users(:admin))
     pass = BrowserPass.sole
     sign_in_as(users(:user))

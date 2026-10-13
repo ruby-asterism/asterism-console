@@ -31,9 +31,12 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "a template without the pass in its fragment is not used" do
-    with_env("ASTERISM_BROWSER_PAGE" => "https://play.example.org/?pass={pass}") do
+  test "a template without the pass in its fragment, or without the node, is not used" do
+    with_env("ASTERISM_BROWSER_PAGE" => "https://play.example.org/?pass={pass}&zenoh_node={node}") do
       refute BrowserPage.enabled?
+    end
+    with_env("ASTERISM_BROWSER_PAGE" => "https://play.example.org/?zenoh={router}#zenoh_pass={pass}") do
+      refute BrowserPage.enabled?, "every link names the node"
     end
   end
 
@@ -77,9 +80,12 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       sign_in_as(users(:admin))
       get browser_passes_path
       assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select "button, input[type=submit]", { text: "Make a pass", count: 0 }
       assert_select "a[href=?]", account_path(anchor: "handle"), "Choose your handle"
       post open_browser_passes_path, params: { app: "" }
-      assert_redirected_to account_path
+      assert_redirected_to account_path(anchor: "handle")
+      post browser_passes_path
+      assert_redirected_to account_path(anchor: "handle"), "no pass at all without a handle"
       assert_equal 0, BrowserPass.count
       patch handle_account_path, params: { handle: "pat" }
       assert_redirected_to account_path(anchor: "handle")
@@ -93,21 +99,36 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "the plain pass link uses the page too, with no node or app" do
+  test "the plain pass link has the same form: the pass and the user's node, no app" do
     with_env("ASTERISM_BROWSER_PAGE" => PAGE, "ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443") do
-      assert_equal "https://play.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=abc&zenoh_node=&app=",
-                   PassLink.url("abc")
+      assert_equal "https://play.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=abc&zenoh_node=wasm-pat&app=",
+                   PassLink.url("abc", node: "wasm-pat")
+      assert_raises(ArgumentError) { PassLink.url("abc", node: "") }
+      sign_in_as(users(:user))
+      get browser_passes_path
+      assert_select "code", "wasm-pat"
+      post browser_passes_path
+      assert_response :created
+      link = css_select("dd a.wrap").first["href"]
+      assert_includes link, "&zenoh_node=wasm-pat&app="
+      assert_select "code.node", "wasm-pat"
+      assert_equal "wasm-pat", BrowserPass.sole.node
+      assert_select "code", "wasm-pat_2", "the pass waits to be used: the next one gets the next name"
+      post open_browser_passes_path, params: { app: "" }
+      assert_includes page_url, "zenoh_node=wasm-pat_2&"
     end
   end
 
-  test "no page: the pass is shown without a link (ASTERISM_STUDIO_URL is no longer read)" do
+  test "no page: the pass is shown with its node, without a link (ASTERISM_STUDIO_URL is no longer read)" do
     with_env("ASTERISM_BROWSER_PAGE" => nil, "ASTERISM_STUDIO_URL" => "https://play.example.org/") do
-      assert_nil PassLink.url("abc")
+      assert_nil PassLink.url("abc", node: "wasm-pat")
       sign_in_as(users(:user))
       post browser_passes_path
       assert_response :created
       assert_select "dt", { text: "Link", count: 0 }
       assert_select "dd code.wrap"
+      assert_select "code.node", "wasm-pat"
+      assert_select "p.hint", /both the pass and the node/
     end
   end
 end

@@ -420,7 +420,9 @@ even on a LAN. What it does, and what it assumes:
   console about it once per connection (docs/g0_w4.md). With a page
   configured (`ASTERISM_BROWSER_PAGE`, a URL template), "Open the browser
   build" makes the pass and opens the page in a new tab as a node named
-  after the user, starting an app a role names (docs/g1_5.md).
+  after the user's handle, starting an app a role names (docs/g1_5.md).
+  Every link names that node (a pass is for the node `wasm-<handle>`; a user
+  without a handle is asked to choose one first).
 - **Limits**: sign-in 10 tries per address in 3 minutes and 20 per email
   address in an hour; the watch panel sends a camera picture (over 16 KB)
   at most twice a second per key.

@@ -1,6 +1,9 @@
 # Passes for the browser build (W4). A signed-in user makes a pass (shown
 # once, with a link that opens the browser build on this console's
 # router) and may revoke their own; admins see every pass (/admin/passes).
+# Every pass is for a node named after the user's handle (Relay::BrowserNode)
+# and every link carries it (2026-10-14): a user without a handle is asked to
+# choose one before any pass is made.
 #
 # check is the proxy's question (nginx auth_request in front of the
 # router's ws/ listener, deploy/vps/nginx): the pass is the "pass" query
@@ -20,7 +23,7 @@ class BrowserPassesController < ApplicationController
 
   def index
     @passes = current_user.browser_passes.order(id: :desc).limit(20)
-    @next_node = Relay::BrowserNode.pick(current_user) if BrowserPage.enabled? && current_user.handle.present?
+    @next_node = Relay::BrowserNode.pick(current_user) if current_user.handle.present?
   end
 
   # Opens the browser build in the tab this form targets: a fresh pass, the
@@ -31,10 +34,7 @@ class BrowserPassesController < ApplicationController
     return head :not_found unless BrowserPage.enabled?
     app = params[:app].to_s
     return head :unprocessable_content unless BrowserPage.apps.any? { _1[1] == app }
-    if current_user.handle.blank?
-      return redirect_to account_path, alert: "Choose a handle first: your browser pages join the network as " \
-                                              "#{Relay::Settings.browser_node_prefix}<handle>."
-    end
+    return ask_for_handle if current_user.handle.blank?
     node = Relay::BrowserNode.pick(current_user)
     pass = BrowserPass.issue!(current_user, ip: request.remote_ip, node: node, app: app)
     Rails.logger.info("pass: #{pass.id} made for #{current_user.log_name} to open the browser build as #{node}")
@@ -46,10 +46,14 @@ class BrowserPassesController < ApplicationController
   end
 
   def create
-    @new_pass = BrowserPass.issue!(current_user, ip: request.remote_ip)
-    Rails.logger.info("pass: #{@new_pass.id} made for #{current_user.log_name} until #{@new_pass.expires_at.utc.iso8601}")
-    @link = PassLink.url(@new_pass.token)
+    return ask_for_handle if current_user.handle.blank?
+    node = Relay::BrowserNode.pick(current_user)
+    @new_pass = BrowserPass.issue!(current_user, ip: request.remote_ip, node: node)
+    Rails.logger.info("pass: #{@new_pass.id} made for #{current_user.log_name} as #{node} " \
+                      "until #{@new_pass.expires_at.utc.iso8601}")
+    @link = PassLink.url(@new_pass.token, node: node)
     @passes = current_user.browser_passes.order(id: :desc).limit(20)
+    @next_node = Relay::BrowserNode.pick(current_user)
     response.headers["Cache-Control"] = "no-store"
     render :index, status: :created
   end
@@ -60,6 +64,12 @@ class BrowserPassesController < ApplicationController
     pass.revoke!(current_user)
     back = current_user.admin? && pass.user_id != current_user.id ? admin_browser_passes_path : browser_passes_path
     redirect_to back, status: :see_other, notice: "Revoked pass #{pass.id}. Connections it opened stay until they close."
+  end
+
+  private def ask_for_handle
+    redirect_to account_path(anchor: "handle"),
+                alert: "Choose a handle first: your browser pages join the network as " \
+                       "#{Relay::Settings.browser_node_prefix}<handle>."
   end
 
   # [pass, page key] from the headers the web server sets (nginx's

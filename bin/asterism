@@ -57,6 +57,11 @@ def check_settings
   %w[CONSOLE_HOSTS ASTERISM_RELAY_PUBLIC_ENDPOINT ASTERISM_PASS_ROUTER].each do |k|
     problems << "#{k} still names example.org (put your own names in .env)" if ENV[k].to_s.include?("example.org")
   end
+  page = ENV["ASTERISM_BROWSER_PAGE"].to_s
+  if !page.empty? && !(page.split("#", 2)[1].to_s.include?("{pass}") && page.include?("{node}"))
+    # Every link names the node (0.1.2): the console would make no links at all.
+    problems << "ASTERISM_BROWSER_PAGE needs {pass} after the # and {node} (env.example)"
+  end
   fail!("fix .env first:\n  - #{problems.join("\n  - ")}") if problems.any?
   done "console #{version}, RAILS_ENV=#{ENV.fetch('RAILS_ENV', 'development')}"
   done "console's name: #{ENV['CONSOLE_HOSTS'].to_s.empty? ? '(any, development)' : ENV['CONSOLE_HOSTS']}"
