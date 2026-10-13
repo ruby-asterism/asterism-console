@@ -2,11 +2,12 @@
 <section class="card">
   <h2>Users</h2>
   <table class="list">
-    <thead><tr><th>Email address</th><th>Role</th><th>Two-factor</th><th>Since</th><th></th></tr></thead>
+    <thead><tr><th>Email address</th><th>Handle</th><th>Role</th><th>Two-factor</th><th>Since</th><th></th></tr></thead>
     <tbody>
       <% @users.each do |u| %>
         <tr>
           <td><%= u.email_address %></td>
+          <td><%= u.handle ? tag.code(u.handle) : tag.span("none yet", class: "hint") %></td>
           <td><%= u.admin? ? "admin" : "user" %></td>
           <td><%= u.otp_enabled? ? "on" : "off" %></td>
           <td class="nowrap"><%= when_text(u.created_at) %></td>

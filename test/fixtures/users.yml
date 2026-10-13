@@ -9,3 +9,4 @@ user:
   email_address: user@example.com
   password_digest: <%= password_digest %>
   admin: false
+  handle: pat

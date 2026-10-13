@@ -20,7 +20,7 @@ class BrowserPassesController < ApplicationController
 
   def index
     @passes = current_user.browser_passes.order(id: :desc).limit(20)
-    @next_node = Relay::BrowserNode.pick(current_user) if BrowserPage.enabled?
+    @next_node = Relay::BrowserNode.pick(current_user) if BrowserPage.enabled? && current_user.handle.present?
   end
 
   # Opens the browser build in the tab this form targets: a fresh pass, the
@@ -31,9 +31,13 @@ class BrowserPassesController < ApplicationController
     return head :not_found unless BrowserPage.enabled?
     app = params[:app].to_s
     return head :unprocessable_content unless BrowserPage.apps.any? { _1[1] == app }
+    if current_user.handle.blank?
+      return redirect_to account_path, alert: "Choose a handle first: your browser pages join the network as " \
+                                              "#{Relay::Settings.browser_node_prefix}<handle>."
+    end
     node = Relay::BrowserNode.pick(current_user)
     pass = BrowserPass.issue!(current_user, ip: request.remote_ip, node: node, app: app)
-    Rails.logger.info("pass: #{pass.id} made for #{current_user.email_address} to open the browser build as #{node}")
+    Rails.logger.info("pass: #{pass.id} made for #{current_user.log_name} to open the browser build as #{node}")
     @url = BrowserPage.url(pass: pass.token, node: node, app: app)
     @node = node
     response.headers["Cache-Control"] = "no-store"
@@ -43,7 +47,7 @@ class BrowserPassesController < ApplicationController
 
   def create
     @new_pass = BrowserPass.issue!(current_user, ip: request.remote_ip)
-    Rails.logger.info("pass: #{@new_pass.id} made for #{current_user.email_address} until #{@new_pass.expires_at.utc.iso8601}")
+    Rails.logger.info("pass: #{@new_pass.id} made for #{current_user.log_name} until #{@new_pass.expires_at.utc.iso8601}")
     @link = PassLink.url(@new_pass.token)
     @passes = current_user.browser_passes.order(id: :desc).limit(20)
     response.headers["Cache-Control"] = "no-store"
@@ -58,25 +62,33 @@ class BrowserPassesController < ApplicationController
     redirect_to back, status: :see_other, notice: "Revoked pass #{pass.id}. Connections it opened stay until they close."
   end
 
+  # [pass, page key] from the headers nginx sets.
   private def pass_from_request
-    given = request.headers["X-Asterism-Pass"].to_s
-    return given if given.present?
-    query = URI.parse(request.headers["X-Original-URI"].to_s).query.to_s
-    URI.decode_www_form(query).to_h["pass"].to_s
+    query = URI.decode_www_form(URI.parse(request.headers["X-Original-URI"].to_s).query.to_s).to_h
+    [ request.headers["X-Asterism-Pass"].presence || query["pass"].to_s,
+      request.headers["X-Asterism-Page"].presence || query["page"] ]
   rescue URI::InvalidURIError, ArgumentError
-    ""
+    [ "", nil ]
   end
 
   def check
-    token = pass_from_request
+    token, page = pass_from_request
     ip = request.remote_ip
-    if (pass = BrowserPass.find_live(token)) && pass.consume!(ip)
-      Rails.logger.info("pass: #{pass.id} (#{pass.user.email_address}) opened a connection from #{ip}")
+    pass = BrowserPass.find_by_token(token)
+    first = pass&.live?
+    if pass&.admit!(ip, page)
+      pass.reload
+      again = first ? "" : " again"
+      Rails.logger.info("pass: #{pass.id} (#{pass.user.log_name}) opened a connection#{again} from #{ip}" \
+                        "#{pass.open_until ? '' : ' (one connection: the page named no key)'}")
+      until_at = pass.open_until || (Time.current + BrowserPass::LIFETIME)
+      response.headers["X-Asterism-Until"] = until_at.to_i.to_s
       head :no_content
     else
-      if token.present? && (gone = BrowserPass.find_by(token_digest: BrowserPass.digest(token)))
-        BrowserPass.where(id: gone.id).update_all("refused = refused + 1")
-        Rails.logger.info("pass: #{gone.id} refused from #{ip} (#{gone.status})")
+      if pass
+        BrowserPass.where(id: pass.id).update_all("refused = refused + 1")
+        why = pass.open? && page ? "another page" : pass.status
+        Rails.logger.info("pass: #{pass.id} refused from #{ip} (#{why})")
       else
         Rails.logger.info("pass: refused from #{ip} (#{token.present? ? 'unknown pass' : 'no pass'})")
       end

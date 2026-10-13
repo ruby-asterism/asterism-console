@@ -5,6 +5,7 @@ Rails.application.routes.draw do
   end
   resource :account, only: :show do
     patch :password, action: :update_password
+    patch :handle, action: :update_handle
     post :otp, action: :start_otp, as: :start_otp
     post :otp_confirm, action: :confirm_otp
     delete :otp, action: :disable_otp, as: :disable_otp
@@ -78,7 +79,9 @@ Rails.application.routes.draw do
         end
       end
       resources :roles
-      resources :applies, only: %i[index new create show]
+      resources :applies, only: %i[index new create show] do
+        patch :cancel, on: :member
+      end
       get "/", to: redirect("/admin/relay/peers")
     end
     namespace :admin, path: "" do

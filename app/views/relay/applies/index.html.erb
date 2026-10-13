@@ -6,14 +6,15 @@
     <p class="hint">None yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>#</th><th>When</th><th>Who</th><th>Status</th><th>Joining</th><th>Leaving</th><th>Digest</th></tr></thead>
+      <thead><tr><th>#</th><th>Made</th><th>Who</th><th>When</th><th>Status</th><th>Joining</th><th>Leaving</th><th>Digest</th></tr></thead>
       <tbody>
         <% @applies.each do |a| %>
           <tr>
             <td><%= link_to a.id, relay_apply_path(a) %></td>
             <td class="nowrap"><%= when_text(a.created_at) %></td>
             <td><%= a.user&.email_address %></td>
-            <td><span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad' }[a.status] || 'warn' %>"><%= a.status %></span></td>
+            <td><%= a.when_text %></td>
+            <td><span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad', 'cancelled' => 'bad' }[a.status] || 'warn' %>"><%= a.status %></span></td>
             <td><%= a.plan["joining"].to_a.join(", ") %></td>
             <td><%= a.plan["leaving"].to_a.join(", ") %></td>
             <td><code><%= a.config_digest %></code></td>

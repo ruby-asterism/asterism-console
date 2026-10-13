@@ -4,3 +4,6 @@
   <%= link_to "Apply", new_relay_apply_path %>
   <%= link_to "Applies", relay_applies_path %>
 </nav>
+<% if (waiting = RelayApply.waiting_one) %>
+  <div class="notice-bar"><%= render "relay/applies/waiting", apply: waiting %></div>
+<% end %>

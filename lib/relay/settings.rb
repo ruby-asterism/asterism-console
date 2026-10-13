@@ -15,7 +15,7 @@
 #                                 behind the proxy that checks passes (W4); unset: none
 #   ASTERISM_BROWSER_NODE_PREFIX  wasm- (the browsers' node IDs start with it: ${node} of the
 #                                 roles for browsers is <prefix>$*, and the console names a
-#                                 browser page it opens <prefix><user>, Relay::BrowserNode)
+#                                 browser page it opens <prefix><handle>, Relay::BrowserNode)
 #   ASTERISM_RELAY_MAX_SESSIONS   64    (transport/unicast/max_sessions)
 #   ASTERISM_RELAY_ACCEPT_PENDING 16    (transport/unicast/accept_pending)
 #   ASTERISM_RELAY_ACCEPT_TIMEOUT 5000  (ms, transport/unicast/accept_timeout)

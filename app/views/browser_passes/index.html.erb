@@ -2,20 +2,26 @@
 <% if BrowserPage.enabled? %>
   <section class="card">
     <h2>Open the browser build</h2>
-    <p>Opens <code><%= BrowserPage.origin %></code> in a new tab, connected to this console's router with a fresh
-      pass, as the node <code><%= @next_node %></code> (yours; a second page open at the same time gets the next name).</p>
-    <%= form_with url: open_browser_passes_path, method: :post, data: { turbo: false }, html: { target: "_blank" } do |f| %>
-      <label>Start <%= f.select :app, BrowserPage.apps %></label>
-      <%= f.submit "Open the browser build" %>
+    <% if current_user.handle.blank? %>
+      <p>A browser page joins the network as <code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>, a short name
+        you choose. Every node on the network sees it. <%= link_to "Choose your handle", account_path(anchor: "handle") %> first.</p>
+    <% else %>
+      <p>Opens <code><%= BrowserPage.origin %></code> in a new tab, connected to this console's router with a fresh
+        pass, as the node <code><%= @next_node %></code> (yours; a second page open at the same time gets the next name).</p>
+      <%= form_with url: open_browser_passes_path, method: :post, data: { turbo: false }, html: { target: "_blank" } do |f| %>
+        <label>Start <%= f.select :app, BrowserPage.apps %></label>
+        <%= f.submit "Open the browser build" %>
+      <% end %>
     <% end %>
   </section>
 <% end %>
 <section class="card">
   <h2>Browser passes</h2>
-  <p>A pass lets a browser build (a page that joins the network from a browser) connect to this console's router over <code>wss://</code>
-    once, within <%= (BrowserPass::TTL / 60).to_i %> minutes. It is yours: the connection it opens is logged with your name.
-    A pass opens one connection; the router closes a connection after a few hours at most, and a page that
-    has to connect again (that, or a reload) needs a new pass.</p>
+  <p>A pass lets a browser build (a page that joins the network from a browser) connect to this console's router over <code>wss://</code>.
+    It is yours: the connections it opens are logged with your name. The first page that uses it, within
+    <%= (BrowserPass::TTL / 60).to_i %> minutes, takes it: for <%= (BrowserPass::LIFETIME / 3600.0).round(1) %> hours from then
+    that page may connect again (after the router restarts, or the line drops), and no other page can use it.
+    After that, or after a reload (a new page), it needs a new pass.</p>
   <%= button_to "Make a pass", browser_passes_path, data: { turbo: false } %>
 </section>
 
@@ -28,7 +34,7 @@
       <dt>Router</dt><dd><code><%= PassLink.router || "(ASTERISM_PASS_ROUTER is not set)" %></code></dd>
       <% if @link %><dt>Link</dt><dd><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></dd><% end %>
     </dl>
-    <p class="hint">Do not share the link: whoever opens it first connects as you (once, until it expires). Revoke it below when you will not use it.</p>
+    <p class="hint">Do not share the link: whoever opens it first connects as you (and keeps it for that page). Revoke it below when you will not use it.</p>
   </section>
 <% end %>
 
@@ -45,12 +51,12 @@
             <td><%= p.id %></td>
             <td><%= p.node ? tag.code(p.node) : "-" %><%= tag.span(" #{p.app}", class: "hint") if p.app %></td>
             <td class="nowrap"><%= when_text(p.created_at) %></td>
-            <td class="nowrap"><%= when_text(p.expires_at) %></td>
-            <td><span class="badge <%= p.status == 'live' ? 'ok' : 'bad' %>"><%= p.status %></span></td>
+            <td class="nowrap"><%= when_text(p.open_until || p.expires_at) %></td>
+            <td><span class="badge <%= %w[live open].include?(p.status) ? 'ok' : 'bad' %>"><%= p.status %></span></td>
             <td><%= p.uses %></td>
             <td class="nowrap"><%= p.last_used_at ? "#{when_text(p.last_used_at)} from #{p.last_used_ip}" : "-" %></td>
             <td><%= p.refused %></td>
-            <td><%= button_to "Revoke", revoke_browser_pass_path(p), method: :patch, class: "small" if p.status == "live" %></td>
+            <td><%= button_to "Revoke", revoke_browser_pass_path(p), method: :patch, class: "small" if p.revocable? %></td>
           </tr>
         <% end %>
       </tbody>

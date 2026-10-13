@@ -1,0 +1,7 @@
+<%# A waiting apply (G1.5b), with its cancel button. %>
+<span class="badge warn">waiting to apply</span>
+<%= link_to "Apply #{apply.id}", relay_apply_path(apply) %> waits <%= apply.when_text %>
+(made by <%= apply.user&.email_address || "?" %>, <%= when_text(apply.created_at) %>).
+<% if current_user.admin? %>
+  <%= button_to "Cancel it", cancel_relay_apply_path(apply), method: :patch, class: "small", form: { class: "inline" } %>
+<% end %>

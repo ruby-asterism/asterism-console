@@ -262,10 +262,15 @@ ruby check_node.rb --router tls/router.example.org:7448 --node bob \
 them. A browser pass (Browser passes > Make a pass, or "Open the browser
 build" when `ASTERISM_BROWSER_PAGE` is set) opens
 the browser build on `wss://router.example.org:7443` (the link carries the
-pass in its fragment, `#zenoh_pass=`). A pass opens one connection; the
-door closes a connection after `WS_DOOR_MAX_SECONDS` (4 h), and the user
-then makes a fresh pass (`docs/g0_w4.md`). `docker compose logs door`
-shows each connection's path (never a query) and why it closed.
+pass in its fragment, `#zenoh_pass=`). A pass belongs to the page that
+uses it first: that page connects again with it after the router restarts
+(an apply) while the pass is open, 4 hours from its first connection
+(`ASTERISM_PASS_LIFETIME`; the door closes connections then, and after
+`WS_DOOR_MAX_SECONDS` at most); another page, or a reload, needs a new one
+(`docs/g0_w4.md`, `docs/g1_5b.md`). "Open the browser build" asks the user
+for a handle first (Account > Handle): the page joins as `wasm-<handle>`.
+`docker compose logs door` shows each connection's path (never a query),
+its lifetime and why it closed.
 
 ## 8. Stop, roll back
 
@@ -397,8 +402,9 @@ Stop the unit before running `docker compose up` / `down` by hand in
 `CONSOLE_IMAGE_TAG=<tag>` in `.env`, then
 `sudo systemctl restart docker-compose-service@<name>`. The old tag stays
 for a roll back (set it again and restart). A restart takes down the
-whole stack, **zenohd too**, so every link drops: home routers reconnect by
-themselves, browsers need a fresh pass (section 7).
+whole stack, **zenohd too**, so every link drops: home routers, nodes and
+browser pages connect again by themselves (a page with its pass, while the
+pass is open; section 7).
 
 ## Roles, rows and passes (what the admin does)
 
@@ -415,8 +421,13 @@ themselves, browsers need a fresh pass (section 7).
 - **A node that connects directly (CRuby)**: a client row with its roles;
   its name is its node ID.
 - **A browser**: the user signs in to the console (by an invitation) and
-  opens the browser build (or makes a pass); the pass opens one
-  connection, within 10 minutes. Browsers get the roles marked "Browsers
-  have this role".
+  chooses a handle (Account), opens the browser build (or makes a pass);
+  the pass is taken by the first page that uses it, within 10 minutes, and
+  that page may connect again with it for 4 hours. Browsers get the roles
+  marked "Browsers have this role".
+- **Applying** (Admin > Relay > Apply): restarts the cloud router; the page
+  says how many browser pages, routers and nodes lose it for a few
+  seconds. "Now", "when nobody is connected" or "at a time"; the last two
+  wait (the registry pages say so) and can be cancelled.
 - **Invitations**: Admin > Users > Make an invitation link (works once, 72
   hours).

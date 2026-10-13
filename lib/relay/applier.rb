@@ -18,7 +18,10 @@ module Relay
       "Every link to the cloud router is cut for a few seconds.",
       "A router that connects to it (the home router) connects again by itself.",
       "The console's bridge connects again by itself (every 3 s).",
-      "Asterism nodes connected to it (CRuby, boards) do not connect again: restart them.",
+      "Asterism nodes connected to it connect again by themselves within seconds (zenoh's own reconnection: " \
+      "zenoh-c on CRuby, zenoh-pico built with reconnection on the boards); an older build does not: restart it.",
+      "A browser page connects again with the pass it opened with, while that pass is open (a few hours " \
+      "from its first connection); a page whose pass has closed needs a new one.",
       "ROS 2 peers connect again and their topics flow, but their liveliness tokens " \
       "(the ROS 2 nodes in the graph) may not come back until they restart."
     ].freeze
@@ -53,11 +56,39 @@ module Relay
         "subjects" => new, "joining" => old ? new - old : new, "leaving" => old ? old - new : [],
         "cloud_seen" => on_cloud[:seen], "cut" => on_cloud[:sessions], "router_links" => on_cloud[:routers],
         "command" => @command.join(" "), "notes" => NOTES
-      }
+      }.merge(self.class.cut_summary(on_cloud, @graph.call.graph))
+    end
+
+    # Who the restart cuts, counted for the confirmation and for "when
+    # nobody is connected": "browsers" (sessions over ws, i.e. browser
+    # pages, and the nodes they carry), "routers" (router links: the home
+    # routers), "nodes" (every Asterism node on the graph but the console's
+    # own: all of them lose the cloud for a few seconds).
+    def self.cut_summary(view, graph)
+      browsers = view[:sessions].reject { _1["self"] }.select { _1["protocol"].to_s.split(",").include?("ws") }
+      nodes = graph["nodes"].to_a.select { _1["kind"] == "a_node" && !_1.dig("data", "self") }
+                            .map { _1.dig("data", "node") }.compact.sort
+      { "browsers" => browsers.size, "browser_nodes" => browsers.flat_map { _1["carries"] }.compact.sort,
+        "routers" => view[:routers], "nodes" => nodes }
+    end
+
+    # Whether nobody is connected through the cloud router now: the bridge is
+    # alive and sees the cloud router, and there is no browser, no other
+    # client session carrying a node, and no Asterism node but the
+    # console's own. Router links alone (a home router with nothing behind
+    # it) do not count. Unknown (no bridge, no cloud router): false.
+    def idle?(state = @graph.call)
+      return false unless state.respond_to?(:bridge_alive?) ? state.bridge_alive? : true
+      view = cloud_view(state.graph)
+      return false unless view[:seen]
+      cut = self.class.cut_summary(view, state.graph)
+      others = view[:sessions].reject { _1["self"] }.select { _1["carries"].any? }
+      cut["browsers"].zero? && cut["nodes"].empty? && others.empty?
     end
 
     # Writes the file and restarts; fills apply (a RelayApply) as it goes.
     def run(apply, by: nil)
+      apply.update!(started_at: Time.current) unless apply.started_at
       plan = self.plan
       text = @config.text(by: by)
       apply.update!(config_text: text, config_digest: @config.digest, plan_json: JSON.generate(plan))

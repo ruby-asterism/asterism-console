@@ -1,0 +1,12 @@
+<%# What the restart cuts, large (G1.5b): browsers, home routers, nodes. %>
+<% if plan["cloud_seen"] %>
+  <div class="cut-summary">
+    <p class="big"><strong><%= pluralize(plan["browsers"].to_i, "browser page") %></strong>,
+      <strong><%= pluralize(plan["routers"].to_a.size, "router") %></strong> and
+      <strong><%= pluralize(plan["nodes"].to_a.size, "node") %></strong> lose the cloud router for a few seconds.</p>
+    <% if plan["nodes"].to_a.any? %><p class="hint">Nodes: <%= plan["nodes"].join(", ") %></p><% end %>
+    <% if plan["routers"].to_a.any? %><p class="hint">Routers: <%= plan["routers"].join(", ") %></p><% end %>
+  </div>
+<% else %>
+  <p class="big">Who is cut is not known now: the bridge does not see the cloud router.</p>
+<% end %>

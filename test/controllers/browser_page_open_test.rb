@@ -42,7 +42,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       sign_in_as(users(:user))
       get browser_passes_path
       assert_select "form[target=_blank] select[name=app] option[value='/app/test/othello.app.rb']"
-      assert_select "code", "wasm-user"
+      assert_select "code", "wasm-pat"
       io = StringIO.new
       old = Rails.logger
       Rails.logger = ActionController::Base.logger = ActiveSupport::TaggedLogging.logger(io)
@@ -54,20 +54,42 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       token = url[/zenoh_pass=([^&]+)/, 1]
       assert_equal BrowserPass.digest(token), pass.token_digest
       assert_equal "https://studio.example.org/?zenoh=ws%2Frouter.example.org%3A7443#zenoh_pass=#{token}" \
-                   "&zenoh_node=wasm-user&app=%2Fapp%2Ftest%2Fothello.app.rb", url
-      assert_equal [ "wasm-user", "/app/test/othello.app.rb" ], [ pass.node, pass.app ]
+                   "&zenoh_node=wasm-pat&app=%2Fapp%2Ftest%2Fothello.app.rb", url
+      assert_equal [ "wasm-pat", "/app/test/othello.app.rb" ], [ pass.node, pass.app ]
       refute_includes io.string, token
+      refute_includes io.string, "user@example.com", "the log names the user by id and handle"
       post open_browser_passes_path, params: { app: "" }
-      assert_includes page_url, "zenoh_node=wasm-user_2", "the first page has not connected yet: the next name"
+      assert_includes page_url, "zenoh_node=wasm-pat_2", "the first page has not connected yet: the next name"
       post open_browser_passes_path, params: { app: "/etc/passwd" }
       assert_response :unprocessable_content, "only the apps the roles name"
       sign_out
       get check_browser_passes_path, headers: { "X-Asterism-Pass" => token }
       assert_response :no_content
       get check_browser_passes_path, headers: { "X-Asterism-Pass" => token }
-      assert_response :unauthorized, "once"
+      assert_response :unauthorized, "once, for a page that names no key"
     ensure
       Rails.logger = ActionController::Base.logger = old if old
+    end
+  end
+
+  test "without a handle: no button, a way to choose one, and open refuses" do
+    with_env("ASTERISM_BROWSER_PAGE" => PAGE, "ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443") do
+      sign_in_as(users(:admin))
+      get browser_passes_path
+      assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select "a[href=?]", account_path(anchor: "handle"), "Choose your handle"
+      post open_browser_passes_path, params: { app: "" }
+      assert_redirected_to account_path
+      assert_equal 0, BrowserPass.count
+      patch handle_account_path, params: { handle: "pat" }
+      assert_redirected_to account_path(anchor: "handle")
+      assert_nil users(:admin).reload.handle, "taken by another user"
+      patch handle_account_path, params: { handle: "Ada" }
+      assert_equal "ada", users(:admin).reload.handle
+      post open_browser_passes_path, params: { app: "" }
+      assert_response :success
+      assert_includes page_url, "zenoh_node=wasm-ada&"
+      refute_includes page_url, "admin"
     end
   end
 

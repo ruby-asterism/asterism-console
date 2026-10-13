@@ -5,9 +5,18 @@
 # is never idle (keep-alives every few seconds). So nginx (which ends TLS and
 # checks the pass, deploy/vps/nginx/asterism-router.conf) hands each
 # WebSocket to this relay, which forwards the bytes both ways to zenohd and
-# closes both sides when the connection is MAX seconds old. A browser that
-# is still there then needs a fresh pass to connect again (a pass opens one
-# connection).
+# closes both sides when the connection is MAX seconds old, or earlier when
+# the pass it came in with closes: nginx hands on the console's answer as
+# X-Asterism-Until (Unix seconds; G1.5b). A pass belongs to the page that
+# used it first and lets that page connect again while it is open (after
+# the router restarts, say), so a connection never outlives its pass. A
+# browser that is still there then needs a fresh pass.
+#
+# When zenohd is not there (it restarts, an apply), the door answers the
+# browser with a plain 503 itself instead of closing the connection: nginx
+# writes the request line, pass and all, into its error log when an
+# upstream closes without an answer, and never for an answer. The page
+# then tries again by itself.
 #
 # It also logs, per connection, the path of the request nginx forwarded and
 # whether it carried a query (it must not: nginx drops the pass before
@@ -46,10 +55,16 @@ def serve(n, client)
   path = target.split("?", 2).first
   query = target.include?("?") ? (target.include?("pass=") ? " WITH A QUERY CARRYING pass=" : " with a query") : ""
   from = head[/^X-Forwarded-For:\s*([^\r\n]+)/i, 1] || "?"
-  upstream = TCPSocket.new(*split_hostport(UPSTREAM))
+  limit = lifetime(head)
+  begin
+    upstream = TCPSocket.new(*split_hostport(UPSTREAM))
+  rescue SystemCallError, SocketError => e
+    unavailable(client)
+    return log("##{n} from #{from}: zenohd is not there (#{e.class}); answered 503")
+  end
   upstream.write(head)
-  log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}")
-  reason = relay(client, upstream, t0)
+  log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}, for #{limit.round} s")
+  reason = relay(client, upstream, t0, limit)
   secs = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)
   log("##{n} closed after #{secs} s (#{reason})")
 rescue StandardError => e
@@ -58,18 +73,38 @@ ensure
   [ client, upstream ].each { |s| s&.close rescue nil }
 end
 
-def relay(a, b, t0)
+# This connection's lifetime in seconds: MAX_SECONDS, or less when the pass
+# closes sooner (X-Asterism-Until from nginx).
+def lifetime(head)
+  until_s = head[/^X-Asterism-Until:\s*(\d+)\s*$/i, 1]
+  return MAX_SECONDS unless until_s
+  [ [ Integer(until_s) - Time.now.to_f, 0.0 ].max, MAX_SECONDS ].min
+end
+
+# A plain answer to the browser (nginx passes it on and logs no error).
+def unavailable(client)
+  client.write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+rescue IOError, SystemCallError
+  nil
+end
+
+def relay(a, b, t0, limit = MAX_SECONDS)
   peer = { a => b, b => a }
+  answered = false # zenohd has sent something (its 101 first)
   loop do
-    left = MAX_SECONDS - (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0)
-    return "lifetime #{MAX_SECONDS.round} s reached" if left <= 0
+    left = limit - (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0)
+    return "lifetime #{limit.round} s reached" if left <= 0
     ready, = IO.select([ a, b ], nil, nil, left)
     next unless ready
     ready.each do |s|
       data = s.readpartial(64 * 1024)
+      answered = true if s == b
       peer[s].write(data)
     rescue EOFError, IOError, SystemCallError
-      return s == a ? "closed by the browser side" : "closed by zenohd"
+      return "closed by the browser side" if s == a
+      # zenohd closed before it answered the upgrade (it is starting).
+      unavailable(a) unless answered
+      return answered ? "closed by zenohd" : "closed by zenohd before it answered; answered 503"
     end
   end
 end

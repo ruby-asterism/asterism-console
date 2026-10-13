@@ -88,4 +88,92 @@ class Relay::AppliesControllerTest < ActionDispatch::IntegrationTest
     get relay_applies_path
     assert_select "tbody tr", 1
   end
+
+  test "the confirmation counts who is cut: browsers, routers, nodes" do
+    plan = @applier.call(%w[true]).plan
+    assert_equal [ 0, [ "router zenohd-home" ], %w[cruby] ], plan.values_at("browsers", "routers", "nodes")
+    html = ApplicationController.render(partial: "relay/applies/cut", locals: { plan: plan })
+    assert_match(/0 browser pages.*1 router.*1 node/m, html.gsub(/<[^>]+>/, ""))
+    get new_relay_apply_path
+    assert_select "p.big", /not known now/, "no bridge here"
+  end
+
+  # A graph seen by a live bridge: with or without others on the cloud router.
+  def live_state(busy)
+    admin = { CLOUD => { "router" => { "metadata" => { "name" => "zenohd-cloud" }, "zid" => CLOUD, "sessions" => [
+      ({ "peer" => "bb22", "whatami" => "client", "links" => [ { "src" => "ws/x:7449", "dst" => "ws/b:3" } ] } if busy),
+      { "peer" => HOME, "whatami" => "router", "links" => [ { "src" => "tls/x:7448", "dst" => "tls/z:2" } ] }
+    ].compact }, "tokens" => busy ? { "asterism/wasm-pat/game" => { "clients" => [ "bb22" ] } } : {}, "linkstate" => {} } }
+    g = Bridge::Graph.build(admin: admin, asterism: busy ? %w[asterism/wasm-pat/game] : []).to_h
+    Struct.new(:graph, :version) { def bridge_alive? = true }.new(g, 5)
+  end
+
+  test "idle: nobody but router links and the console" do
+    busy = Relay::Applier.new(path: @path, command: %w[true], graph: -> { live_state(true) })
+    assert_not busy.idle?
+    assert_equal [ 1, %w[wasm-pat] ], busy.plan.values_at("browsers", "browser_nodes")
+    assert Relay::Applier.new(path: @path, command: %w[true], graph: -> { live_state(false) }).idle?
+    dead = Struct.new(:graph, :version) { def bridge_alive? = false }.new(live_state(false).graph, 5)
+    assert_not Relay::Applier.new(path: @path, command: %w[true], graph: -> { dead }).idle?, "no bridge: not known"
+  end
+
+  test "waiting for nobody: the waiter starts it when the network is idle; cancel" do
+    woken = 0
+    old_waiter = Relay::AppliesController.waiter
+    Relay::AppliesController.waiter = -> { woken += 1 }
+    post relay_applies_path, params: { mode: "idle" }
+    a = RelayApply.last
+    assert_equal [ "waiting", "idle", 1 ], [ a.status, a.mode, woken ]
+    get relay_peers_path
+    assert_select "div.notice-bar", /waiting to apply.*when nobody is connected/m
+    assert_select "div.notice-bar form[action=?] button, div.notice-bar form[action=?] input[type=submit]", cancel_relay_apply_path(a), cancel_relay_apply_path(a)
+    busy = Relay::Applier.new(path: @path, command: %w[true], graph: -> { live_state(true) })
+    assert_nil Relay::ApplyWaiter.tick(applier: -> { busy })
+    assert_equal "waiting", a.reload.status
+    idle = Relay::Applier.new(path: @path, command: [ "sh", "-c", "echo restarted" ], wait_back: 0.2,
+                              graph: -> { live_state(false) })
+    Relay::ApplyWaiter.tick(applier: -> { idle })
+    assert_equal "ok", a.reload.status
+    assert a.started_at
+    assert File.exist?(@path)
+
+    post relay_applies_path, params: { mode: "idle" }
+    b = RelayApply.last
+    patch cancel_relay_apply_path(b)
+    assert_equal "cancelled", b.reload.status
+    assert_equal users(:admin), b.cancelled_by
+    assert_nil Relay::ApplyWaiter.tick(applier: -> { idle }), "a cancelled one never runs"
+    patch cancel_relay_apply_path(b)
+    assert_match(/not waiting/, flash[:alert])
+    get relay_peers_path
+    assert_select "div.notice-bar", 0
+  ensure
+    Relay::AppliesController.waiter = old_waiter
+  end
+
+  test "waiting for a time: given in the browser's zone; a new apply replaces it" do
+    old_waiter = Relay::AppliesController.waiter
+    Relay::AppliesController.waiter = -> { }
+    travel_to Time.utc(2026, 10, 13, 12, 0) do
+      post relay_applies_path, params: { mode: "at", run_at: "2026-10-13T22:30", tz_offset: "-540" }
+      a = RelayApply.last
+      assert_equal Time.utc(2026, 10, 13, 13, 30), a.run_at, "22:30 in UTC+9"
+      get relay_apply_path(a)
+      assert_select "p", /at 2026-10-13 13:30 UTC/
+      runs = Relay::Applier.new(path: @path, command: %w[true], wait_back: 0.2, graph: -> { live_state(true) })
+      assert_nil Relay::ApplyWaiter.tick(Time.utc(2026, 10, 13, 13, 29), applier: -> { runs })
+      Relay::ApplyWaiter.tick(Time.utc(2026, 10, 13, 13, 30), applier: -> { runs })
+      assert_equal "ok", a.reload.status, "at its time, busy or not"
+
+      post relay_applies_path, params: { mode: "at", run_at: "2026-10-13T11:00" }
+      assert_match(/passed/, flash[:alert])
+      post relay_applies_path, params: { mode: "at", run_at: "2026-10-14T00:00" }
+      first = RelayApply.last
+      post relay_applies_path, params: { mode: "idle" }
+      assert_equal "cancelled", first.reload.status, "replaced"
+      assert_equal 1, RelayApply.waiting.count
+    end
+  ensure
+    Relay::AppliesController.waiter = old_waiter
+  end
 end

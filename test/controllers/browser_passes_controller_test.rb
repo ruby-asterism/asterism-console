@@ -13,10 +13,20 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
     css_select("dd code.wrap").first.text
   end
 
-  def check(token, ip: "198.51.100.7")
-    get check_browser_passes_path, headers: { "X-Asterism-Pass" => token, "X-Forwarded-For" => ip }.compact
+  def check(token, ip: "198.51.100.7", page: nil)
+    get check_browser_passes_path, headers: { "X-Asterism-Pass" => token, "X-Asterism-Page" => page,
+                                              "X-Forwarded-For" => ip }.compact
     response.status
   end
+
+  # The way nginx hands it over: the WebSocket URL's query, in a header.
+  def check_uri(token, page, ip: "198.51.100.7")
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}&page=#{page}", "X-Forwarded-For" => ip }
+    response.status
+  end
+
+  PAGE_A = "pageAAAAAAAAAAAAAAAAAAAA".freeze
+  PAGE_B = "pageBBBBBBBBBBBBBBBBBBBB".freeze
 
   test "a pass is shown once, as a link with the router; only its digest is kept" do
     with_env("ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443",
@@ -55,6 +65,39 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
     sign_out
     BrowserPass.find_by!(token_digest: BrowserPass.digest(third)).revoke!(users(:user))
     assert_equal 401, check(third)
+  end
+
+  test "a pass belongs to the page that used it first, while it is open" do
+    token = make_pass
+    sign_out
+    assert_equal 204, check_uri(token, PAGE_A)
+    pass = BrowserPass.sole.reload
+    assert_equal "open", pass.status
+    assert_in_delta BrowserPass::LIFETIME.from_now, pass.open_until, 5
+    assert_equal pass.open_until.to_i.to_s, response.headers["X-Asterism-Until"], "the door closes it then"
+    assert_equal 204, check_uri(token, PAGE_A), "the same page connects again (the router restarted)"
+    assert_equal 204, check(token, page: PAGE_A, ip: "198.51.100.9"), "also from another address (a new line)"
+    assert_equal 401, check_uri(token, PAGE_B), "another page"
+    assert_equal 401, check(token), "a page that names no key"
+    assert_equal 401, check(token, page: "short"), "not a key"
+    assert_equal [ 3, 3 ], [ pass.reload.uses, pass.refused ]
+    travel BrowserPass::LIFETIME + 1.second do
+      assert_equal 401, check_uri(token, PAGE_A), "closed after its lifetime"
+      assert_equal "closed", pass.reload.status
+    end
+    pass.revoke!(users(:user))
+    assert_equal 401, check_uri(token, PAGE_A), "revoked: nothing connects again"
+  end
+
+  test "the page that comes first takes the pass; one connection when it names no key" do
+    token = make_pass
+    other = make_pass
+    sign_out
+    assert_equal 204, check_uri(token, PAGE_B)
+    assert_equal 401, check_uri(token, PAGE_A), "too late"
+    assert_equal 204, check(other)
+    assert_equal 401, check(other), "no key: one connection, as before"
+    assert_equal 401, check(other, page: PAGE_A), "and no page can take it later"
   end
 
   test "a pass opens one connection: the first 204 consumes it" do
@@ -126,11 +169,16 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
     io = StringIO.new
     old = Rails.logger
     Rails.logger = ActionController::Base.logger = ActiveSupport::TaggedLogging.logger(io)
-    check(token)
-    check(token)
+    check(token, page: PAGE_A)
+    check(token, page: PAGE_A)
+    check(token, page: PAGE_B)
     refute_includes io.string, token
-    assert_includes io.string, "opened a connection"
-    assert_includes io.string, "refused from"
+    refute_includes io.string, PAGE_A
+    refute_includes io.string, PAGE_B
+    refute_includes io.string, "user@example.com"
+    assert_includes io.string, "opened a connection from"
+    assert_includes io.string, "opened a connection again"
+    assert_includes io.string, "refused from 198.51.100.7 (another page)"
 
   ensure
     Rails.logger = ActionController::Base.logger = old
@@ -141,7 +189,7 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(users(:admin))
     get admin_browser_passes_path
     assert_response :success
-    assert_select "td", "user@example.com"
+    assert_select "td", /user@example.com/
     sign_in_as(users(:user))
     get admin_browser_passes_path
     assert_redirected_to root_path

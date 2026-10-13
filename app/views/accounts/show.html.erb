@@ -7,6 +7,27 @@
   </dl>
 </section>
 
+<section class="card" id="handle">
+  <h2>Handle</h2>
+  <p>A short name for you on the network: a browser page you open from the console joins it as
+    <code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>, which every node sees (a second page at the same time
+    adds <code>_2</code> and so on). Lower case letters, digits and single hyphens, <%= User::HANDLE_MIN %> to
+    <%= User::HANDLE_MAX %> characters, starting with a letter; nobody else may have it.</p>
+  <% if @user.handle.blank? %>
+    <p><strong>You have no handle yet.</strong> Choose one to open the browser build.</p>
+  <% end %>
+  <%= form_with url: handle_account_path, method: :patch, class: "row" do |f| %>
+    <%= f.text_field :handle, value: @user.handle_in_database, required: true, minlength: User::HANDLE_MIN,
+                     maxlength: User::HANDLE_MAX, pattern: "[A-Za-z]([A-Za-z0-9]|-(?=[A-Za-z0-9]))*", autocomplete: "off", autocapitalize: "none",
+                     spellcheck: false, "aria-label": "Handle" %>
+    <%= f.submit(@user.handle.blank? ? "Choose" : "Change") %>
+  <% end %>
+  <% if @user.handle.present? %>
+    <p class="hint">Changing it: pages open now keep the old name until they close. The old name stays reserved for you for
+      <%= (User::HANDLE_HOLD / 1.day).round %> days (nobody else can take it meanwhile).</p>
+  <% end %>
+</section>
+
 <section class="card">
   <h2>Two-factor sign-in (TOTP)</h2>
   <% if @user.otp_enabled? %>

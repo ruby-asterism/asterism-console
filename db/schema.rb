@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_13_120200) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -49,6 +49,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
     t.datetime "used_at"
     t.string "node"
     t.string "app"
+    t.string "page_digest"
+    t.datetime "open_until"
     t.index ["expires_at"], name: "index_browser_passes_on_expires_at"
     t.index ["revoked_by_id"], name: "index_browser_passes_on_revoked_by_id"
     t.index ["token_digest"], name: "index_browser_passes_on_token_digest", unique: true
@@ -176,6 +178,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "mode", default: "now", null: false
+    t.datetime "run_at"
+    t.datetime "started_at"
+    t.datetime "cancelled_at"
+    t.integer "cancelled_by_id"
+    t.index ["status"], name: "index_relay_applies_on_status"
     t.index ["user_id"], name: "index_relay_applies_on_user_id"
   end
 
@@ -239,6 +247,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
     t.index ["name"], name: "index_relay_roles_on_name", unique: true
   end
 
+  create_table "released_handles", force: :cascade do |t|
+    t.string "handle", null: false
+    t.integer "user_id"
+    t.datetime "released_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["handle"], name: "index_released_handles_on_handle"
+  end
+
   create_table "sessions", force: :cascade do |t|
     t.integer "user_id", null: false
     t.string "ip_address"
@@ -272,7 +289,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
     t.string "otp_secret"
     t.datetime "otp_enabled_at"
     t.integer "otp_last_step"
+    t.string "handle"
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
+    t.index ["handle"], name: "index_users_on_handle", unique: true
   end
 
   create_table "watches", force: :cascade do |t|

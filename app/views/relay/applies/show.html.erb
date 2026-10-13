@@ -1,10 +1,17 @@
 <% content_for(:title, "Apply #{@apply.id} - Asterism Console") %>
-<% if @apply.running? %><% content_for(:head) { tag.meta("http-equiv": "refresh", content: "2") } %><% end %>
+<% if @apply.running? || @apply.waiting? %><% content_for(:head) { tag.meta("http-equiv": "refresh", content: @apply.running? ? "2" : "10") } %><% end %>
 <%= render "relay/peers/tabs" %>
 <section class="card">
   <h2>Apply <%= @apply.id %> <span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad' }[@apply.status] || 'warn' %>"><%= @apply.status %></span></h2>
   <p class="hint"><%= @apply.user&.email_address %>, <%= when_text(@apply.created_at) %><%= " to #{l(@apply.finished_at, format: '%H:%M:%S')}" if @apply.finished_at %>,
-     digest <%= @apply.config_digest %></p>
+     <%= @apply.when_text %><%= ", digest #{@apply.config_digest}" if @apply.config_digest %></p>
+  <% if @apply.status == "cancelled" %>
+    <p>Cancelled<%= " by #{@apply.cancelled_by.email_address}" if @apply.cancelled_by %>, <%= when_text(@apply.cancelled_at) %>: nothing was written.</p>
+  <% end %>
+  <% if @apply.waiting? %>
+    <p>Waiting: it writes the configuration and restarts the cloud router <%= @apply.when_text %> (this page follows it).</p>
+    <%= button_to "Cancel it", cancel_relay_apply_path(@apply), method: :patch %>
+  <% end %>
   <% if @apply.running? %><p>Writing the configuration and restarting the cloud router... (this page follows it)</p><% end %>
   <% if @apply.plan.any? %>
     <h3>Before</h3>
