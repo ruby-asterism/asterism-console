@@ -316,6 +316,71 @@ docker compose up -d
 
 The console migrates its databases on start.
 
+## 11. Under systemd (optional)
+
+To have the stack start with the server and be stopped and started with
+`systemctl`, run it from a systemd template unit. One template serves any
+number of compose stacks, each in its own directory under
+`/opt/docker-compose-service/<name>/`.
+
+`/etc/systemd/system/docker-compose-service@.service`:
+
+```
+[Unit]
+Description=docker compose stack %i
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=COMPOSE_FILE=/opt/docker-compose-service/%i/docker-compose.yml
+ExecStartPre=/usr/bin/docker compose -f ${COMPOSE_FILE} down
+ExecStart=/usr/bin/docker compose -f ${COMPOSE_FILE} up
+ExecStop=/usr/bin/docker compose -f ${COMPOSE_FILE} down
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+A small wrapper next to the checkout of section 1,
+`/opt/docker-compose-service/<name>/docker-compose.yml`, takes in the
+stack with its own directory and `.env`:
+
+```
+name: asterism   # keep the project name: the volumes (the CA among them) are asterism_*
+include:
+  - path: asterism-console/deploy/vps/docker-compose.yml
+    project_directory: asterism-console/deploy/vps
+    env_file: asterism-console/deploy/vps/.env
+```
+
+Keep `name: asterism`: without it the project is named after the
+directory, and compose makes new, empty volumes instead of using the
+existing ones. Check the result with
+`docker compose -f /opt/docker-compose-service/<name>/docker-compose.yml config`.
+
+```
+sudo systemctl daemon-reload
+sudo systemctl enable --now docker-compose-service@<name>    # start now and at boot
+systemctl status docker-compose-service@<name>
+journalctl -u docker-compose-service@<name> -f               # the containers' output
+sudo systemctl stop docker-compose-service@<name>            # stop (volumes kept)
+sudo systemctl disable docker-compose-service@<name>         # no longer at boot
+```
+
+Stop the unit before running `docker compose up` / `down` by hand in
+`deploy/vps`, or the two fight over the same containers.
+
+**Updating** under the unit: build the new image with a tag
+(`CONSOLE_IMAGE_TAG=<tag> docker compose build` in `deploy/vps`), set
+`CONSOLE_IMAGE_TAG=<tag>` in `.env`, then
+`sudo systemctl restart docker-compose-service@<name>`. The old tag stays
+for a roll back (set it again and restart). A restart takes down the
+whole stack, **zenohd too**, so every link drops: home routers reconnect by
+themselves, browsers need a fresh pass (section 7).
+
 ## Players and passes (what the admin does)
 
 - **A player with a board at home**: register the home router as a peer of
