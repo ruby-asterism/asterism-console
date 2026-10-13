@@ -51,8 +51,12 @@ class RelayRoles < ActiveRecord::Migration[8.1]
     add_index :relay_roles, :name, unique: true
 
     create_table :relay_peer_roles do |t|
-      t.references :relay_peer, null: false, foreign_key: { on_delete: :cascade }
-      t.references :relay_role, null: false, foreign_key: { on_delete: :cascade }
+      # No ON DELETE CASCADE: SQLite drops a column of relay_peers by copying
+      # the table, and a cascade would silently take every link with it
+      # (seen: a later remove_column emptied this table). Without it the
+      # links survive the copy; the models delete them themselves.
+      t.references :relay_peer, null: false, foreign_key: true
+      t.references :relay_role, null: false, foreign_key: true
       t.timestamps
     end
     add_index :relay_peer_roles, %i[relay_peer_id relay_role_id], unique: true

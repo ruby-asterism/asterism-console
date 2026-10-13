@@ -297,8 +297,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_13_110000) do
   add_foreign_key "relay_certificates", "relay_peers"
   add_foreign_key "relay_certificates", "users", column: "issued_by_id"
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
-  add_foreign_key "relay_peer_roles", "relay_peers", on_delete: :cascade
-  add_foreign_key "relay_peer_roles", "relay_roles", on_delete: :cascade
+  add_foreign_key "relay_peer_roles", "relay_peers"
+  add_foreign_key "relay_peer_roles", "relay_roles"
   add_foreign_key "sessions", "users"
   add_foreign_key "stream_leases", "users"
 end
