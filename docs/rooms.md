@@ -37,7 +37,7 @@ with them.
   base64url(Ed25519 signature)`, with the room's ID, its slot, its end, its
   connection limit, a random ID and the signing key's ID (kid). No role is
   in it: a key lets one into the room; what one may do inside is the app's
-  business. About 250 bytes. The signer signs it (`POST /room-token`, at
+  business. About 280 bytes. The signer signs it (`POST /room-token`, at
   most 24 hours ahead) with a key that stays in the signer's volume; the
   console asks for a key when it shows a link and keeps no copy.
 - **The link** is `ASTERISM_ROOM_PAGE` with the key in its fragment
