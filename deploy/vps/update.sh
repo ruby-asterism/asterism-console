@@ -322,7 +322,8 @@ main() {
     UNIT="docker-compose-service@$PROJECT"
   fi
   say "  $DIR (checkout $TOP at $OLD_REF), project $PROJECT"
-  say "  console $FROM -> $VERSION ($IMAGE), restart: ${UNIT:+systemctl restart $UNIT (the unit starts the stack)}${UNIT:-docker compose up -d}"
+  if [ -n "$UNIT" ]; then how="systemctl restart $UNIT (the unit starts the stack)"; else how="docker compose up -d"; fi
+  say "  console $FROM -> $VERSION ($IMAGE), restart: $how"
   [ -z "$RESTORE" ] || say "  then the data of $RESTORE"
   [ "$DRY" = 0 ] || say "  dry run: nothing below is run"
 

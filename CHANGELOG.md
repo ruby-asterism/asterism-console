@@ -8,6 +8,11 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+- `deploy/vps/update.sh`: the restart line of the checks no longer prints
+  the unit's name twice ("…(the unit starts the stack)docker-compose-service@…").
+
 ## 0.1.4
 
 - Issuing a certificate on a peer's page says what comes next without a
