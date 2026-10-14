@@ -67,7 +67,8 @@ class UpdateScriptTest < ActiveSupport::TestCase
     assert st.success?, out
     order = lines_matching(out, "checkout -q v0.1.3", "sed -i s/^CONSOLE_VERSION=.*/CONSOLE_VERSION=0.1.3/",
                            "docker compose pull", "run --rm --no-deps -T console bin/asterism backup --label before-0.1.3 --data-version 0.1.2",
-                           "bin/asterism setup", "up -d --remove-orphans", "would wait until every service runs")
+                           "bin/asterism setup --from-update", "up -d --remove-orphans", "would wait until every service runs",
+                           "the setup says whether it changed the cloud router's configuration")
     assert_equal order.sort, order
     assert_includes out, "console 0.1.2 -> 0.1.3 (registry.example.org/asterism-console)"
     assert_includes out, "0.1.2 --restore asterism-<time>-0.1.2-before-0.1.3.tar.gz"
@@ -95,6 +96,8 @@ class UpdateScriptTest < ActiveSupport::TestCase
     assert_includes out, "+ sudo docker compose -f /opt/wrap/asterism/docker-compose.yml pull"
     assert_includes out, "+ sudo env CONSOLE_VERSION=0.1.3 docker compose -f /opt/wrap/asterism/docker-compose.yml run --rm --no-deps -T console bin/asterism backup"
     assert_includes out, "+ sudo systemctl restart docker-compose-service@asterism"
+    # The checks name the unit once (0.2.0).
+    assert_includes out, "restart: systemctl restart docker-compose-service@asterism (the unit starts the stack)\n"
     # The unit starts the stack itself; a second `up -d` would race it for the containers' names.
     assert_not_includes out, "+ sudo docker compose -f /opt/wrap/asterism/docker-compose.yml up -d"
     assert_includes out, "--sudo --unit docker-compose-service@asterism -f /opt/wrap/asterism/docker-compose.yml 0.1.2 --restore"

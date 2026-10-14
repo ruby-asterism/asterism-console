@@ -29,16 +29,20 @@
 #   7. the rooms (G2, docs/rooms.md): the room slots' certificates
 #      (room-01 .. room-NN, ASTERISM_ROOM_SLOTS) for the door, the signer's
 #      key that signs the rooms' keys, and the door's file (rooms.json)
-#   8. the cloud router's configuration from the registry (cloud.json5)
+#   8. the cloud router's configuration from the registry (cloud.json5); a
+#      router starting later starts on it
 #
 # Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
-# Updating a server: deploy/vps/update.sh (it takes a backup first).
+# Updating a server: deploy/vps/update.sh (it takes a backup first). It runs
+# "setup --from-update": then a configuration that changed also restarts
+# the running router on it (as Apply does), so the update leaves the router
+# on the registry; setup says so in a last line ROUTER_CONFIG=... for it.
 require "io/console"
 require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
-USAGE_LINES = 1..34
+USAGE_LINES = 1..38
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -75,8 +79,16 @@ def check_settings
     # Every link names the node (0.1.2): the console would make no links at all.
     problems << "ASTERISM_BROWSER_PAGE needs {pass} after the # and {node} (env.example)"
   end
+  zone = ENV["CONSOLE_TIME_ZONE"].to_s.strip
+  unless zone.empty?
+    require File.join(ROOT, "config/boot")
+    require "active_support"
+    require "active_support/time"
+    problems << "CONSOLE_TIME_ZONE=#{zone} is not a time zone (a Rails or IANA name, e.g. Asia/Tokyo)" unless ActiveSupport::TimeZone[zone]
+  end
   fail!("fix .env first:\n  - #{problems.join("\n  - ")}") if problems.any?
   done "console #{version}, RAILS_ENV=#{ENV.fetch('RAILS_ENV', 'development')}"
+  done "time zone: #{zone.empty? ? 'UTC (CONSOLE_TIME_ZONE is not set)' : zone}"
   done "console's name: #{ENV['CONSOLE_HOSTS'].to_s.empty? ? '(any, development)' : ENV['CONSOLE_HOSTS']}"
   done "router for others: #{endpoint.empty? ? '(not set)' : endpoint}"
 end
@@ -181,15 +193,36 @@ rescue Relay::SignerClient::Error => e
   fail!("the signer: #{e.message}")
 end
 
-def write_router_config
+# Writes the configuration when it is not the registry's. Returns what
+# happened: "unchanged", "new" (no file before: the router starts on it),
+# "written" (and, from an update, the router asked to restart on it) or
+# "written-not-restarted".
+def write_router_config(update: false)
   step "The cloud router's configuration"
   config = Relay::Applier.config_for
   path = Relay::Settings.config_path
   if File.exist?(path) && File.read(path).include?("digest #{config.digest}.")
-    done "#{path} is up to date"
+    done "#{path} is up to date: it holds the registry"
+    return "unchanged"
+  end
+  existed = File.exist?(path)
+  applier = Relay::Applier.new(config: config)
+  applier.write(config.text(by: "bin/asterism setup"))
+  done "wrote #{path} from the registry"
+  return "new" unless existed
+  unless update
+    done "a running router keeps its configuration until it restarts: Apply in the console (Admin > Relay) restarts it on this one"
+    return "written-not-restarted"
+  end
+  out, ok = applier.restart
+  if ok
+    done "asked the cloud router to restart on it (#{Relay::Settings.restart_command.join(' ')})"
+    "written"
   else
-    Relay::Applier.new(config: config).write(config.text(by: "bin/asterism setup"))
-    done "wrote #{path} (Apply in the console restarts a running router on it)"
+    done "could not restart the cloud router (#{Relay::Settings.restart_command.join(' ')}): " \
+         "#{out.lines.drop(1).last.to_s.strip.presence || 'no output'}"
+    done "Apply in the console (Admin > Relay) once the console runs"
+    "written-not-restarted"
   end
 end
 
@@ -286,7 +319,8 @@ when "restore"
 when "backup-daily"
   cmd_backup_daily
 when "setup"
-  say "asterism-console #{version}: setup"
+  update = ARGV.include?("--from-update")
+  say "asterism-console #{version}: setup#{' (from update.sh)' if update}"
   check_settings
   prepare_databases
   require File.join(ROOT, "config/environment")
@@ -296,13 +330,22 @@ when "setup"
   ensure_admin
   ensure_identities(ca_pem)
   ensure_rooms(ca_pem)
-  write_router_config
-  say <<~TEXT
+  router = write_router_config(update: update)
+  if update
+    say "\nDone. update.sh restarts the stack next."
+    say(router == "written-not-restarted" ? "The cloud router still runs its previous configuration: Apply once (Admin > Relay)." :
+        "The cloud router runs the registry; Apply (Admin > Relay) is needed only after you change the registry later.")
+    say "ROUTER_CONFIG=#{router}"
+  else
+    say <<~TEXT
 
-    Done. Next (docs/install.md):
-      docker compose up -d          # the router, the console, the bridge, the door
-      then TLS in front of the console and the browsers' door, and sign in as the admin.
-  TEXT
+      Done. Next (docs/install.md):
+        docker compose up -d          # the router, the console, the bridge, the door
+        then TLS in front of the console and the browsers' door, and sign in as the admin.
+      #{router == 'written-not-restarted' ? 'A router that is running now still runs its previous configuration: Apply once (Admin > Relay).' : 'The router starts on the configuration written from the registry: no Apply is needed now.'}
+      Apply (Admin > Relay) is needed only after you change the registry later.
+    TEXT
+  end
 else
   puts File.read(__FILE__).lines[USAGE_LINES].join.gsub(/^# ?/, "")
   exit(ARGV.empty? ? 0 : 2)

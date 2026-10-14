@@ -2,8 +2,8 @@
 # Updates (or rolls back) the console on a server in one command (0.1.3).
 # Plain sh, git and docker compose: nothing else on the host.
 #
-#   ./update.sh 0.2.0                     # from deploy/vps of the checkout
-#   ./update.sh --dry-run 0.2.0           # print the steps, change nothing
+#   ./update.sh 0.2.1                     # from deploy/vps of the checkout
+#   ./update.sh --dry-run 0.2.1           # print the steps, change nothing
 #   ./update.sh 0.1.3 --restore <backup>  # back to 0.1.3 with that backup's data
 #
 # In order:
@@ -16,14 +16,18 @@
 #      docker compose pull
 #   4. (--restore) stops the console, the bridge and the backup service and
 #      restores the backup named
-#   5. bin/asterism setup (the migrations; idempotent)
+#   5. bin/asterism setup --from-update (the migrations; idempotent). When
+#      the registry's configuration of the cloud router differs from the
+#      router's file, it writes the file and restarts the router on it (as
+#      Apply does): after the update the router runs the registry
 #   6. the restart: systemctl restart <unit> when the stack runs as a systemd
 #      unit (and nothing else: the unit starts the stack), otherwise
 #      docker compose up -d --remove-orphans
 #   7. checks that every service runs, the console's ones on the new image,
 #      and that no other container of the project is left
-#   8. prints how to go back (this script with the old version and
-#      --restore <the backup it took>)
+#   8. says whether the router's configuration changed, and prints how to go
+#      back (this script with the old version and --restore <the backup it
+#      took>)
 # When something fails before the restart, the checkout and .env are put
 # back as they were.
 #
@@ -212,6 +216,43 @@ verify() {
   say "  nothing else of project $PROJECT is left (docker ps -a)"
 }
 
+# The setup, its output shown; ROUTER_CONFIG= its last line says what it
+# did with the cloud router's configuration (bin/asterism, 0.2.1 and later;
+# an older one says nothing: "unknown").
+run_setup() {
+  ROUTER_CONFIG=unknown
+  say "+ ${SUDO:+$SUDO }docker compose ${CFLAGS:+$CFLAGS }run --rm -T console bin/asterism setup --from-update"
+  [ "$DRY" = 1 ] && return 0
+  out=$(compose run --rm -T console bin/asterism setup --from-update 2>&1) || {
+    say "$out"
+    die "failed: bin/asterism setup"
+  }
+  say "$out" | grep -v '^ROUTER_CONFIG=' || true
+  got=$(say "$out" | sed -n 's/^ROUTER_CONFIG=//p' | tail -n 1)
+  [ -z "$got" ] || ROUTER_CONFIG=$got
+}
+
+router_note() {
+  case "$ROUTER_CONFIG" in
+    written)
+      say "  the registry is applied: the setup wrote the cloud router's configuration from it and restarted"
+      say "  the router on it. Apply (Admin > Relay) is needed only after you change the registry later." ;;
+    unchanged|new)
+      say "  the registry is applied: the cloud router's configuration already was the registry's."
+      say "  Apply (Admin > Relay) is needed only after you change the registry later." ;;
+    written-not-restarted)
+      say "  the setup wrote the cloud router's configuration from the registry but could not restart the router:"
+      say "  Apply once (Admin > Relay)." ;;
+    *)
+      if [ "$DRY" = 1 ]; then
+        say "  (the setup says whether it changed the cloud router's configuration; then nothing more is needed)"
+      else
+        say "  the setup of $VERSION does not say whether the cloud router's configuration changed:"
+        say "  if Admin > Relay shows \"Changes not yet applied\", Apply once."
+      fi ;;
+  esac
+}
+
 way_back() {
   if [ "$FROM" != "$VERSION" ]; then
     say ""
@@ -360,8 +401,8 @@ main() {
   done
   [ -z "$missing" ] || say "  note: env.example has settings your .env does not mention:$missing (CHANGELOG.md says which matter)"
 
-  step "Setup (migrations)"
-  act compose run --rm -T console bin/asterism setup
+  step "Setup (migrations, the cloud router's configuration)"
+  run_setup
 
   ARMED=0
   step "Restart"
@@ -379,6 +420,7 @@ main() {
   step "Done: console $VERSION"
   [ -z "$BACKUP" ] || say "  backup taken first: $BACKUP (in the \"backups\" volume)"
   [ -z "$RESTORE" ] || say "  restored: $RESTORE"
+  router_note
   say "  old images stay for going back; list them: ${SUDO:+$SUDO }docker image ls $IMAGE"
   way_back
 }
