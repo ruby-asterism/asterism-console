@@ -142,4 +142,62 @@ class Relay::CertificatesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/did not answer/, response.parsed_body["error"])
     assert_equal 0, @peer.certificates.count
   end
+
+  test "issuing answers with the banner, the ledger and what comes next, for the page to put in place" do
+    Dir.mktmpdir do |gen|
+      with_env("ASTERISM_RELAY_GENERATED_DIR" => gen) do
+        # The cloud router runs the registry as it is (w2bot has no certificate, so it is not in the ACL).
+        File.write(Relay::Settings.config_path, Relay::Applier.config_for.text(by: "admin@example.com"))
+        get relay_peer_path(@peer)
+        assert_select "#relay-tabs .tabs-aside", /runs this registry/
+        assert_select "#relay-tabs .apply-banner", 0
+        assert_select "#peer-cert-status [data-test=cert-next]",
+                      /No certificate yet: issue one below; it joins the ACL when you apply/
+        assert_select "#peer-acl .badge", "no valid certificate"
+        assert_select "[data-issue-target=next]"
+
+        post relay_peer_certificates_path(@peer), params: { spki: spki }, as: :json
+        assert_response :created
+        ans = response.parsed_body
+        next_step = Nokogiri::HTML5.fragment(ans["next"])
+        assert_match(/Saved\? Next: apply/, next_step.text)
+        assert_equal new_relay_apply_path, next_step.at_css("a.button")["href"]
+        assert_equal "Review and apply", next_step.at_css("a.button").text
+        parts = ans["replace"].transform_values { Nokogiri::HTML5.fragment(_1) }
+        assert_equal %w[peer-acl peer-cert-status peer-certs relay-tabs], parts.keys.sort
+        parts.each { |id, frag| assert_equal id, frag.element_children.sole["id"], "#{id} replaces itself" }
+        tabs = parts["relay-tabs"]
+        assert_match(/Changes not yet applied/, tabs.at_css(".apply-banner").text)
+        assert_equal new_relay_apply_path, tabs.at_css(".apply-banner a")["href"]
+        assert_nil tabs.at_css(".tabs-aside"), "no longer says the cloud router runs this registry"
+        assert_equal "in the ACL", parts["peer-acl"].at_css(".badge").text
+        assert_nil parts["peer-cert-status"].at_css("[data-test=cert-next]"), "it has a certificate now"
+        assert_equal @peer.certificates.sole.serial, parts["peer-certs"].at_css("tbody tr code").text
+
+        # A reload says the same.
+        get relay_peer_path(@peer)
+        assert_select "#relay-tabs .apply-banner", /Changes not yet applied/
+      end
+    end
+  end
+
+  test "issuing again for a peer the cloud router already lets in: nothing to apply" do
+    post relay_peer_certificates_path(@peer), params: { spki: spki }, as: :json
+    Dir.mktmpdir do |gen|
+      with_env("ASTERISM_RELAY_GENERATED_DIR" => gen) do
+        File.write(Relay::Settings.config_path, Relay::Applier.config_for.text)
+        post relay_peer_certificates_path(@peer), params: { spki: spki(OpenSSL::PKey::EC.generate("prime256v1")) }, as: :json
+        assert_response :created
+        assert_match(/Nothing to apply/, response.parsed_body["next"])
+        assert_includes response.parsed_body["replace"]["relay-tabs"], "runs this registry"
+      end
+    end
+  end
+
+  test "a peer whose certificates are all revoked is told to issue one" do
+    post relay_peer_certificates_path(@peer), params: { spki: spki }, as: :json
+    @peer.certificates.sole.revoke!(users(:admin))
+    get relay_peer_path(@peer)
+    assert_select "#peer-cert-status [data-test=cert-next]", /No valid certificate \(expired or revoked\): issue one below/
+  end
 end

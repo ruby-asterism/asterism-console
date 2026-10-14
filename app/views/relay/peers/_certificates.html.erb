@@ -1,0 +1,25 @@
+<%# A peer's certificates in the ledger (relay/peers/show). #peer-certs is
+    replaced in place when one is issued on the page. %>
+<div id="peer-certs">
+<% if peer.certificates.empty? %>
+  <p class="hint">None in the ledger.</p>
+<% else %>
+  <table class="list">
+    <thead><tr><th>Serial</th><th>From</th><th>Until</th><th>Status</th><th>Issued</th><th>Fingerprint (SHA-256)</th><th></th></tr></thead>
+    <tbody>
+      <% peer.certificates.each do |c| %>
+        <tr>
+          <td><code><%= c.serial %></code></td>
+          <td class="nowrap"><%= when_text(c.not_before) %></td>
+          <td class="nowrap"><%= when_text(c.not_after) %></td>
+          <td><span class="badge <%= c.status == 'valid' ? 'ok' : 'bad' %>"><%= c.status %></span>
+            <% if c.revoked_at %><br><span class="hint"><%= when_text(c.revoked_at) %> by <%= c.revoked_by&.email_address %></span><% end %></td>
+          <td><%= c.source == "imported" ? "imported" : c.issued_by&.email_address %></td>
+          <td><code class="wrap"><%= c.fingerprint %></code></td>
+          <td><%= button_to "Revoke", revoke_relay_peer_certificate_path(peer, c), method: :patch, class: "small" if current_user.admin? && c.revoked_at.nil? %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+</div>

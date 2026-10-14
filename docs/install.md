@@ -110,7 +110,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.1.3 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.1.4 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -130,7 +130,7 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.1.3`).
+- `CONSOLE_VERSION`: the version you install (`0.1.4`).
 - `ASTERISM_BACKUP_HOUR`, `ASTERISM_BACKUP_KEEP`: when the daily backup of
   the databases runs and how many are kept (section 14).
 - `CONSOLE_HOSTS=asterism.example.org`
@@ -502,14 +502,15 @@ connect again by themselves within seconds. Old images stay on the server
 for going back; remove them with `docker image rm` when you no longer need
 them.
 
-**From a version before 0.1.3** (it has no `update.sh` yet): take the
-script from the new tag and run it from there; it checks the tag out
-itself:
+**From a version before 0.1.4** (0.1.2 and earlier have no `update.sh`
+yet; the one of 0.1.3 restarts twice with a systemd unit and fails at its
+end): take the script from the new tag and run it from there; it checks
+the tag out itself:
 
 ```
 git fetch --tags
-git show v0.1.3:deploy/vps/update.sh > /tmp/asterism-update.sh
-sh /tmp/asterism-update.sh -C "$PWD" 0.1.3
+git show v0.1.4:deploy/vps/update.sh > /tmp/asterism-update.sh
+sh /tmp/asterism-update.sh -C "$PWD" 0.1.4
 ```
 
 ## 16. Restoring

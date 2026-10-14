@@ -9,8 +9,12 @@ import { credentialsTar } from "lib/credentials_tar"
 // never sent, stored or shown again: leaving the page loses it. "Save all
 // (.tar)" saves the key, the certificate, the CA, the example configuration
 // and asterism.json as one tar made here (lib/credentials_tar.js, O1).
+// The answer also carries the parts of the page that issuing changes (the
+// "not yet applied" banner, the ACL badge, the next step, the ledger),
+// rendered by the console, and what to do next; they are put in place
+// here, so the page says so without a reload (which would lose the key).
 export default class extends Controller {
-  static targets = ["button", "insecure", "result", "facts", "key", "cert", "ca", "config", "command", "error"]
+  static targets = ["button", "insecure", "result", "facts", "key", "cert", "ca", "config", "command", "next", "error"]
   static values = { url: String, name: String }
 
   connect() {
@@ -61,6 +65,11 @@ export default class extends Controller {
         this.factsTarget.append(dt, dd)
       }
       this.commandTarget.textContent = `With the .tar: ${ans.command}`
+      this.nextTarget.innerHTML = ans.next || ""
+      for (const [id, html] of Object.entries(ans.replace || {})) {
+        const el = document.getElementById(id)
+        if (el) el.outerHTML = html
+      }
       this.resultTarget.hidden = false
       this.holdsKey = true
     } catch (e) {

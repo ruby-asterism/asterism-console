@@ -89,6 +89,51 @@ class Relay::AppliesControllerTest < ActionDispatch::IntegrationTest
     assert_select "tbody tr", 1
   end
 
+  test "the confirmation asks for a time only for \"at a time\": one form, the choice, one button" do
+    get new_relay_apply_path
+    assert_select "form.apply-when[data-controller~=apply-mode]", 1 do
+      assert_select "input[type=radio][name=mode]", 3
+      assert_select "input[type=radio][name=mode][value=now][checked]"
+      assert_select "input[name=run_at]"
+      assert_select "input[name=run_at][required]", 0, "not required unless \"at a time\" is chosen"
+      assert_select "button[type=submit]", 1
+    end
+    assert_select "input[name=run_at][required]", 0
+  end
+
+  test "now and when nobody is connected go without a time; at a time needs one" do
+    ran = []
+    Relay::AppliesController.runner = ->(id, by) { ran << id }
+    old_waiter = Relay::AppliesController.waiter
+    Relay::AppliesController.waiter = -> { }
+    # What the form sends for "now": the time field empty.
+    post relay_applies_path, params: { mode: "now", run_at: "", tz_offset: "-540" }
+    now = RelayApply.last
+    assert_redirected_to relay_apply_path(now)
+    assert_equal [ "running", "now", nil, [ now.id ] ], [ now.status, now.mode, now.run_at, ran ]
+    now.update!(status: "ok")
+
+    post relay_applies_path, params: { mode: "idle", run_at: "", tz_offset: "-540" }
+    idle = RelayApply.last
+    assert_redirected_to relay_apply_path(idle)
+    assert_equal [ "waiting", "idle", nil ], [ idle.status, idle.mode, idle.run_at ]
+
+    assert_no_difference -> { RelayApply.count } do
+      post relay_applies_path, params: { mode: "at", run_at: "", tz_offset: "-540" }
+    end
+    assert_redirected_to new_relay_apply_path
+    assert_match(/Give the time/, flash[:alert])
+  ensure
+    Relay::AppliesController.waiter = old_waiter
+  end
+
+  test "while an apply runs, now cannot be chosen" do
+    RelayApply.create!(user: users(:admin), status: "running", mode: "now", started_at: Time.current)
+    get new_relay_apply_path
+    assert_select "input[type=radio][name=mode][value=now][disabled]"
+    assert_select "input[type=radio][name=mode][value=idle][checked]"
+  end
+
   test "the confirmation counts who is cut: browsers, routers, nodes" do
     plan = @applier.call(%w[true]).plan
     assert_equal [ 0, [ "router zenohd-home" ], %w[cruby] ], plan.values_at("browsers", "routers", "nodes")

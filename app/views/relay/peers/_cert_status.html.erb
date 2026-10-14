@@ -1,0 +1,17 @@
+<%# What a peer needs next for its certificate (relay/peers/show): the step
+    to take while it has no valid certificate, nothing once it has one.
+    #peer-cert-status is replaced in place when one is issued on the page. %>
+<div id="peer-cert-status">
+  <% if !peer.enabled? %>
+    <p class="next-step" data-test="cert-next">Disabled: it stays out of the ACL and cannot be issued a certificate.
+      Enable it (Edit) first.</p>
+  <% elsif peer.current_certificate.nil? %>
+    <p class="next-step" data-test="cert-next">
+      <% if peer.certificates.empty? %>
+        No certificate yet: issue one below; it joins the ACL when you apply.
+      <% else %>
+        No valid certificate (expired or revoked): issue one below; it joins the ACL again when you apply.
+      <% end %>
+    </p>
+  <% end %>
+</div>

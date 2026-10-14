@@ -9,21 +9,37 @@
   <%= render "cut", plan: @plan %>
   <%= render "plan", plan: @plan %>
   <% if current_user.admin? %>
-    <div class="stack">
-      <%= button_to "Write the configuration and restart the cloud router now", relay_applies_path,
-                    params: { mode: "now" }, disabled: @running,
-                    form: { data: { turbo_confirm: "Restart the cloud router now? Every link to it is cut for a few seconds." } } %>
-      <%= button_to "Apply when nobody is connected", relay_applies_path, params: { mode: "idle" } %>
-      <%= form_with url: relay_applies_path, class: "row", data: { controller: "tz" } do |f| %>
-        <%= f.hidden_field :mode, value: "at" %>
+    <%# One form, one button: the choice says when. The time is required only
+        while "at a time" is chosen (apply_mode_controller.js); create checks
+        it for that mode only. %>
+    <%= form_with url: relay_applies_path, class: "apply-when", data: { controller: "tz apply-mode",
+          apply_mode_confirm_value: "Restart the cloud router now? Every link to it is cut for a few seconds." } do |f| %>
+      <fieldset>
+        <legend>When</legend>
+        <label class="check">
+          <%= radio_button_tag :mode, "now", !@running, disabled: @running, data: { action: "apply-mode#pick" } %>
+          Now: write the configuration and restart the cloud router
+          <%= tag.span("(an apply is still running)", class: "hint") if @running %>
+        </label>
+        <label class="check">
+          <%= radio_button_tag :mode, "idle", @running, data: { action: "apply-mode#pick" } %>
+          When nobody is connected
+        </label>
+        <label class="check">
+          <%= radio_button_tag :mode, "at", false, data: { action: "apply-mode#pick" } %>
+          At a time:
+          <%= f.datetime_local_field :run_at, data: { tz_target: "time", apply_mode_target: "time",
+                                             action: "focus->apply-mode#chooseAt input->apply-mode#chooseAt" },
+                                     aria: { label: "The time to apply at" } %>
+          <span class="hint" data-tz-target="zone">(UTC, unless this page knows your time zone)</span>
+        </label>
         <%= f.hidden_field :tz_offset, value: "", data: { tz_target: "offset" } %>
-        <label>Apply at <%= f.datetime_local_field :run_at, required: true, data: { tz_target: "time" } %></label>
-        <span class="hint" data-tz-target="zone">(UTC, unless this page knows your time zone)</span>
-        <%= f.submit "Apply at this time" %>
-      <% end %>
-    </div>
-    <p class="hint">The last two wait (the registry pages say so) and can be cancelled; they apply the registry as it is
-      when they run. A new apply replaces one that waits.</p>
+      </fieldset>
+      <%= f.button(@running ? "Apply when nobody is connected" : "Write the configuration and restart the cloud router now",
+                   type: "submit", class: "primary", data: { apply_mode_target: "submit" }) %>
+    <% end %>
+    <p class="hint">"When nobody is connected" and "at a time" wait (the registry pages say so) and can be cancelled;
+      they apply the registry as it is when they run. A new apply replaces one that waits.</p>
     <% if @waiting %><div class="notice-bar"><%= render "waiting", apply: @waiting %></div><% end %>
   <% else %>
     <p class="hint">Only an admin can apply.</p>

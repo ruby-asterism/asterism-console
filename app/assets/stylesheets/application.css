@@ -397,6 +397,24 @@ img.msg-thumb { width: 80px; height: auto; vertical-align: middle; margin-right:
   background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-line); font-weight: 600;
 }
 .apply-banner a.button { margin-left: auto; }
+/* The relay tabs and banners as one block a page can replace in place
+   (relay/peers/_tabs); its children stay the page's own flex items. */
+#relay-tabs { display: contents; }
+/* When to apply (relay/applies/new): one choice, one button. */
+.apply-when { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.apply-when fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px 10px; margin: 0;
+  display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.apply-when legend { font-weight: 600; padding: 0 4px; }
+.apply-when label.check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.apply-when input[type=datetime-local] { font: inherit; padding: 4px 8px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--panel); color: var(--text); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.1); }
+/* What to do next for a peer's certificate (relay/peers/_cert_status), and
+   after one is issued. */
+.next-step { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0; padding: 8px 12px;
+  border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-line); }
+.next-step.done { background: var(--bg); color: var(--text); border-color: var(--line); }
 a.button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 a.button.primary:hover { filter: brightness(1.1); }
 /* The role form (relay/roles/_form) and the roles where they are picked. */

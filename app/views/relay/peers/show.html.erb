@@ -1,7 +1,7 @@
 <% content_for(:title, "#{@peer.name} - Asterism Console") %>
 <%= render "relay/peers/tabs" %>
 <section class="card">
-  <h2><%= @peer.name %> <span class="hint"><%= @peer.kind %></span> <%= acl_badge(@peer) %> <%= presence_badge(@peer, @seen) %></h2>
+  <h2><%= @peer.name %> <span class="hint"><%= @peer.kind %></span> <span id="peer-acl"><%= acl_badge(@peer) %></span> <%= presence_badge(@peer, @seen) %></h2>
   <dl class="facts">
     <dt>Description</dt><dd><%= @peer.description.presence || "-" %></dd>
     <dt>Roles</dt><dd><%= @peer.roles.any? ? safe_join(@peer.roles.map { link_to _1.name, relay_role_path(_1) }, ", ") : tag.span("none", class: "hint") %></dd>
@@ -25,6 +25,7 @@
 
 <section class="card">
   <h2>Certificates</h2>
+  <%= render "relay/peers/cert_status", peer: @peer %>
   <% if current_user.admin? %>
     <div data-controller="issue" data-issue-url-value="<%= relay_peer_certificates_path(@peer) %>"
          data-issue-name-value="<%= @peer.name %>">
@@ -40,6 +41,7 @@
       <div data-issue-target="result" hidden>
         <p class="flash alert" role="alert">Copy or save the private key now. Leaving this page loses it for good.</p>
         <dl class="facts" data-issue-target="facts"></dl>
+        <div data-issue-target="next"></div>
         <p class="row">
           <button type="button" data-action="issue#saveAll" data-test="save-all">Save all (.tar)</button>
           <span class="hint"><code><%= @peer.name %>.tar</code>: the key (0600), the certificate, the CA,
@@ -65,27 +67,7 @@
       <p class="error" data-issue-target="error" hidden></p>
     </div>
   <% end %>
-  <% if @peer.certificates.empty? %>
-    <p class="hint">None in the ledger.</p>
-  <% else %>
-    <table class="list">
-      <thead><tr><th>Serial</th><th>From</th><th>Until</th><th>Status</th><th>Issued</th><th>Fingerprint (SHA-256)</th><th></th></tr></thead>
-      <tbody>
-        <% @peer.certificates.each do |c| %>
-          <tr>
-            <td><code><%= c.serial %></code></td>
-            <td class="nowrap"><%= when_text(c.not_before) %></td>
-            <td class="nowrap"><%= when_text(c.not_after) %></td>
-            <td><span class="badge <%= c.status == 'valid' ? 'ok' : 'bad' %>"><%= c.status %></span>
-              <% if c.revoked_at %><br><span class="hint"><%= when_text(c.revoked_at) %> by <%= c.revoked_by&.email_address %></span><% end %></td>
-            <td><%= c.source == "imported" ? "imported" : c.issued_by&.email_address %></td>
-            <td><code class="wrap"><%= c.fingerprint %></code></td>
-            <td><%= button_to "Revoke", revoke_relay_peer_certificate_path(@peer, c), method: :patch, class: "small" if current_user.admin? && c.revoked_at.nil? %></td>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
-  <% end %>
+  <%= render "relay/peers/certificates", peer: @peer %>
 </section>
 
 <% if current_user.admin? %>

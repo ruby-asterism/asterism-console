@@ -17,7 +17,8 @@ module Relay
                      "not_after" => record.not_after.utc.iso8601, "fingerprint" => record.fingerprint,
                      "certificate" => cert_pem, "ca" => ca_pem,
                      "zenoh_config" => issuer.zenoh_config(@peer), "command" => issuer.command(@peer),
-                     "info" => issuer.credentials_info(@peer, record, console: request.base_url) },
+                     "info" => issuer.credentials_info(@peer, record, console: request.base_url),
+                     "next" => fragment("issued_next"), "replace" => replacements },
              status: :created
     rescue Relay::Issuer::Error => e
       render json: { "error" => e.message }, status: :unprocessable_content
@@ -34,6 +35,21 @@ module Relay
     end
 
     private
+
+    # The parts of the peer's page that issuing changes, rendered again for
+    # the page to put in place (by element id): the relay tabs with the
+    # "not yet applied" banner, the ACL badge, the next step, the ledger.
+    def replacements
+      @peer.reload
+      { "relay-tabs" => render_to_string(partial: "relay/peers/tabs", formats: [ :html ]),
+        "peer-acl" => helpers.tag.span(helpers.acl_badge(@peer), id: "peer-acl"),
+        "peer-cert-status" => fragment("cert_status"),
+        "peer-certs" => fragment("certificates") }
+    end
+
+    def fragment(name)
+      render_to_string(partial: "relay/peers/#{name}", formats: [ :html ], locals: { peer: @peer })
+    end
 
     def set_peer
       @peer = RelayPeer.find(params[:peer_id])

@@ -8,14 +8,40 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased
+## 0.1.4
 
+- Issuing a certificate on a peer's page says what comes next without a
+  reload (which would lose the key the page holds): the "Changes not yet
+  applied to the cloud router" banner appears in place of "The cloud
+  router runs this registry.", the result says "Saved? Next: apply" with
+  the "Review and apply" button (or that there is nothing to apply when
+  the cloud router already lets the peer in), and the ACL badge and the
+  ledger show the new certificate. The issuing answer carries these parts,
+  rendered by the console.
+- A peer without a valid certificate says the next step at the top of its
+  Certificates: "No certificate yet: issue one below; it joins the ACL when
+  you apply." (or that its certificates expired or were revoked, or that a
+  disabled peer must be enabled first).
+- Apply (Review and apply): one form with the choice of when (now, when
+  nobody is connected, at a time) and one button that says what it does.
+  The time is asked for only when "at a time" is chosen (going to the time
+  field chooses it); before, "at a time" was a form of its own whose
+  large button stood out from the other two, and pressing it without a
+  time asked for one. "Now" still asks for a confirmation; the console checks the time
+  for "at a time" only, as before.
 - `deploy/vps/update.sh`: with a systemd unit, the restart is the unit's
   alone. 0.1.3 also ran `docker compose up -d` right after `systemctl
   restart`, which raced the unit's own `docker compose up` for the
   containers' names ("container name ... is already in use") and failed the
   update after everything else had been done (the stack was up under the
   unit).
+- Updating from 0.1.3: `./update.sh 0.1.4` (docs/install.md, "Updating");
+  with a systemd unit, the `update.sh` of 0.1.3 runs into the race above
+  at its end, so take the new one first (`git fetch --tags`, `git show
+  v0.1.4:deploy/vps/update.sh > /tmp/asterism-update.sh`,
+  `sh /tmp/asterism-update.sh -C <deploy/vps> 0.1.4`, with `--sudo` / `-f`
+  as your server needs). No migration; the compose file and `.env` are as
+  in 0.1.3 apart from the version.
 
 ## 0.1.3
 

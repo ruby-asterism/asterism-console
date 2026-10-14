@@ -1,0 +1,11 @@
+<%# What comes after issuing (relay/certificates#create answers with it; the
+    issuing page shows it under the new certificate's facts). %>
+<% if relay_unapplied? %>
+  <div class="next-step" data-test="issued-next">
+    <span>Saved? Next: apply, so the cloud router lets <%= peer.name %> in.</span>
+    <%= link_to "Review and apply", new_relay_apply_path, class: "button primary" %>
+  </div>
+<% else %>
+  <p class="next-step done" data-test="issued-next">Nothing to apply: the cloud router already lets <%= peer.name %> in
+    (its ACL matches the name, not the certificate). Install the new certificate and key where <%= peer.name %> runs.</p>
+<% end %>
