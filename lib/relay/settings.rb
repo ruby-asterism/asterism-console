@@ -21,10 +21,21 @@
 #   ASTERISM_BROWSER_NODE_PREFIX  wasm- (the browsers' node IDs start with it: ${node} of the
 #                                 roles for browsers is <prefix>$*, and the console names a
 #                                 browser page it opens <prefix><handle>, Relay::BrowserNode)
-#   ASTERISM_RELAY_MAX_SESSIONS   64    (transport/unicast/max_sessions)
+#   ASTERISM_RELAY_MAX_SESSIONS   96    (transport/unicast/max_sessions; 64 before G2's rooms)
 #   ASTERISM_RELAY_ACCEPT_PENDING 16    (transport/unicast/accept_pending)
 #   ASTERISM_RELAY_ACCEPT_TIMEOUT 5000  (ms, transport/unicast/accept_timeout)
 #   ASTERISM_RELAY_MAX_MESSAGE    4194304 (bytes, transport/link/rx/max_message_size)
+#
+# Rooms (G2, docs/rooms.md):
+#
+#   ASTERISM_ROOM_SLOTS           8     room slots: room-01 .. room-08, each with its certificate and
+#                                       its ACL (room/<slot>/**) made once; a room takes a free one
+#   ASTERISM_ROOM_DEFAULT_HOURS   3     how long a new room is open unless the admin says otherwise
+#   ASTERISM_ROOM_MAX_HOURS       24    the longest (at most 24: the signer refuses a later end)
+#   ASTERISM_ROOM_MAX_CONNECTIONS 16    connections a room may have at once (at most 16)
+#   ASTERISM_ROOMS_DIR            storage/relay/rooms (what the door reads: rooms.json, the
+#                                       slots' certificates in certs/)
+#   ASTERISM_DOOR_STATUS_URL      http://127.0.0.1:7453/status (the door's connection counts)
 require "shellwords"
 
 module Relay
@@ -47,6 +58,37 @@ module Relay
         "accept_timeout_ms" => int.("ASTERISM_RELAY_ACCEPT_TIMEOUT"),
         "max_message_size" => int.("ASTERISM_RELAY_MAX_MESSAGE")
       }.compact
+    end
+
+    def room_slots(env = ENV)
+      n = Integer(env["ASTERISM_ROOM_SLOTS"].presence || 8)
+      raise ArgumentError, "ASTERISM_ROOM_SLOTS must be 0..99" unless n.between?(0, 99)
+      n
+    end
+
+    # The slots' names: "01" .. "08".
+    def slot_names(env = ENV)
+      (1..room_slots(env)).map { format("%02d", _1) }
+    end
+
+    def slot_peer_name(slot) = "room-#{slot}"
+
+    def room_hours(env = ENV)
+      max = Integer(env["ASTERISM_ROOM_MAX_HOURS"].presence || RoomToken::MAX_HOURS).clamp(1, RoomToken::MAX_HOURS)
+      default = Integer(env["ASTERISM_ROOM_DEFAULT_HOURS"].presence || 3).clamp(1, max)
+      [ default, max ]
+    end
+
+    def room_max_connections(env = ENV)
+      Integer(env["ASTERISM_ROOM_MAX_CONNECTIONS"].presence || RoomToken::MAX_CONNECTIONS).clamp(1, RoomToken::MAX_CONNECTIONS)
+    end
+
+    def rooms_dir(env = ENV, root: Rails.root)
+      File.expand_path(env["ASTERISM_ROOMS_DIR"].presence || "storage/relay/rooms", root)
+    end
+
+    def door_status_url(env = ENV)
+      env["ASTERISM_DOOR_STATUS_URL"].presence || "http://127.0.0.1:7453/status"
     end
 
     def browser_node_prefix(env = ENV)

@@ -9,6 +9,7 @@ tests); where they differ from install.md, install.md is current.
 
 | Note | |
 |---|---|
+| [rooms.md](rooms.md) | G2: rooms (signed keys, room slots, the rooms' door) |
 | [o1.md](o1.md) | O1: a console anyone can install on their own server (published image, first setup, certificates as one file) |
 | [g1_5b.md](g1_5b.md) | G1.5b: surviving router restarts, choosing when to apply, handles |
 | [g1_5.md](g1_5.md) | G1.5: roles, calls under one's own name, opening a browser page |

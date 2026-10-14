@@ -10,6 +10,9 @@
 #             ws/7449 (browsers)             none: the door only
 #   door      7451 (bin/ws_door)             127.0.0.1:${ROUTER_WS_PORT} (the web server, with a pass check);
 #             relays to zenohd ws/7449 and closes a connection after WS_DOOR_MAX_SECONDS
+#             7452 (the rooms, G2)           127.0.0.1:${ROOM_DOOR_PORT} (the web server's /room): checks a
+#             room's key, then mutual TLS to zenohd tls/7448 with the room slot's certificate
+#             7453 (its connection counts)   none: the console asks on the "router" network
 #   console   3000 (Puma, production)        127.0.0.1:${CONSOLE_PORT} (the web server)
 #   bridge    -- (a client of zenohd)        none
 #   signer    7450 (the CA's key)            none: on the "signer" network only, which only the console joins
@@ -26,7 +29,7 @@
 name: asterism
 
 x-console: &console
-  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.1.4}
+  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.2.0}
   init: true
   restart: unless-stopped
   env_file: ${ASTERISM_ENV_FILE:-.env}
@@ -52,6 +55,10 @@ services:
   # The browsers' door (G1): nginx -> here -> zenohd's ws/ listener. Gives
   # each WebSocket a lifetime (nginx's timeouts only close idle ones) and
   # logs the path nginx forwarded (it must carry no pass).
+  # The rooms' door (G2, docs/rooms.md) is the same process: it reads the
+  # rooms' file and the slots' certificates the console writes (the "rooms"
+  # volume, read-only here). Two threads per connection: a small thread
+  # stack keeps a connection near 0.5 MB.
   door:
     <<: *console
     env_file: !reset []
@@ -60,8 +67,20 @@ services:
       WS_DOOR_LISTEN: 0.0.0.0:7451
       WS_DOOR_UPSTREAM: zenohd:7449
       WS_DOOR_MAX_SECONDS: ${WS_DOOR_MAX_SECONDS:-14400}
+      WS_DOOR_ROOM_LISTEN: 0.0.0.0:7452
+      WS_DOOR_ROOM_UPSTREAM: zenohd:7448
+      WS_DOOR_ROOMS_FILE: /rooms/rooms.json
+      WS_DOOR_ROOM_CERTS: /rooms/certs
+      WS_DOOR_ROOM_TOTAL: ${WS_DOOR_ROOM_TOTAL:-48}
+      WS_DOOR_ROOM_PER_ROOM: ${WS_DOOR_ROOM_PER_ROOM:-16}
+      WS_DOOR_STATUS_LISTEN: 0.0.0.0:7453
+      RUBY_THREAD_VM_STACK_SIZE: "131072"
+      MALLOC_ARENA_MAX: "2"
+    volumes:
+      - rooms:/rooms:ro
     ports:
       - "127.0.0.1:${ROUTER_WS_PORT:-7449}:7451"
+      - "127.0.0.1:${ROOM_DOOR_PORT:-7452}:7452"
     networks: [router]
     depends_on: [zenohd]
 
@@ -80,11 +99,14 @@ services:
       ASTERISM_RELAY_CERTS_DIR: /certs
       ASTERISM_RELAY_BROWSERS: ws/[::]:7449
       ASTERISM_BACKUP_DIR: /backups
+      ASTERISM_ROOMS_DIR: /rooms
+      ASTERISM_DOOR_STATUS_URL: http://door:7453/status
     volumes:
       - storage:/app/storage
       - generated:/generated
       - certs:/certs
       - backups:/backups
+      - rooms:/rooms
     ports:
       - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
     networks: [router, signer]
@@ -136,6 +158,7 @@ volumes:
   certs: {}        # the CA certificate and this server's own router / bridge keys
   signer_ca: {}    # the CA's private key: the signer's only (back it up off the server, docs/install.md)
   backups: {}      # the console's database backups (bin/asterism backup; copy them off the server too)
+  rooms: {}        # the rooms (G2): the door's file and the room slots' certificates and keys
 
 networks:
   router: {}

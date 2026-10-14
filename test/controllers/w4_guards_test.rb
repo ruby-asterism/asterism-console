@@ -180,8 +180,9 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_select ".nav-group.watch .nav-label", "Watch"
     assert_select ".nav-group.watch a", 5
     assert_select ".nav-group.play a[href=?]", "/passes"
-    assert_select ".nav-group.admin a", 3
+    assert_select ".nav-group.admin a", 4
     assert_select ".nav-group.admin a[href=?]", "/admin/relay/peers"
+    assert_select ".nav-group.admin a[href=?]", "/admin/rooms"
     assert_select "nav a.current[aria-current=page]", 1
     assert_select "nav a.current[href=?]", "/calls"
     assert_select ".nav .who[title=?]", "admin@example.com (admin)"

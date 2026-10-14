@@ -92,6 +92,10 @@ Rails.application.routes.draw do
         patch :revoke, on: :member
       end
       resources :browser_passes, path: "passes", only: :index
+      # Rooms (G2): time-limited key spaces anyone with the link joins.
+      resources :rooms, only: %i[index create show destroy] do
+        post :link, on: :member
+      end
     end
     get "/", to: redirect("/admin/relay/peers"), as: :admin_root
   end

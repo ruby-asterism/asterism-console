@@ -1,0 +1,60 @@
+<% content_for(:title, "Rooms - Asterism Console") %>
+<section class="card">
+  <h2>Rooms</h2>
+  <p>A room is a key space of its own on the cloud router (<code>room/&lt;slot&gt;/**</code>) that anyone with its link
+    joins from a browser, without an account, until it ends. The link holds the room's key: give it to the people you
+    invite. Inside, everyone with the link is alike; what they may do there is up to the app. Nothing in a room reaches
+    the registered routers and nodes, and nothing of theirs reaches the room.</p>
+  <%= render "door", door: @door %>
+  <% if @ready.empty? %>
+    <p class="error">No room slot is ready: run <code>bin/asterism setup</code> (it makes the slots' certificates), then
+      apply in Relay so that the cloud router lets them in.</p>
+  <% else %>
+    <p class="hint">Slots: <%= @slots.map { |s| @busy[s] ? "#{s} (#{@busy[s].name})" : (@ready.include?(s) ? "#{s} free" : "#{s} not ready") }.join(", ") %>.</p>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Make a room</h2>
+  <%= form_with url: admin_rooms_path, scope: :room, class: "grid-form", data: { turbo: false } do |f| %>
+    <label>Name <%= f.text_field :name, required: true, maxlength: 60, placeholder: "Othello on Friday" %></label>
+    <label>Opens <span class="field-help">The app the link starts (a path on the page, e.g. /app/test/othello.app.rb), or
+        nothing for the page's own start.</span>
+      <%= f.text_field :app, list: "room-apps", placeholder: "/app/test/othello.app.rb" %></label>
+    <datalist id="room-apps">
+      <% BrowserPage.apps.each do |label, value| %><% next if value.blank? %><option value="<%= value %>"><%= label %></option><% end %>
+    </datalist>
+    <label>Hours <span class="field-help">How long it is open: <%= @hours %> unless you say, at most <%= @max_hours %>.
+        Its links stop working then and the door closes its connections.</span>
+      <%= f.number_field :hours, value: @hours, min: 0.25, max: @max_hours, step: 0.25 %></label>
+    <label>Connections <span class="field-help">At once, at most <%= Relay::Settings.room_max_connections %>. One browser
+        page is one connection (a table of 4 and 12 watching is 16).</span>
+      <%= f.number_field :max_connections, value: @room.max_connections, min: 1, max: Relay::Settings.room_max_connections %></label>
+    <div class="wide"><%= f.submit "Make the room", disabled: @ready.empty? %></div>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Every room</h2>
+  <% if @rooms.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Links</th></tr></thead>
+      <tbody>
+        <% @rooms.each do |r| %>
+          <tr>
+            <td><%= link_to r.name, admin_room_path(r) %></td>
+            <td><code><%= r.slot %></code></td>
+            <td><%= r.app.present? ? tag.code(r.app) : "-" %></td>
+            <td class="nowrap"><%= when_text(r.created_at) %><% if r.created_by %><br><span class="hint"><%= r.created_by.email_address %></span><% end %></td>
+            <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
+            <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span></td>
+            <td><%= r.open? ? (@door ? "#{@door.dig('rooms', r.uid) || 0} / #{r.max_connections}" : "? / #{r.max_connections}") : "-" %></td>
+            <td><%= r.links_made %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

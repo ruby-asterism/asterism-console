@@ -26,7 +26,10 @@
 #      valid for the router's public name and for "zenohd") and the bridge's
 #      ("console"); issued again when missing, from another CA, ending
 #      within 30 days or not naming the router's public name
-#   7. the cloud router's configuration from the registry (cloud.json5)
+#   7. the rooms (G2, docs/rooms.md): the room slots' certificates
+#      (room-01 .. room-NN, ASTERISM_ROOM_SLOTS) for the door, the signer's
+#      key that signs the rooms' keys, and the door's file (rooms.json)
+#   8. the cloud router's configuration from the registry (cloud.json5)
 #
 # Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
 # Updating a server: deploy/vps/update.sh (it takes a backup first).
@@ -35,7 +38,7 @@ require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
-USAGE_LINES = 1..31
+USAGE_LINES = 1..34
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -155,6 +158,29 @@ def ensure_identities(ca_pem)
   end
 end
 
+def ensure_rooms(ca_pem)
+  step "Rooms (room slots and the rooms' signing key)"
+  n = Relay::Settings.room_slots
+  if n.zero?
+    done "no room slots (ASTERISM_ROOM_SLOTS=0)"
+  else
+    Relay::RoomSlots.ensure!(ca_pem) { |slot, what| done "room-#{slot}: #{what}" }
+    done "in #{Relay::RoomSlots.certs_dir} (the door reads them; apply so that the cloud router lets them in)"
+  end
+  client = Relay::SignerClient.from_env(root: ROOT)
+  keys = client.room_keys
+  if keys["current"]
+    done "the signer has a rooms' signing key (#{keys['current']}, #{keys['keys'].size} in all)"
+  else
+    made = client.make_room_key
+    done "made the rooms' signing key #{made['kid']} (in the signer's volume)"
+  end
+  Relay::RoomFiles.write!
+  done "wrote #{Relay::RoomFiles.path}"
+rescue Relay::SignerClient::Error => e
+  fail!("the signer: #{e.message}")
+end
+
 def write_router_config
   step "The cloud router's configuration"
   config = Relay::Applier.config_for
@@ -269,6 +295,7 @@ when "setup"
   ensure_roles
   ensure_admin
   ensure_identities(ca_pem)
+  ensure_rooms(ca_pem)
   write_router_config
   say <<~TEXT
 

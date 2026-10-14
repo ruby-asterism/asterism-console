@@ -37,6 +37,7 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
  boards --tcp--> home router --mutual TLS--+
  CRuby  ----------- mutual TLS ------------+--> zenohd (tls/7448)     the router, its ACL written by the console
  browser page --wss:// + a pass--> web server :7443 --> door --> zenohd (ws, inside)
+ room page ---wss:///room + a room's key--> web server :7443 --> door --mutual TLS, room slot--> zenohd (tls)
  admin / users --https--> web server :443 --> console (Rails) --> signer (the CA's key, inside)
                                                bridge (the console's own node on the router)
 ```
@@ -44,7 +45,7 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
 | Service | Listens (in its container) | Published on the server | Reached by |
 |---|---|---|---|
 | `zenohd` (eclipse/zenoh 1.10.1) | `tls/7448` mutual TLS; `ws/7449` | `ROUTER_TLS_BIND:ROUTER_TLS_PORT` (0.0.0.0:7448) | home routers, CRuby, directly |
-| `door` (the browsers' WebSockets) | 7451 | `127.0.0.1:ROUTER_WS_PORT` (7449) | the web server only (`wss://router.example.org:7443`, with a pass) |
+| `door` (the browsers' WebSockets) | 7451; 7452 (rooms); 7453 (its counts) | `127.0.0.1:ROUTER_WS_PORT` (7449), `127.0.0.1:ROOM_DOOR_PORT` (7452) | the web server only (`wss://router.example.org:7443`, with a pass; `/room` with a room's key); 7453 the console only |
 | `console` (Rails) | 3000 | `127.0.0.1:CONSOLE_PORT` (3000) | the web server only (`https://asterism.example.org`) |
 | `bridge` | - | - | connects to `tls/zenohd:7448` with the console's own certificate |
 | `signer` (holds the CA's key) | 7450 | nothing | the console only, over an internal network |
@@ -66,7 +67,8 @@ router is the official `eclipse/zenoh:1.10.1`.
 - **Data**: the console's databases (SQLite) and recordings in the
   `storage` volume, the router's configuration in `generated`, the server's
   own certificates in `certs`, the daily backups of the databases in
-  `backups` (the `backup` service, section 14).
+  `backups` (the `backup` service, section 14), the rooms' file and the
+  room slots' certificates in `rooms` (section 12).
 
 ## 2. What you need
 
@@ -110,7 +112,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.1.4 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.2.0 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -130,7 +132,7 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.1.4`).
+- `CONSOLE_VERSION`: the version you install (`0.2.0`).
 - `ASTERISM_BACKUP_HOUR`, `ASTERISM_BACKUP_KEEP`: when the daily backup of
   the databases runs and how many are kept (section 14).
 - `CONSOLE_HOSTS=asterism.example.org`
@@ -206,6 +208,10 @@ The web server ends TLS for two things and forwards to the loopback ports:
    after asking the console whether the pass in the URL is live
    (`/passes/check`, answer 204 or 401), and without the query (the pass)
    in what goes on or into the logs.
+3. `wss://router.example.org:7443/room` -> `127.0.0.1:ROOM_DOOR_PORT` (rooms,
+   section 12): no question to the console (the door checks the room's key
+   itself), the query kept for the door but kept out of the logs, and a
+   limit on tries per address.
 
 ### nginx (example)
 
@@ -222,7 +228,8 @@ sudo cp nginx/asterism-console.conf nginx/asterism-router.conf /etc/nginx/sites-
 ```
 
 Edit them: the names, the loopback ports in `asterism-upstreams.conf` (the
-same as `.env`), the wss port (7443), the certificate paths in the two
+same as `.env`; three upstreams: the console, the pass door and the rooms'
+door), the wss port (7443), the certificate paths in the two
 `asterism-ssl-*.conf`, the admins' addresses in `asterism-admin-allow.conf`
 and who may open the door in `asterism-door-allow.conf` (`allow all;` to
 rely on passes alone).
@@ -250,7 +257,9 @@ and `diff` them (only the asterism files should differ).
 `caddy/Caddyfile` does the same with Caddy 2: `forward_auth` asks the
 console about the pass (the console reads it from `X-Forwarded-Uri`) and
 hands `X-Asterism-Until` on to the door, and `uri query -pass` drops the
-pass before the door, in that order (`route`). Caddy gets the certificates
+pass before the door, in that order (`route`); `/room` goes to the rooms'
+door as it is (no question, the query kept: keep it out of any log you
+add). Caddy gets the certificates
 itself and logs no requests unless asked to. Replace the names, the
 admins' address and the ports, then run Caddy on the host (or in a
 container with `network_mode: host`).
@@ -292,8 +301,11 @@ compose file).
   services use first.
 
 Address limits are the second lock: without them the router still asks for
-a certificate signed by your CA, the door for a live pass, and the console
-for a sign-in (and, for `/admin`, an admin's address and TOTP).
+a certificate signed by your CA, the door for a live pass (or a room's
+key), and the console for a sign-in (and, for `/admin`, an admin's address
+and TOTP). The address list of `asterism-door-allow.conf` applies to rooms
+too; to let anyone with a room's link in, put `allow all;` in the `/room`
+location of `asterism-router.conf`.
 
 ## 10. First sign-in
 
@@ -378,6 +390,39 @@ which never reaches the page's server. Browsers get the roles marked
 pass is shown with its node, without a link. The browser build refuses a
 link with a pass but no node.
 
+### Rooms
+
+A room lets people in without an account: an admin makes it under Admin >
+Rooms (a name, the app the link opens, how long it is open: 3 hours unless
+said, at most 24, and how many connections at once: at most 16) and gets a
+link to give to the people invited. Whoever opens the link joins the
+room's own key space on the router (`room/<slot>/**`) through the door,
+until the room ends or the admin closes it; nothing in a room reaches the
+registered routers and nodes, and nothing of theirs reaches the room.
+Inside, everyone with the link is alike: what one may do there is up to the
+app. How it works: [rooms.md](rooms.md).
+
+- **Room slots**: `bin/asterism setup` makes `ASTERISM_ROOM_SLOTS` (8) slot
+  certificates (`room-01` ..., rows of the registry marked "room slot"),
+  whose ACL is their slot's key space only, and the signer's key that signs
+  the rooms' keys (in the signer's volume, like the CA's). Apply once after
+  that so that the router lets the slots in. Making and closing rooms then
+  restarts nothing: a room takes a free slot.
+- **The link**: set `ASTERISM_ROOM_PAGE` (a URL template with `{room}`
+  after the `#`, `env.example`); the room's key goes in the fragment, which
+  never reaches the page's server. The console keeps no copy of a key:
+  "Make another link" signs another one for the same room.
+- **Limits** (`env.example`): the door lets at most `WS_DOOR_ROOM_TOTAL` (48)
+  room connections in at once and `WS_DOOR_ROOM_PER_ROOM` (16) per room; the
+  router's `ASTERISM_RELAY_MAX_SESSIONS` is 96 so that the rooms do not
+  crowd out the registered routers and nodes. A connection costs the door
+  about 0.5-1.3 MB.
+- **The web server**: the `/room` location of `nginx/asterism-router.conf`
+  (tries per address, and at most 32 room connections per address: two
+  full rooms behind one address), the `asterism_room` and
+  `asterism_room_conn` zones of `nginx/asterism-http.conf` and the
+  `asterism_room_door` upstream of `nginx/asterism-upstreams.conf`.
+
 ## 13. Check
 
 ```
@@ -386,6 +431,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://asterism.example.org/admin/rela
 curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
   https://router.example.org:7443/                                                    # 401 (no pass)
+curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+  'https://router.example.org:7443/room?t=x.y'                                         # 403 (not a room's key)
 openssl s_client -connect router.example.org:7448 </dev/null 2>/dev/null | grep -E "^subject|^issuer"
 #   the router's certificate (CN = ROUTER_NAME), issued by your CA
 ```
@@ -457,8 +505,8 @@ needs). Then, in `deploy/vps`:
 
 ```
 git fetch --tags
-./update.sh --dry-run 0.1.4      # the steps, nothing changed
-./update.sh 0.1.4
+./update.sh --dry-run 0.2.0      # the steps, nothing changed
+./update.sh 0.2.0
 ```
 
 `update.sh` (plain sh, git and docker compose) does in order:
@@ -628,8 +676,8 @@ project name `asterism` there, or compose makes new, empty volumes.
 by itself), and takes such a compose file with `-f`:
 
 ```
-./update.sh --sudo --unit asterism 0.1.4
-./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.1.4
+./update.sh --sudo --unit asterism 0.2.0
+./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.2.0
 ```
 
 ## 20. Updating from an earlier deployment
@@ -661,6 +709,21 @@ server, `CONSOLE_IMAGE_TAG` in `.env`):
 - Then back up the CA (section 14) and update as in section 15 (the
   setup keeps your CA, users and registry, and issues nothing that is
   valid).
+
+From 0.1.x to 0.2.0 (rooms, section 12):
+
+- **`.env`**: add the rooms' lines of `env.example` (`ASTERISM_ROOM_PAGE`,
+  `ASTERISM_ROOM_SLOTS` ..., `WS_DOOR_ROOM_TOTAL`, `WS_DOOR_ROOM_PER_ROOM`,
+  `ROOM_DOOR_PORT`) and raise `ASTERISM_RELAY_MAX_SESSIONS` to 96.
+- **The compose file** of the checkout has the door's room listener and the
+  `rooms` volume (`update.sh` checks out the version's files).
+- **nginx**: the `asterism_room` and `asterism_room_conn` zones in `asterism-http.conf`, the
+  `asterism_room_door` upstream in `asterism-upstreams.conf` (the port of
+  `ROOM_DOOR_PORT`) and the `location = /room` block in
+  `asterism-router.conf`; `nginx -t`, reload.
+- **The update's setup** makes the room slots and the rooms' signing key;
+  then **Apply** (Admin > Relay) so that the router lets the slots in and
+  takes the new `max_sessions`.
 
 ## 21. When something is wrong
 

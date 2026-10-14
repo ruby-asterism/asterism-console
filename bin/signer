@@ -21,13 +21,25 @@
 #            or  {"name": "cruby", "spki": "<base64 DER>", ...}
 #                -> {"certificate": "<PEM>", "serial": "<hex>", "not_before", "not_after", "fingerprint"}
 #
+#   GET  /room-keys   the rooms' signing keys, public part only (G2):
+#                     {"current": "<kid>", "keys": [{"kid", "public_key" (PEM), "made_at"}]}
+#   POST /room-keys   makes a new signing key and makes it the current one
+#                     (the older ones stay, so the keys they signed still
+#                     check until they end) -> {"kid", "public_key", "made_at"}
+#   POST /room-token  {"room": "<16 hex>", "slot": "01", "exp": <Unix s>, "max": 16}
+#                     -> {"token", "kid", "jti", "exp"}: a room's key
+#                     (lib/relay/room_token.rb), signed with the current key;
+#                     409 while there is none. exp at most 24 hours ahead.
+#
 # The common name is "name" (the CSR's subject is ignored, only its public
 # key is taken, after its signature is checked). "spki" is a bare public
 # key (SubjectPublicKeyInfo, ECDSA P-256), made where its private key
 # stays (the admin's browser, W4): there is nothing to check it against,
 # and none is needed, since a certificate is no use without the key. Every signature is
 # appended to DIR/issued.log (JSON lines), the signer's own record next to
-# the console's ledger.
+# the console's ledger. The rooms' signing keys (Ed25519) are in
+# DIR/room_keys/ (0600), and every room key signed is appended to
+# DIR/room_tokens.log (the room, its slot and end, the jti; never the key).
 #
 # Keep DIR readable by the signer only (0700, its own user or a container
 # volume). The console must not be able to read it.
@@ -37,7 +49,9 @@ require "json"
 require "time"
 require "openssl"
 require "fileutils"
+require "securerandom"
 require_relative "../lib/relay/cert_authority"
+require_relative "../lib/relay/room_token"
 
 module Signer
   MAX_BODY = 64 * 1024
@@ -135,6 +149,13 @@ module Signer
     case [ verb, path ]
     when [ "POST", "/init" ]
       init_once(c, dir, body.to_s.empty? ? {} : JSON.parse(body))
+    when [ "GET", "/room-keys" ]
+      reply(c, "200 OK", room_keys_answer(dir))
+    when [ "POST", "/room-keys" ]
+      made = @lock.synchronize { make_room_key(dir) }
+      reply(c, "201 Created", made)
+    when [ "POST", "/room-token" ]
+      room_token(c, dir, JSON.parse(body))
     when [ "GET", "/ca" ], [ "POST", "/sign" ]
       return reply(c, "404 Not Found", { "error" => "no CA yet (bin/asterism setup makes one)" }) unless ca
       if path == "/ca"
@@ -145,7 +166,7 @@ module Signer
     else
       reply(c, "404 Not Found", { "error" => "no such thing" })
     end
-  rescue JSON::ParserError, ArgumentError, OpenSSL::X509::RequestError => e
+  rescue JSON::ParserError, ArgumentError, OpenSSL::X509::RequestError, Relay::RoomToken::Invalid => e
     log("refused: #{e.message}")
     reply(c, "400 Bad Request", { "error" => e.message })
   end
@@ -174,6 +195,62 @@ module Signer
     key
   rescue OpenSSL::PKey::PKeyError
     raise ArgumentError, "spki is not a public key"
+  end
+
+  # --- the rooms' signing keys (G2) ---
+
+  def room_key_dir(dir) = File.join(dir, "room_keys")
+
+  # [[made_at (ms), kid, key]] oldest first. A key file is <made_at>-<kid>.key.
+  def room_keys(dir)
+    Dir[File.join(room_key_dir(dir), "*.key")].filter_map do |f|
+      made, kid = File.basename(f, ".key").split("-", 2)
+      key = OpenSSL::PKey.read(File.read(f))
+      next unless kid == Relay::RoomToken.kid(key)
+      [ Integer(made), kid, key ]
+    rescue ArgumentError, OpenSSL::PKey::PKeyError
+      log("skipped #{f}: not a room signing key")
+      nil
+    end.sort_by(&:first)
+  end
+
+  def room_key_info(made, kid, key)
+    { "kid" => kid, "public_key" => key.public_to_pem, "made_at" => Time.at(made / 1000.0).utc.iso8601(3) }
+  end
+
+  def room_keys_answer(dir)
+    keys = room_keys(dir)
+    { "current" => keys.last&.dig(1), "keys" => keys.map { room_key_info(*_1) } }
+  end
+
+  def make_room_key(dir)
+    FileUtils.mkdir_p(room_key_dir(dir), mode: 0o700)
+    key = OpenSSL::PKey.generate_key("ED25519")
+    made = (Time.now.to_f * 1000).to_i
+    made += 1 while Dir[File.join(room_key_dir(dir), "#{made}-*.key")].any?
+    kid = Relay::RoomToken.kid(key)
+    Relay::CertAuthority.write(File.join(room_key_dir(dir), "#{made}-#{kid}.key"), key.private_to_pem, 0o600)
+    log("made a room signing key #{kid}")
+    room_key_info(made, kid, key)
+  end
+
+  def room_token(c, dir, req)
+    made, kid, key = room_keys(dir).last
+    return reply(c, "409 Conflict", { "error" => "no room signing key yet (bin/asterism setup makes one)" }) unless made
+    now = Time.now.to_i
+    exp = Integer(req.fetch("exp"))
+    raise ArgumentError, "exp must be after now" unless exp > now
+    raise ArgumentError, "exp is more than #{Relay::RoomToken::MAX_HOURS} hours ahead" if exp > now + Relay::RoomToken::MAX_HOURS * 3600
+    claims = { "v" => Relay::RoomToken::VERSION, "kid" => kid, "room" => req["room"].to_s, "slot" => req["slot"].to_s,
+               "exp" => exp, "max" => Integer(req.fetch("max")), "jti" => SecureRandom.uuid }
+    token = Relay::RoomToken.sign(key, claims)
+    File.open(File.join(dir, "room_tokens.log"), "a", 0o600) do |f|
+      f.puts(JSON.generate(claims.slice("room", "slot", "exp", "max", "jti", "kid").merge("at" => Time.now.utc.iso8601)))
+    end
+    log("signed a key for room #{claims['room']} on slot #{claims['slot']} until #{Time.at(exp).utc.iso8601}")
+    reply(c, "200 OK", { "token" => token, "kid" => kid, "jti" => claims["jti"], "exp" => exp })
+  rescue KeyError, TypeError => e
+    raise ArgumentError, e.message
   end
 
   def sign(c, ca, dir, req)

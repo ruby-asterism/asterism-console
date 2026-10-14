@@ -156,4 +156,30 @@ class Relay::SignerTest < ActiveSupport::TestCase
     Process.kill("TERM", pid) rescue nil
     Process.wait(pid) rescue nil
   end
+  test "the rooms' signing keys: none, made, the keys it signs check with the public part, a new one keeps the old" do
+    e = assert_raises(Relay::SignerClient::Error) { @client.room_token(room: "0" * 16, slot: "01", exp: Time.now.to_i + 60, max: 4) }
+    assert_match(/409/, e.message)
+    assert_nil @client.room_keys["current"]
+    made = @client.make_room_key
+    keys = @client.room_keys
+    assert_equal made["kid"], keys["current"]
+    pub = keys["keys"].to_h { [ _1["kid"], OpenSSL::PKey.read(_1["public_key"]) ] }
+    refute_match(/PRIVATE/, keys["keys"].first["public_key"], "the public part only")
+    ans = @client.room_token(room: "a" * 16, slot: "02", exp: Time.now.to_i + 3600, max: 16)
+    claims = Relay::RoomToken.verify(ans["token"], pub)
+    assert_equal [ "a" * 16, "02", 16, made["kid"] ], claims.values_at("room", "slot", "max", "kid")
+    assert_equal "600", format("%o", File.stat(Dir[File.join(@ca_dir, "room_keys", "*.key")].first).mode & 0o777)
+    log = File.read(File.join(@ca_dir, "room_tokens.log"))
+    refute_includes log, ans["token"], "the log never holds a key"
+    second = @client.make_room_key
+    keys = @client.room_keys
+    assert_equal [ second["kid"], 2 ], [ keys["current"], keys["keys"].size ]
+    pub = keys["keys"].to_h { [ _1["kid"], OpenSSL::PKey.read(_1["public_key"]) ] }
+    assert Relay::RoomToken.verify(ans["token"], pub), "a key signed with the older one still checks"
+    [ { exp: Time.now.to_i + 25 * 3600 }, { exp: Time.now.to_i - 1 }, { max: 17 }, { slot: "x" } ].each do |bad|
+      args = { room: "a" * 16, slot: "02", exp: Time.now.to_i + 60, max: 4 }.merge(bad)
+      e = assert_raises(Relay::SignerClient::Error, bad.inspect) { @client.room_token(**args) }
+      assert_match(/400/, e.message)
+    end
+  end
 end

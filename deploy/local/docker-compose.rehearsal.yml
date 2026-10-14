@@ -36,6 +36,7 @@ services:
 
   door:
     ports: !override []
+    # The rehearsal's own .env is read for the door's settings too.
 
   nginx:
     # NGINX_IMAGE: match the server's nginx (e.g. nginx:1.18-alpine for

@@ -29,6 +29,14 @@
 # pattern (settings "browser_nodes", wasm-$*). One browser can write at
 # another browser's node; see docs/g0_w4.md and docs/g1_5.md.
 #
+# Room slots (G2, docs/rooms.md; peers with "room_slot" => "01"): the
+# certificate the door connects with for the rooms on that slot (and a
+# room's host process, if it has one). It gets its slot's key space and
+# nothing else: room/<slot>/** and, since a ** never matches a chunk that
+# starts with @, room/<slot>/**/@adv/** for zenoh-ext's advanced
+# publishers and subscribers (their history and recovery). Its other keys,
+# roles and the admin space are not used.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -68,7 +76,9 @@ module Relay
       # What ${node} is for the browsers: their node IDs share a prefix.
       "browser_nodes" => "wasm-$*",
       # Connection limits (zenoh 1.10.1, transport/unicast and link/rx).
-      "max_sessions" => 64,
+      # 96 (G2): the rooms' connections come through the door on top of the
+      # registered routers and nodes (docs/rooms.md).
+      "max_sessions" => 96,
       "accept_pending" => 16,
       "accept_timeout_ms" => 5000,
       "max_message_size" => 4 * 1024 * 1024
@@ -97,6 +107,11 @@ module Relay
     # once).
     def self.expand(templates, nodes)
       templates.flat_map { |t| t.include?(VARIABLE) ? nodes.map { |n| t.gsub(VARIABLE, n) } : [ t ] }.uniq
+    end
+
+    # A room slot's key space (G2).
+    def self.room_keys(slot)
+      [ "room/#{slot}/**", "room/#{slot}/**/@adv/**" ]
     end
 
     def self.node_bound?(template)
@@ -139,6 +154,13 @@ module Relay
       shared = {}
       @peers.each do |p|
         id = self.class.ident(p["name"])
+        if p["room_slot"]
+          rules << { "id" => "#{id}_room", "messages" => ALL, "flows" => %w[egress ingress],
+                     "permission" => "allow", "key_exprs" => self.class.room_keys(p["room_slot"]) }
+          subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
+          policies << { "id" => id, "rules" => [ "#{id}_room" ], "subjects" => [ id ] }
+          next
+        end
         mine = []
         rw = Array(p["rw"]).uniq
         ro = Array(p["ro"]).uniq - rw

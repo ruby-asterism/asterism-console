@@ -22,7 +22,7 @@ lists the options for sudo, a systemd unit and a compose file of your own):
 
 ```
 git fetch --tags
-./update.sh 0.1.4
+./update.sh 0.2.0
 # going back, with the data from before the update (update.sh prints this line):
 ./update.sh 0.1.3 --restore asterism-<date>-<time>-0.1.3-before-0.1.4.tar.gz
 ```

@@ -2,8 +2,8 @@
 # Updates (or rolls back) the console on a server in one command (0.1.3).
 # Plain sh, git and docker compose: nothing else on the host.
 #
-#   ./update.sh 0.1.4                     # from deploy/vps of the checkout
-#   ./update.sh --dry-run 0.1.4           # print the steps, change nothing
+#   ./update.sh 0.2.0                     # from deploy/vps of the checkout
+#   ./update.sh --dry-run 0.2.0           # print the steps, change nothing
 #   ./update.sh 0.1.3 --restore <backup>  # back to 0.1.3 with that backup's data
 #
 # In order:

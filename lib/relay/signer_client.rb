@@ -1,6 +1,7 @@
 # The console's side of the signer (bin/signer): asks it for the CA
-# certificate and to sign certificate requests. The CA's key stays with the
-# signer; this holds only the address and the token.
+# certificate, to sign certificate requests and to sign rooms' keys. The
+# CA's key and the rooms' signing keys stay with the signer; this holds
+# only the address and the token.
 #
 #   ASTERISM_SIGNER_URL    http://127.0.0.1:7450 (default)
 #   ASTERISM_SIGNER_TOKEN  the token, or ASTERISM_SIGNER_TOKEN_FILE
@@ -66,6 +67,25 @@ module Relay
         body["spki"] = [ spki.public_to_der ].pack("m0")
       end
       req.body = JSON.generate(body)
+      JSON.parse(request(req).body)
+    end
+
+    # The rooms' signing keys (G2), public parts only:
+    # {"current" => kid or nil, "keys" => [{"kid", "public_key", "made_at"}]}.
+    def room_keys
+      JSON.parse(request(Net::HTTP::Get.new("/room-keys")).body)
+    end
+
+    # Makes a new current signing key for the rooms' keys.
+    def make_room_key
+      JSON.parse(request(Net::HTTP::Post.new("/room-keys", "Content-Type" => "application/json")).body)
+    end
+
+    # A room's key (Relay::RoomToken), signed by the signer:
+    # {"token", "kid", "jti", "exp"}.
+    def room_token(room:, slot:, exp:, max:)
+      req = Net::HTTP::Post.new("/room-token", "Content-Type" => "application/json")
+      req.body = JSON.generate("room" => room, "slot" => slot, "exp" => exp.to_i, "max" => max)
       JSON.parse(request(req).body)
     end
 

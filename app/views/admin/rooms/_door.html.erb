@@ -1,0 +1,7 @@
+<%# The door's counts (Relay::DoorStatus), or that it does not answer. %>
+<% if door %>
+  <p class="hint">The door: <%= door["total"] %> of <%= door["limit"] %> room connections in use
+    (at most <%= door["per_room"] %> per room).</p>
+<% else %>
+  <p class="hint">The door does not answer on <code><%= Relay::Settings.door_status_url %></code>: connection counts are not known.</p>
+<% end %>

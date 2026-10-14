@@ -5,7 +5,8 @@
 #   https://asterism.example.org        the console (127.0.0.1:CONSOLE_PORT);
 #                                       /admin only from the admins' addresses
 #   wss://router.example.org:7443       the browsers' door (127.0.0.1:ROUTER_WS_PORT),
-#                                       only after the console says the pass is live
+#                                       only after the console says the pass is live;
+#                                       /room: the rooms' door (127.0.0.1:ROOM_DOOR_PORT)
 #
 # Replace the names, the addresses and the ports (.env). Caddy logs no
 # requests unless a "log" directive asks it to; if you add one, the door's
@@ -36,6 +37,19 @@ asterism.example.org {
 }
 
 router.example.org:7443 {
+	# Rooms (G2, docs/rooms.md): the door checks the room's key itself (the
+	# "t" query, kept for it; keep it out of any log you add).
+	@room {
+		path /room
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @room {
+		reverse_proxy 127.0.0.1:7452 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
 	@ws {
 		path /
 		header Connection *Upgrade*

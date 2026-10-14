@@ -1,0 +1,41 @@
+<% content_for(:title, "Room #{@room.name} - Asterism Console") %>
+<section class="card">
+  <h2>Room <%= @room.name %></h2>
+  <dl class="facts">
+    <dt>Status</dt><dd><span class="badge <%= @room.open? ? 'ok' : 'bad' %>"><%= @room.status %></span>
+      <% if @room.closed_at %> by <%= @room.closed_by&.email_address || "?" %> (<%= @room.close_reason %>)<% end %></dd>
+    <dt>Slot</dt><dd><code><%= @room.slot %></code>: keys <code><%= @room.key_space %>/**</code> on the cloud router</dd>
+    <dt>Opens</dt><dd><%= @room.app.present? ? tag.code(@room.app) : "the page's own start" %></dd>
+    <dt>Until</dt><dd><%= when_text(@room.closed_at || @room.expires_at) %></dd>
+    <dt>Connections</dt><dd><%= @door ? (@door.dig("rooms", @room.uid) || 0) : "?" %> of at most <%= @room.max_connections %></dd>
+    <dt>Links made</dt><dd><%= @room.links_made %></dd>
+  </dl>
+  <%= render "door", door: @door %>
+</section>
+
+<% if @token %>
+  <section class="card">
+    <h2>The room's link (shown once)</h2>
+    <% if @link %>
+      <p><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap" %></p>
+    <% else %>
+      <p class="hint">ASTERISM_ROOM_PAGE is not set, so there is no link: give the page this key in its fragment
+        (<code>#room=&lt;key&gt;</code>).</p>
+    <% end %>
+    <dl class="facts"><dt>Key</dt><dd><code class="wrap"><%= @token %></code></dd></dl>
+    <p class="hint">Whoever has the link joins the room until it ends. The console keeps no copy: make another link below
+      when you need one again (the old ones keep working until the room ends or is closed).</p>
+  </section>
+<% end %>
+
+<% if @room.open? %>
+  <section class="card">
+    <h2>Links and closing</h2>
+    <div class="row">
+      <%= button_to "Make another link", link_admin_room_path(@room), method: :post, data: { turbo: false } %>
+      <%= button_to "Close the room", admin_room_path(@room), method: :delete,
+                    data: { turbo_confirm: "Close #{@room.name}? Everyone in it is disconnected and its links stop working." } %>
+    </div>
+  </section>
+<% end %>
+<p><%= link_to "Every room", admin_rooms_path %></p>

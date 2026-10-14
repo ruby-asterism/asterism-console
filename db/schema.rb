@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_14_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_14_150000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -230,6 +230,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_090000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.text "nodes"
+    t.boolean "room_slot", default: false, null: false
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 
@@ -254,6 +255,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_090000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["handle"], name: "index_released_handles_on_handle"
+  end
+
+  create_table "rooms", force: :cascade do |t|
+    t.string "uid", null: false
+    t.string "name", null: false
+    t.string "app"
+    t.string "slot", null: false
+    t.integer "max_connections", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "closed_at"
+    t.string "close_reason"
+    t.integer "links_made", default: 0, null: false
+    t.integer "created_by_id"
+    t.integer "closed_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["closed_by_id"], name: "index_rooms_on_closed_by_id"
+    t.index ["created_by_id"], name: "index_rooms_on_created_by_id"
+    t.index ["slot", "expires_at"], name: "index_rooms_on_slot_and_expires_at"
+    t.index ["uid"], name: "index_rooms_on_uid", unique: true
   end
 
   create_table "sessions", force: :cascade do |t|
@@ -318,6 +339,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_090000) do
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "relay_peer_roles", "relay_peers"
   add_foreign_key "relay_peer_roles", "relay_roles"
+  add_foreign_key "rooms", "users", column: "closed_by_id"
+  add_foreign_key "rooms", "users", column: "created_by_id"
   add_foreign_key "sessions", "users"
   add_foreign_key "stream_leases", "users"
 end

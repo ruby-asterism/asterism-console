@@ -25,6 +25,21 @@
 #   WS_DOOR_LISTEN        0.0.0.0:7451
 #   WS_DOOR_UPSTREAM      zenohd:7449
 #   WS_DOOR_MAX_SECONDS   14400 (4 hours)
+#
+# The rooms' door (G2, lib/relay/room_door.rb, docs/rooms.md) runs in the
+# same process when WS_DOOR_ROOM_LISTEN is set: a browser in a room comes
+# with the room's key (wss://<router>/room?t=...), which it checks before
+# it connects to zenohd's mutual-TLS port with the room slot's certificate.
+#
+#   WS_DOOR_ROOM_LISTEN       0.0.0.0:7452 (unset: no rooms)
+#   WS_DOOR_ROOM_UPSTREAM     zenohd:7448 (zenohd's mutual-TLS listener)
+#   WS_DOOR_ROOM_TLS_NAME     the name in zenohd's certificate (default: the upstream's host)
+#   WS_DOOR_ROOMS_FILE        /rooms/rooms.json (the console writes it: Relay::RoomFiles)
+#   WS_DOOR_ROOM_CERTS        /rooms/certs (room-<slot>.pem / .key, ca.pem)
+#   WS_DOOR_ROOM_TOTAL        48  room connections at once, all rooms together
+#   WS_DOOR_ROOM_PER_ROOM     16  per room (a room's own limit may be lower)
+#   WS_DOOR_ROOM_MAX_MESSAGE  65535 bytes (one WebSocket message, one Zenoh batch)
+#   WS_DOOR_STATUS_LISTEN     0.0.0.0:7453 (GET /status: the counts, for the console; unset: none)
 require "socket"
 
 LISTEN = ENV.fetch("WS_DOOR_LISTEN", "0.0.0.0:7451")
@@ -107,6 +122,22 @@ def relay(a, b, t0, limit = MAX_SECONDS)
       return answered ? "closed by zenohd" : "closed by zenohd before it answered; answered 503"
     end
   end
+end
+
+if ENV["WS_DOOR_ROOM_LISTEN"].to_s != ""
+  require_relative "../lib/relay/room_door"
+  Relay::RoomDoor.new(
+    listen: ENV["WS_DOOR_ROOM_LISTEN"],
+    upstream: ENV.fetch("WS_DOOR_ROOM_UPSTREAM", "zenohd:7448"),
+    tls_name: ENV["WS_DOOR_ROOM_TLS_NAME"].to_s.empty? ? nil : ENV["WS_DOOR_ROOM_TLS_NAME"],
+    rooms_file: ENV.fetch("WS_DOOR_ROOMS_FILE", "/rooms/rooms.json"),
+    certs_dir: ENV.fetch("WS_DOOR_ROOM_CERTS", "/rooms/certs"),
+    status_listen: ENV["WS_DOOR_STATUS_LISTEN"].to_s.empty? ? nil : ENV["WS_DOOR_STATUS_LISTEN"],
+    total: Integer(ENV.fetch("WS_DOOR_ROOM_TOTAL", "48")),
+    per_room: Integer(ENV.fetch("WS_DOOR_ROOM_PER_ROOM", "16")),
+    max_message: Integer(ENV.fetch("WS_DOOR_ROOM_MAX_MESSAGE", "65535")),
+    log: ->(m) { log(m) }
+  ).start
 end
 
 server = TCPServer.new(*split_hostport(LISTEN))

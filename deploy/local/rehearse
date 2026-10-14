@@ -40,6 +40,8 @@ def prepare
                .sub(/^# ASTERISM_RELAY_EXTRA_IPS=.*/, "ASTERISM_RELAY_EXTRA_IPS=127.0.0.1")
                .sub(/^# ASTERISM_BROWSER_PAGE=.*/, "ASTERISM_BROWSER_PAGE=https://play.localtest/index.html" \
                                                    "?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}")
+               .sub(/^# ASTERISM_ROOM_PAGE=.*/, "ASTERISM_ROOM_PAGE=https://play.localtest/index.html" \
+                                                 "?zenoh={router}#room={room}&app={app}")
                .sub(/^CONSOLE_ADMIN_NETS=.*/, "CONSOLE_ADMIN_NETS=172.31.240.50/32")
                .sub(/^SECRET_KEY_BASE=.*/, "SECRET_KEY_BASE=#{SecureRandom.hex(64)}")
                .sub(/^ASTERISM_SIGNER_TOKEN=.*/, "ASTERISM_SIGNER_TOKEN=#{SecureRandom.hex(32)}")

@@ -54,8 +54,15 @@ class RelayPeer < ApplicationRecord
     node_list.presence || [ name ]
   end
 
+  # A room slot's certificate (G2): room-01 .. room-NN, made by bin/asterism
+  # setup (Relay::RoomSlots). Its ACL is fixed (its slot's key space).
+  def room_slot_name
+    name.delete_prefix("room-") if room_slot?
+  end
+
   # What Relay::CloudConfig takes.
   def to_config
+    return { "name" => name, "kind" => kind, "in_acl" => in_acl?, "room_slot" => room_slot_name } if room_slot?
     { "name" => name, "kind" => kind, "rw" => rw_list, "ro" => ro_list,
       "admin_space" => admin_space?, "in_acl" => in_acl?,
       "roles" => roles.map(&:name), "nodes" => node_list }

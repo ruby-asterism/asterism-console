@@ -34,6 +34,7 @@ so a directive the server's nginx does not know fails here first.
   `asterism-rehearsal_web` with `--ip 172.31.240.50` (the admin's address)
   or another; every `*.localtest` name resolves to the nginx container
   there, which also hands 7448 on to zenohd (as a server's published port).
-- `.env` sets `ASTERISM_BROWSER_PAGE` to the page served here, so the
-  Browser passes page has "Open the browser build".
+- `.env` sets `ASTERISM_BROWSER_PAGE` and `ASTERISM_ROOM_PAGE` to the page
+  served here, so the Browser passes page has "Open the browser build" and
+  a room's link opens it (rooms, docs/rooms.md).
 - `.env` and `certs/` are ignored by git.

@@ -54,9 +54,9 @@ COPY --from=build /app /app
 # (1001), whose CA directory (/ca, a volume) nobody else mounts or reads.
 RUN groupadd --system --gid 1000 rails && useradd --uid 1000 --gid 1000 --create-home rails && \
     groupadd --system --gid 1001 signer && useradd --uid 1001 --gid 1001 --no-create-home signer && \
-    mkdir -p /ca /generated /certs /backups storage tmp log && \
+    mkdir -p /ca /generated /certs /backups /rooms storage tmp log && \
     chown signer:signer /ca && chmod 0700 /ca && \
-    chown -R rails:rails /generated /certs /backups storage tmp log db
+    chown -R rails:rails /generated /certs /backups /rooms storage tmp log db
 USER 1000:1000
 
 EXPOSE 3000

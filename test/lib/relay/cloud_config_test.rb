@@ -141,4 +141,18 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     prefixed = Relay::CloudConfig.new([], { "browsers" => "ws/[::]:7449", "browser_nodes" => "web-$*" }, roles: [ MATCH ]).to_h
     assert_includes rule(prefixed, "browsers__match_rw")["key_exprs"], "asterism/web-$*/game/**"
   end
+  test "room slots (G2): their slot's key space and its @adv part, nothing else; max_sessions 96" do
+    peers = PEERS + [ { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
+                      { "name" => "room-02", "kind" => "client", "in_acl" => false, "room_slot" => "02" } ]
+    h = Relay::CloudConfig.new(peers).to_h
+    r = rule(h, "room_01_room")
+    assert_equal [ %w[room/01/** room/01/**/@adv/**], %w[egress ingress] ], r.values_at("key_exprs", "flows")
+    assert_equal Relay::CloudConfig::ALL, r["messages"]
+    pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
+    assert_equal [ "room_01_room" ], pol["room_01"]
+    refute pol.key?("room_02"), "a slot without a valid certificate is not in it"
+    sub = h["access_control"]["subjects"].find { _1["id"] == "room_01" }
+    assert_equal [ "room-01" ], sub["cert_common_names"]
+    assert_equal 96, h["transport"]["unicast"]["max_sessions"]
+  end
 end

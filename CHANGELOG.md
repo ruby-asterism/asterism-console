@@ -8,7 +8,34 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased
+## 0.2.0
+
+Rooms (G2, docs/rooms.md): time-limited key spaces that anyone with a
+room's link joins from a browser, without an account.
+
+- Admin > Rooms: make a room (name, the app its link opens, hours: 3
+  unless said, at most 24; connections at once: at most 16), see its link
+  once, make another link, see its connections, close it. A room takes one
+  of `ASTERISM_ROOM_SLOTS` (8) room slots, whose certificates (`room-01`
+  ...) and ACL (`room/<slot>/**` and `room/<slot>/**/@adv/**`) are made
+  once, so making and closing rooms restarts nothing.
+- The rooms' keys are signed (Ed25519) by the signer, with a key that stays
+  in its volume (`POST /room-token`, `GET`/`POST /room-keys`); the console
+  keeps no copy of a key.
+- The door (`bin/ws_door`) has a rooms' listener (7452): it checks a room's
+  key (signature, end, the room still on its slot, not closed) before it
+  connects to zenohd, then connects with the room slot's certificate over
+  mutual TLS and moves the WebSocket's batches to TLS framing. It limits
+  connections (48 in all, 16 per room), message size and keys that do not
+  check per address, cuts a room's connections when it ends or is closed,
+  and answers its counts on 7453 for the console.
+- The router's `max_sessions` default is 96 (was 64).
+- Updating (docs/install.md, section 20): new `.env` lines, the rooms'
+  parts of the nginx example (`location = /room`, the `asterism_room` and
+  `asterism_room_conn` zones, the `asterism_room_door` upstream), the
+  setup (it makes the slots and the signing key) and one Apply.
+- `deploy/vps/update.sh`: the restart line of the checks no longer prints
+  the unit's name twice ("…(the unit starts the stack)docker-compose-service@…").
 
 - `deploy/vps/update.sh`: the restart line of the checks no longer prints
   the unit's name twice ("…(the unit starts the stack)docker-compose-service@…").
