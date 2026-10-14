@@ -12,6 +12,10 @@
 #             asterism/<node>/<app> (an application) and
 #             asterism/<node>/<app>/<object> (an exposed object), protocol 1
 #   ros:      token keys alive under @ros2_lv/**
+#   rooms:    token keys alive under room/*/asterism/** (0.2.1, docs/rooms.md):
+#             room/<slot>/asterism/<node>/<app>[/<object>]
+#   room_info: the open rooms (Room.for_graph: "slot", "name", "uid",
+#             "expires_at", "app"), for the rooms' frames
 #   self_node: the bridge's own Asterism node ID (marked, not hidden)
 #   self_zids: the bridge's own Zenoh session IDs (marked)
 #   own_links: the bridge's own links ({ router zid => { "protocol" =>,
@@ -76,13 +80,23 @@
 #     token a readable router's table lists under "routers" (a router whose
 #     admin space the console cannot read), gets a "via_router" edge, node
 #     -> that router, label "via". Not drawn when a "carries" edge exists.
+#   - The rooms (0.2.1, docs/rooms.md): one "room" node per open room and per
+#     slot with tokens ("room:<slot>", data "slot", "name", "expires_at", ...),
+#     holding the room's Asterism nodes (ids "a_node:room/<slot>/<node>", so a
+#     room's wasm-abc123 is not the registered side's), their apps and
+#     objects; everything of a room has data "room" (its slot). Their
+#     sessions carry them like any other node's. Graph.without_rooms takes
+#     all of it out again (for the users who are not admins).
 module Bridge
   class Graph
     LAYERS = {
       "router" => "infra", "session" => "infra", "registered" => "infra",
       "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism",
-      "r_node" => "ros", "r_topic" => "ros", "others" => "infra"
+      "r_node" => "ros", "r_topic" => "ros", "others" => "infra", "room" => "rooms"
     }.freeze
+
+    # An Asterism token of a room: room/<slot>/asterism/<rest>.
+    ROOM_TOKEN = %r{\Aroom/([^/]+)/asterism/(.+)\z}
 
     # The services every rclcpp node serves for its parameters (and its
     # type description): /<node>/<one of these>.
@@ -108,7 +122,8 @@ module Bridge
     attr_accessor :icons
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
-                   registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil)
+                   registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil,
+                   rooms: [], room_info: [])
       g = new
       g.cloud = cloud
       g.icons = icons
@@ -119,6 +134,7 @@ module Bridge
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
       g.add_profiles(profiles)
+      g.add_rooms(rooms, room_info)
       g.add_ros(ros)
       g.finish_ros
       g.link_tokens(admin)
@@ -336,6 +352,49 @@ module Bridge
       end
     end
 
+    # The rooms (0.2.1): a frame per open room (and per slot with tokens but
+    # no open room: what is left of one that ended), holding its nodes.
+    def add_rooms(keys, info)
+      by_slot = Array(info).to_h { [ _1["slot"].to_s, _1 ] }
+      by_slot.each { |slot, room| room_frame(slot, room) }
+      Array(keys).each do |key|
+        m = ROOM_TOKEN.match(key.to_s) or next
+        slot = m[1]
+        parts = m[2].split("/")
+        next if parts.size < 2 || parts.size > 3 || parts.any?(&:empty?)
+        nid, app, obj = parts
+        frame = room_frame(slot, by_slot[slot])
+        base = "room/#{slot}/#{nid}"
+        node("a_node:#{base}", "a_node", nid, { "node" => nid, "room" => slot }, frame)
+        aid = "a_app:#{base}/#{app}"
+        node(aid, "a_app", app, { "node" => nid, "app" => app, "room" => slot }, "a_node:#{base}")
+        next unless obj
+        node("a_object:#{base}/#{app}/#{obj}", "a_object", obj,
+             { "path" => "#{base}/#{app}/#{obj}", "node" => nid, "app" => app, "room" => slot }, aid)
+      end
+    end
+
+    def room_frame(slot, room)
+      data = { "slot" => slot, "room" => slot, "open" => !room.nil? }
+      data.merge!(room.slice("name", "uid", "expires_at", "app").compact) if room
+      node("room:#{slot}", "room", room ? room["name"].to_s : "room #{slot}", data)["id"]
+    end
+
+    # A graph (to_h form) without the rooms: their frames, nodes, apps and
+    # objects, the edges to them, and the sessions that carry nothing else
+    # (with their edges). For the users who are not admins.
+    def self.without_rooms(graph)
+      gone = graph["nodes"].to_a.select { _1["kind"] == "room" || _1.dig("data", "room") }.map { _1["id"] }.to_set
+      return graph if gone.empty?
+      carries = graph["edges"].to_a.select { _1["kind"] == "carries" }.group_by { _1["source"] }
+      carries.each do |sid, list|
+        gone << sid if list.all? { gone.include?(_1["target"]) }
+      end
+      nodes = graph["nodes"].to_a.reject { gone.include?(_1["id"]) }
+      edges = graph["edges"].to_a.reject { gone.include?(_1["source"]) || gone.include?(_1["target"]) }
+      graph.merge("nodes" => nodes, "edges" => edges)
+    end
+
     # The profiles the nodes told (V2.5): data "profile" (kind, host, name,
     # icon_hash) on the Asterism nodes that are here.
     def add_profiles(profiles)
@@ -429,10 +488,8 @@ module Bridge
         own = self.class.norm_zid(rzid)
         (info["tokens"] || {}).each do |key, who|
           note_via(via, key, who, own)
-          m = key.to_s.match(%r{\Aasterism/([^/]+)})
-          next unless m
-          nid = "a_node:#{m[1]}"
-          next unless @nodes[nid]
+          nid = asterism_node_id(key)
+          next unless nid && @nodes[nid]
           (Array(who["clients"]) + Array(who["peers"])).each do |z|
             nz = self.class.norm_zid(z)
             next if nz == own
@@ -451,11 +508,20 @@ module Bridge
       link_via(via, admin)
     end
 
+    # The Asterism node (its id) an Asterism token names, in a room or not.
+    def asterism_node_id(key)
+      if (m = key.to_s.match(%r{\Aasterism/([^/]+)}))
+        "a_node:#{m[1]}"
+      elsif (m = key.to_s.match(%r{\Aroom/([^/]+)/asterism/([^/]+)}))
+        "a_node:room/#{m[1]}/#{m[2]}"
+      end
+    end
+
     # The node a token in a router's table belongs to (an Asterism node or a
     # ROS 2 node), or nil.
     def token_node(key)
-      if (m = key.to_s.match(%r{\Aasterism/([^/]+)}))
-        id = "a_node:#{m[1]}"
+      if (id = asterism_node_id(key))
+        id
       elsif (t = self.class.parse_ros_token(key))
         id = "r_node:#{self.class.norm_zid(t[:zid])}/#{t[:nid]}"
       end
@@ -505,6 +571,7 @@ module Bridge
       by_name = registry.to_h { [ _1["name"].to_s, _1 ] }
       seen = {}
       @nodes.values.each do |n|
+        next if n["data"]["room"] # a room's nodes are not the registry's
         name = case n["kind"]
         when "a_node" then n["data"]["node"]
         when "router" then n["data"]["name"]

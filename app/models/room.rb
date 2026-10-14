@@ -83,6 +83,14 @@ class Room < ApplicationRecord
     end
   end
 
+  # What the graph's rooms' frames show (Bridge::Graph, room_info:): the
+  # open rooms, by slot.
+  def self.for_graph(at = Time.current)
+    open_now(at).order(:slot).map do |r|
+      { "slot" => r.slot, "name" => r.name, "uid" => r.uid, "expires_at" => r.expires_at.utc.iso8601, "app" => r.app }
+    end
+  end
+
   def open?(at = Time.current)
     closed_at.nil? && expires_at > at
   end

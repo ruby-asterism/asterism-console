@@ -2,6 +2,7 @@ import { Controller } from "@hotwired/stimulus"
 import cytoscape from "cytoscape"
 import fcose from "cytoscape-fcose"
 import { createConsumer } from "@rails/actioncable"
+import { date as zoneDate, dateTime, zoneName } from "lib/time_zone"
 
 cytoscape.use(fcose)
 
@@ -62,6 +63,17 @@ cytoscape.use(fcose)
 // "Not connected (registry)" box, with a dashed line to the router the
 // registry says they connect to when it tells.
 //
+// The rooms (0.2.1, docs/rooms.md; "Rooms", admins only, on by default):
+// one frame per open room (kind "room", a compound node like the
+// registry's box) with its name, slot and end (in the console's time zone),
+// holding the nodes in the room (browser pages, wasm-xxxxxx) with their
+// apps and objects, each joined to the router by its session. Everything of
+// a room has data "room" (its slot). The console only watches who is in a
+// room: an object there has no call form. A user who is not an admin never
+// gets the rooms (the server leaves them out).
+//
+// Times (lib/time_zone.js) are in the console's time zone (CONSOLE_TIME_ZONE).
+//
 // Replay mode (replay: true, the graph rewind of a recording): no
 // connection to the bridge, no leases, no watches, no calls; the rewind
 // controller hands it graphs (showRecorded) and the differences are applied
@@ -71,6 +83,8 @@ cytoscape.use(fcose)
 const ROUTER_BLUE = "#1f4e99"
 const RUBY = "#cc342d"
 const GREY = "#8a8f98"
+// The rooms' frames (0.2.1).
+const ROOM_AMBER = "#b26a00"
 
 const KINDS = {
   router:    { label: "Router",          shape: "diamond",         color: ROUTER_BLUE, size: 46 },
@@ -84,6 +98,7 @@ const KINDS = {
   others:    { label: "Other connections", shape: "round-rectangle", color: GREY, size: 20 },
   reg_box:   { label: "Not connected (registry)", shape: "round-rectangle", color: "#f1f3f4", border: "#c4c7cc", size: 30 },
   registered: { label: "Registered, not connected", shape: "round-rectangle", color: "#e8eaed", border: "#9aa0a6", size: 22 },
+  room:      { label: "Room", shape: "round-rectangle", color: "#fff8e1", border: ROOM_AMBER, size: 30 },
 }
 
 // What an Asterism node runs on (data "machine"): the mark before its name.
@@ -171,11 +186,11 @@ function globMatch(pattern, value) {
 
 export default class extends Controller {
   static targets = ["graph", "details", "bridge", "counts", "watchList", "watchError", "watchCount", "dock", "legend", "rateStatus"]
-  static values = { state: Object, watches: Array, replay: Boolean, admin: Boolean }
+  static values = { state: Object, watches: Array, replay: Boolean, admin: Boolean, rooms: Boolean }
 
   connect() {
     this.version = this.stateValue.version || 0
-    this.layers = { infra: true, asterism: true, ros: true, registry: loadFlag(STORE_REGISTRY) }
+    this.layers = { infra: true, asterism: true, ros: true, registry: loadFlag(STORE_REGISTRY), rooms: this.roomsValue }
     this.topicsAsNodes = false
     this.showHz = true
     this.hideDebug = true
@@ -272,6 +287,11 @@ export default class extends Controller {
       { selector: "node[kind = 'r_group']", style: {
           "font-size": 11, "font-weight": "bold", "border-width": 0,
           "outline-width": 2, "outline-color": "#6a1b9a", "outline-offset": 3, "outline-style": "solid" } },
+      // A room (0.2.1): an amber frame holding the nodes in it, its name,
+      // slot and end above it.
+      { selector: "node[kind = 'room']", style: {
+          "background-opacity": 0.35, padding: 16, "text-valign": "top", "text-margin-y": -4, color: ROOM_AMBER,
+          "font-size": 12, "font-weight": "bold", "text-max-width": 400, "border-width": 2, "border-style": "dashed" } },
       // The registry's names that are not here, in one box.
       { selector: "node[kind = 'reg_box']", style: {
           padding: 12, "text-valign": "top", "text-margin-y": -3, color: "#5f6368", "font-style": "italic" } },
@@ -350,7 +370,12 @@ export default class extends Controller {
 
   // Parents before their children (cytoscape needs the parent to exist).
   elementsOf(graph) {
-    const depth = (n) => n.kind === "a_object" ? 2 : n.kind === "a_app" || n.kind === "registered" ? 1 : 0
+    const parentOf = new Map((graph.nodes || []).map((n) => [n.id, n.parent]))
+    const depth = (n) => {
+      let d = 0
+      for (let p = n.parent; p && d < 8; p = parentOf.get(p)) d++
+      return d
+    }
     const nodes = [...(graph.nodes || [])].sort((a, b) => depth(a) - depth(b)).map((n) => this.nodeElement(n))
     const edges = (graph.edges || []).map((e) => this.edgeElement(e))
     return nodes.concat(edges)
@@ -374,6 +399,8 @@ export default class extends Controller {
     if (n.data?.group) data.group = n.data.group
     if (n.kind === "a_node" && n.data?.icon) data.icon = n.data.icon
     if (n.kind === "r_topic") data.label = this.topicNodeLabel(n.id, n.label)
+    if (n.data?.room) data.room = n.data.room
+    if (n.kind === "room") data.label = roomLabel(n)
     return { group: "nodes", data, classes: `layer-${n.layer}` }
   }
 
@@ -433,7 +460,7 @@ export default class extends Controller {
         if (el.empty()) continue
         const fresh = this.nodeElement(n).data
         el.data({ label: fresh.label, name: fresh.name, info: fresh.info, self: fresh.self })
-        for (const key of ["registry", "regmark", "regkind", "group", "icon"]) {
+        for (const key of ["registry", "regmark", "regkind", "group", "icon", "room"]) {
           if (fresh[key] === undefined) el.removeData(key)
           else el.data(key, fresh[key])
         }
@@ -828,6 +855,7 @@ export default class extends Controller {
       this.renderLegend()
       if (this.selected) this.refreshDetails()
     }
+    if (layer === "rooms") this.renderLegend()
   }
 
   // "Sessions as points": each Zenoh session as a point (V2's drawing), or
@@ -890,6 +918,7 @@ export default class extends Controller {
         if (n.data("group")) shown = shown && !folded(n.data("group"))
         if (n.data("kind") === "r_topic" && shown) shown = !this.insideFolded(n)
         if (REGISTRY_KINDS.includes(n.data("kind"))) shown = shown && this.layers.registry
+        if (n.data("room")) shown = shown && this.layers.rooms
         if (n.data("kind") === "r_topic") shown = shown && this.topicsAsNodes && !(this.hideDebug && isDebugTopic(n.id()))
         if (POINT_KINDS.includes(n.data("kind"))) shown = shown && this.sessionPoints
         if (DIRECT_KINDS.includes(n.data("kind"))) shown = shown && !this.sessionPoints
@@ -1040,6 +1069,7 @@ export default class extends Controller {
       if (["others", "reg_box", "frame"].includes(n.data("kind"))) return
       if (n.data("kind") === "r_group" && !this.layers.ros) return
       if (n.data("kind") === "registered" && !this.layers.registry) return
+      if (n.data("room") && !this.layers.rooms) return
       by[n.data("kind")] = (by[n.data("kind")] || 0) + 1
       if (n.data("kind") === "r_node") services += (n.data("info").services || []).length
     })
@@ -1087,7 +1117,8 @@ export default class extends Controller {
   renderLegend() {
     const badge = (c, t) => `<span class="pill" style="background:${c}">${t}</span>`
     const kinds = Object.entries(KINDS).filter(([kind]) => kind !== (this.sessionPoints ? "others" : "session") &&
-                                                (this.layers.registry || !REGISTRY_KINDS.includes(kind))).map(([, k]) => k)
+                                                (this.layers.registry || !REGISTRY_KINDS.includes(kind)) &&
+                                                (kind !== "room" || (this.roomsValue && this.layers.rooms))).map(([, k]) => k)
     const lines = this.sessionPoints
       ? `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.session}"></span>session at a router</span>` +
         `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.carries}"></span>what a session carries</span>`
@@ -1269,10 +1300,23 @@ export default class extends Controller {
                   ["Links", (info.links || []).map((l) => `${l.dst} -> ${l.src}`).join("<br>"), true],
                   ["Carries", names("[kind = 'carries']").map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
+      case "room": {
+        const nodes = el.children().map((c) => this.link(c.id(), c.data("name")))
+        rows.push(["Name", info.name || null], ["Slot", info.slot],
+                  ["Until", info.expires_at ? dateTime(info.expires_at) : null],
+                  ["App", info.app || null],
+                  ["Nodes", nodes.join("<br>") || "none", true])
+        html += info.open === false
+          ? `<p class="hint">No room is open on slot ${esc(info.slot)}: what is left of one that ended (the door cuts it).</p>`
+          : `<p class="hint">The console watches who is in a room and nothing more: it cannot call the objects in it
+              or write into it (the cloud router's ACL). <a href="/admin/rooms">Rooms</a></p>`
+        break
+      }
       case "a_node":
         const m = machineOf(info.machine)
         const pr = info.profile || {}
         rows.push(["ID", info.node],
+                  ["Room", info.room ? this.link(`room:${info.room}`, roomName(this.cy.getElementById(`room:${info.room}`), info.room)) : null, true],
                   ["Runs on", m ? `${esc(m.mark)} ${esc(m.label)}` +
                     (MACHINE_BY[info.machine_by] ? ` <span class="hint">(${MACHINE_BY[info.machine_by]})</span>` : "") : null, true],
                   ["Name", pr.name || null],
@@ -1306,7 +1350,9 @@ export default class extends Controller {
                   ["Objects", el.children().map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
       case "a_object":
-        rows.push(["Path", info.path])
+        rows.push(["Path", info.path],
+                  ["Room", info.room ? this.link(`room:${info.room}`, roomName(this.cy.getElementById(`room:${info.room}`), info.room)) : null, true])
+        if (info.room) html += `<p class="hint">In a room: the console only watches who is there, so this object cannot be called from here.</p>`
         break
       case "r_node": {
         const topicList = (role, other) => this.topicsOf(id, role).filter((t) => !(this.hideDebug && isDebugTopic(t.id()))).map((t) => {
@@ -1359,7 +1405,7 @@ export default class extends Controller {
       const parts = [r ? r.label : info.registry]
       if (p.kind) parts.push(p.kind)
       if (p.name) parts.push(p.in_acl ? "in the ACL" : "not in the ACL")
-      if (p.expires) parts.push(`certificate until ${p.expires.slice(0, 10)}`)
+      if (p.expires) parts.push(`certificate until ${zoneDate(p.expires)}`)
       rows.push(["Registry", (r?.glyph ? `<img class="mark" src="${registryMark(info.registry)}" alt=""> ` : "") +
                  esc(parts.join(", ")) + (p.name ? ` <a href="/relay/peers">registry</a>` : ""), true])
       if (info.via) rows.push(["Through", String(info.via).startsWith("router ") ? info.via : `router ${info.via}`])
@@ -1374,11 +1420,12 @@ export default class extends Controller {
     if (kind === "r_group") html += this.rosNodeExtras(info)
     if (kind === "r_node") html += `<p class="actions"><a class="button" href="/logs?node=${encodeURIComponent(loggerName(info.name))}" target="_blank" rel="noopener">Show its logs</a></p>`
     if (kind === "r_node") html += this.rosNodeExtras(info)
-    if (kind === "a_object") html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
+    const callable = kind === "a_object" && !info.room
+    if (callable) html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
     if (kind === "r_topic") html += `<div class="row actions"><button type="button" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>` +
       `${plotLink(id)}</div>`
     this.renderDetails(html)
-    if (kind === "a_object") this.loadMeta(info.path)
+    if (callable) this.loadMeta(info.path)
   }
 
   // How a group's name was matched: the node names it was given for.
@@ -1696,7 +1743,7 @@ export default class extends Controller {
         <code class="watch-key" title="${esc(w.key)}">${esc(w.key)}</code>
         <button type="button" class="watch-value" aria-expanded="${open}" ${last ? "" : "disabled"}
           title="${open ? "Hide" : "Show"} the full value">${value}</button>
-        <span class="at">${last ? esc(last.at) : ""}${dropped}</span>
+        <span class="at" title="${esc(zoneName())}">${last ? esc(last.at) : ""}${dropped}</span>
         <button type="button" class="small stop" aria-label="Stop watching ${esc(w.key)}">Stop</button></div>` +
       (open && last ? `<div class="watch-more">${imageTag(last.image)}<ol class="samples">${list.map((s) =>
         `<li><span class="at">${esc(s.at)}</span> <code class="k" title="${esc(s.key)}">${esc(shorten(s.key, 64))}</code> <span class="fmt">${esc(s.format)}</span> <span class="v">${esc(s.text)}</span></li>`).join("")}</ol></div>`
@@ -1760,6 +1807,18 @@ function swatch(k) {
   const border = k.double ? `;outline:1.5px solid ${k.border};outline-offset:1.5px`
     : k.border ? `;border:${k.dashed ? "1.5px dashed" : "2px solid"} ${k.border}` : ""
   return `<span class="swatch shape-${k.shape}" style="background:${k.color}${border}"></span>`
+}
+
+// A room's frame: its name, slot and end (in the console's time zone).
+function roomLabel(n) {
+  const d = n.data || {}
+  if (d.open === false) return `room ${d.slot} (no open room)`
+  return `${d.name || "room"} · room ${d.slot}${d.expires_at ? ` · until ${dateTime(d.expires_at)}` : ""}`
+}
+
+// A room's name for the details (its frame, or the slot when it is gone).
+function roomName(frame, slot) {
+  return frame?.nonempty() ? `${frame.data("info")?.name || "room"} (room ${slot})` : `room ${slot}`
 }
 
 // The registry's corner mark (an SVG image): a dark grey disc with a white

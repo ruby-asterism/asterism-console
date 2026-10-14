@@ -3,6 +3,7 @@
 class ConsoleController < ApplicationController
   def show
     @state = GraphState.current
+    @rooms = rooms_visible?
     @watches = Watch.order(:id)
   end
 end

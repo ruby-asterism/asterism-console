@@ -77,6 +77,46 @@ with them.
   too. The console being down stops nobody who has a link: the door needs
   only the file.
 
+## Rooms in the graph (0.2.1)
+
+An admin sees the rooms on the graph ("Rooms", next to "Relay registry",
+on by default); a user who is not an admin never receives them.
+
+- **What the console may do in a room.** When there are room slots, the
+  cloud router's ACL gives the console's own certificate (`console`, the
+  bridge's) one more pair of rules: from it only the liveliness watch and
+  liveliness queries on `room/*/asterism/**`, to it only the liveliness
+  tokens and the replies to those queries. No put, no subscription, no
+  queryable, no query (an Asterism call is a query), no token: the console
+  cannot write into a room or call an object in one, and nothing it does
+  reaches the rooms' sessions. The `@profile` of a room's nodes is not
+  read: a room's ACL (`room/<slot>/**`) does not reach `@` chunks, so the
+  pages cannot put one anyway. The tests check this with an evaluator of
+  the rules (`test/lib/relay/cloud_config_test.rb`); a run against zenohd
+  1.10.1 with two room slots showed the watch and the liveliness query
+  answering the rooms' tokens, and a put, a call and a token of the console
+  in a room not arriving.
+- **The bridge** watches `room/*/asterism/**` next to `asterism/**` and reads
+  the open rooms (name, slot, end) with the registry. The graph has one
+  frame per open room (`room:<slot>`, label "name · room 01 · until
+  2026-10-14 22:00 JST", the end in the console's time zone,
+  `CONSOLE_TIME_ZONE`), holding the room's nodes, their apps and objects
+  (ids `a_node:room/<slot>/<node>`, so a room's `wasm-abc123` is not a
+  registered `wasm-abc123`). Each page in a room is a client session of
+  the cloud router (the door connects one TLS session per WebSocket), so
+  its node is joined to the router like any other client. A room with
+  nobody in it has an empty frame; tokens on a slot with no open room (a
+  room that just ended, before the door cut it) get a frame "room 03 (no
+  open room)".
+- **No calls.** An object in a room has no call form: its details say that
+  the console only watches who is there. The registry's marks are not
+  given to a room's nodes.
+- **Who sees it.** The graph's diffs go on two streams: with the rooms to
+  admins who may use the admin pages from where they are (`CONSOLE_ADMIN_NETS`,
+  and the second factor when it is required), without them (no frame, no
+  node, no session of a room) to everyone else; the same for the whole
+  graph the page asks for. Recordings (admins only) keep the rooms.
+
 ## A room's host (later)
 
 A process that holds a room's state (a mahjong table, say) can join from

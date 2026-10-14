@@ -67,4 +67,28 @@ class ConsoleControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal 1, GraphState.count
   end
+
+  test "the rooms (0.2.1): in the page, the layer and /graph for an admin only; the zone in the layout" do
+    room_graph = Bridge::Graph.build(asterism: %w[asterism/console/console],
+                                     rooms: %w[room/01/asterism/wasm-a1b2c3/game/table],
+                                     room_info: [ { "slot" => "01", "name" => "Game night", "expires_at" => "2026-10-14T13:00:00Z" } ]).to_h
+    GraphState.first.update!(snapshot: JSON.generate(room_graph))
+    get root_path
+    assert_select "meta[name=console-time-zone][data-abbr=UTC][data-offset=0]"
+    assert_select "input[data-layer=rooms]", 0
+    assert_select "[data-controller=console][data-console-rooms-value=false]"
+    refute_includes css_select("[data-controller=console]").first["data-console-state-value"], "Game night"
+    get graph_path, as: :json
+    refute_includes response.body, "room"
+
+    sign_out if respond_to?(:sign_out)
+    sign_in_as(users(:admin))
+    get root_path
+    assert_select "input[type=checkbox][data-layer=rooms][checked]"
+    assert_select "[data-controller=console][data-console-rooms-value=true]"
+    state = JSON.parse(css_select("[data-controller=console]").first["data-console-state-value"])
+    assert state["graph"]["nodes"].any? { _1["id"] == "room:01" }
+    get graph_path, as: :json
+    assert_includes response.parsed_body["graph"]["nodes"].map { _1["id"] }, "a_object:room/01/wasm-a1b2c3/game/table"
+  end
 end

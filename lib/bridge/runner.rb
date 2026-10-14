@@ -2,8 +2,9 @@
 #
 #   - reads the router's admin space (@/<zid>/router, its linkstate and
 #     token table) every ADMIN_EVERY seconds;
-#   - follows the liveliness tokens of Asterism (asterism/**) and ROS 2
-#     (@ros2_lv/**) as they come and go;
+#   - follows the liveliness tokens of Asterism (asterism/**), of the rooms
+#     (room/*/asterism/**, 0.2.1: the cloud router lets the console watch
+#     them and nothing more) and of ROS 2 (@ros2_lv/**) as they come and go;
 #   - builds the graph (Bridge::Graph), keeps it in GraphState and
 #     broadcasts what changed (ConsoleChannel);
 #   - runs the page's requests (BridgeRequest: meta, call) and subscribes
@@ -63,6 +64,8 @@ module Bridge
     # 1024 is the binding's maximum; when a watch still drops, it is
     # declared again (Runner#check_follows).
     LIVELINESS_DEPTH = 1024
+    # The rooms' Asterism tokens (docs/rooms.md): read only (the ACL).
+    ROOMS_WATCH = "room/*/asterism/**".freeze
     GET_TIMEOUT = 1.5
     # The queue of a recording's subscriptions: the binding's maximum, so a
     # receiving thread held up for a moment (20 s of a 50 Hz topic) delays
@@ -103,6 +106,8 @@ module Bridge
       @objects = objects # what runs meta and calls (Bridge::Objects; the tests pass a stand-in)
       @lock = Mutex.new
       @asterism_keys = {}
+      @room_keys = {}
+      @rooms = []
       @ros_keys = {}
       @admin = {}
       @own_links = {}
@@ -170,6 +175,7 @@ module Bridge
       @net.start
       @z.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
       follow("asterism/**", @asterism_keys)
+      follow(ROOMS_WATCH, @room_keys)
       follow("@ros2_lv/**", @ros_keys)
       @profile_sub = @z.subscribe("asterism/*/@profile") { |sample| profile_notice(sample) }
       @profile_worker = start_profile_worker
@@ -182,6 +188,7 @@ module Bridge
     def reset
       @lock.synchronize do
         @asterism_keys.clear
+        @room_keys.clear
         @ros_keys.clear
         @admin = {}
         @own_links = {}
@@ -316,13 +323,16 @@ module Bridge
       peers = peer_links
       reg = registry
       names = machine_names
+      rooms = open_rooms
       @lock.synchronize do
-        if admin != @admin || own != @own_links || reg != @registry || peers != @peer_links || names != @names
+        if admin != @admin || own != @own_links || reg != @registry || peers != @peer_links || names != @names ||
+           rooms != @rooms
           @admin = admin
           @own_links = own
           @peer_links = peers
           @registry = reg
           @names = names
+          @rooms = rooms
           @dirty = true
         end
       end
@@ -335,6 +345,13 @@ module Bridge
     # The relay registry (W2), to mark the graph's nodes by it.
     def registry
       RelayPeer.registry
+    rescue ActiveRecord::ActiveRecordError
+      []
+    end
+
+    # The open rooms (0.2.1), for their frames in the graph.
+    def open_rooms
+      Room.for_graph
     rescue ActiveRecord::ActiveRecordError
       []
     end
@@ -425,17 +442,20 @@ module Bridge
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
                     cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured,
                     profiles: @profiles.to_graph.merge(@node_id => @own_profile).compact,
-                    icons: @profiles.icon_set).to_h
+                    icons: @profiles.icon_set, rooms: @room_keys.keys, room_info: @rooms).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"
       end
       state = GraphState.current
-      diff = Graph.diff(state.graph, graph)
+      old = state.graph
+      diff = Graph.diff(old, graph)
       return if Graph.empty_diff?(diff) && state.version.positive?
       state.update!(version: state.version + 1, snapshot: JSON.generate(graph), bridge_seen_at: Time.current,
                     bridge_info: JSON.generate(bridge_info))
-      ConsoleChannel.send_message("graph_diff", "version" => state.version, "diff" => diff)
+      # The admins' pages get the rooms, the others the graph without them
+      # (the same version, so a page that misses one asks for the whole).
+      ConsoleChannel.send_graph(state.version, diff, Graph.diff(Graph.without_rooms(old), Graph.without_rooms(graph)))
       @recorders.each_value { _1[:recorder].graph(state.version, graph, diff) }
       say "bridge: graph v#{state.version}: #{graph['nodes'].size} nodes, #{graph['edges'].size} edges " \
           "(+#{diff['add_nodes'].size} -#{diff['remove_nodes'].size} ~#{diff['change_nodes'].size})"
@@ -554,7 +574,7 @@ module Bridge
         return
       end
       @outbox << Payload.describe(sample.payload, key: sample.key).merge(
-        "watch_id" => id, "key" => sample.key, "at" => Time.now.strftime("%H:%M:%S.%L"), "dropped" => r[2]
+        "watch_id" => id, "key" => sample.key, "at" => Time.current.strftime("%H:%M:%S.%L"), "dropped" => r[2]
       )
     end
 

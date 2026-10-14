@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../test_helpers/acl_evaluator"
 require Rails.root.join("db/migrate/20261013100000_relay_roles").to_s
 
 # G1.5: the rows that were "Player" (G0) become rows with the role "match"
@@ -43,43 +44,9 @@ class Relay::RoleMigrationTest < ActiveSupport::TestCase
     end
   end
 
-  # zenohd's decision for one message, as far as these ACLs use it: allowed
-  # when a rule of the subject's policies lists the message and the flow and
-  # one of its key expressions includes the key.
-  def self.allowed?(acl, subject, message, flow, key)
-    ids = acl["subjects"].select do |s|
-      subject == :ws ? s["link_protocols"].to_a.include?("ws") : s["cert_common_names"].to_a.include?(subject)
-    end.map { _1["id"] }
-    rule_ids = acl["policies"].select { (_1["subjects"] & ids).any? }.flat_map { _1["rules"] }
-    acl["rules"].any? do |r|
-      rule_ids.include?(r["id"]) && r["messages"].include?(message) && r["flows"].include?(flow) &&
-        r["key_exprs"].any? { includes?(_1, key) }
-    end
-  end
-
-  # Does key expression a include b (every key b matches, a matches)?
-  # Chunks: ** (any number), * (one), and $* inside a chunk.
-  def self.includes?(a, b)
-    chunks_include?(a.split("/"), b.split("/"))
-  end
-
-  def self.chunks_include?(a, b)
-    return b.empty? if a.empty?
-    if a.first == "**"
-      return true if chunks_include?(a.drop(1), b)
-      return false if b.empty? || b.first.start_with?("@")
-      return chunks_include?(a, b.drop(1))
-    end
-    return false if b.empty? || b.first == "**"
-    chunk_include?(a.first, b.first) && chunks_include?(a.drop(1), b.drop(1))
-  end
-
-  def self.chunk_include?(a, b)
-    return !b.start_with?("@") if a == "*"
-    return false if b == "*"
-    return a == b unless a.include?("$*")
-    Regexp.new("\\A" + a.split("$*", -1).map { Regexp.escape(_1) }.join("[^/]*") + "\\z").match?(b)
-  end
+  # zenohd's decision for one message (test/test_helpers/acl_evaluator.rb).
+  def self.allowed?(...) = AclEvaluator.allowed?(...)
+  def self.includes?(...) = AclEvaluator.includes?(...)
 
   NODES = %w[alice fmruby-aaaaaa fmruby-bbbbbb wasm-abc123 carol].freeze
   KEYS = (NODES.flat_map do |n|

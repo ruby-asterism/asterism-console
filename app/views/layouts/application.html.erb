@@ -8,6 +8,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
+    <%# The console's time zone (CONSOLE_TIME_ZONE): the pages show times in it. %>
+    <meta name="console-time-zone" content="<%= Time.zone.tzinfo.name %>" data-abbr="<%= Time.zone.now.strftime("%Z") %>" data-offset="<%= Time.zone.now.utc_offset %>">
 
     <%= yield :head %>
 

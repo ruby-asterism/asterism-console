@@ -26,6 +26,11 @@ calls the methods that Asterism nodes expose.
   (docs/g1b.md). Since asterism 0.7.0 (wire protocol 1, docs/x1.md) every
   application has a token of its own, so an app that exposes nothing is
   drawn too.
+- **Rooms** (admins only, 0.2.1): each open room is an amber frame with its
+  name, slot and end, holding the nodes in it (browser pages, `wasm-xxxxxx`)
+  and their apps and objects, each joined to the router by its session. The
+  console watches the rooms' liveliness and nothing more: an object in a
+  room cannot be called from the console (docs/rooms.md).
 - **ROS 2** nodes from rmw_zenoh's liveliness tokens (`@ros2_lv/**`), like
   rqt_graph's nodes-only view: a topic is an edge from the node that
   publishes it to the node that subscribes to it, labelled with its name

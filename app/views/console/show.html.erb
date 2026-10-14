@@ -1,8 +1,9 @@
 <% content_for(:title, "Asterism Console") %>
 <div class="console" data-controller="console"
-     data-console-state-value="<%= @state.as_payload.to_json %>"
+     data-console-state-value="<%= @state.as_payload(rooms: @rooms).to_json %>"
      data-console-watches-value="<%= @watches.map(&:as_payload).to_json %>"
-     data-console-admin-value="<%= current_user&.admin? ? "true" : "false" %>">
+     data-console-admin-value="<%= current_user&.admin? ? "true" : "false" %>"
+     data-console-rooms-value="<%= @rooms ? "true" : "false" %>">
   <header class="bar">
     <h1>Asterism Console</h1>
     <div class="bridge" data-console-target="bridge">bridge: waiting</div>
@@ -15,6 +16,9 @@
     <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
     <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
     <label title="Marks the nodes and routers by the relay registry, and shows its names that are not connected (remembered by this browser)"><input type="checkbox" data-layer="registry" data-action="console#toggleLayer"> Relay registry</label>
+    <% if @rooms %>
+      <label title="The open rooms, each a frame holding the nodes in it (admins only; watched, not callable)"><input type="checkbox" data-layer="rooms" data-action="console#toggleLayer" checked> Rooms</label>
+    <% end %>
     <span class="sep" aria-hidden="true"></span>
     <label title="ROS 2 topics as nodes between their publishers and subscribers, instead of edges">
       <input type="checkbox" name="topic_nodes" data-action="console#toggleTopicNodes"> Topics as nodes</label>

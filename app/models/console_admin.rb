@@ -24,6 +24,13 @@ module ConsoleAdmin
     false
   end
 
+  # Whether the graph shows the rooms (0.2.1, docs/rooms.md) to this user
+  # from this address: to an admin who could use the admin pages from there.
+  def rooms_visible?(user, ip, env = ENV)
+    return false unless user&.admin? && network_allowed?(ip, env)
+    !(totp_required?(env) && !user.otp_enabled?)
+  end
+
   def totp_required?(env = ENV)
     v = env["CONSOLE_ADMIN_TOTP"].presence || (Rails.env.production? ? "required" : "optional")
     v == "required"

@@ -9,7 +9,7 @@ tests); where they differ from install.md, install.md is current.
 
 | Note | |
 |---|---|
-| [rooms.md](rooms.md) | G2: rooms (signed keys, room slots, the rooms' door) |
+| [rooms.md](rooms.md) | G2: rooms (signed keys, room slots, the rooms' door); 0.2.1: the rooms in the graph |
 | [o1.md](o1.md) | O1: a console anyone can install on their own server (published image, first setup, certificates as one file) |
 | [g1_5b.md](g1_5b.md) | G1.5b: surviving router restarts, choosing when to apply, handles |
 | [g1_5.md](g1_5.md) | G1.5: roles, calls under one's own name, opening a browser page |
@@ -19,4 +19,4 @@ tests); where they differ from install.md, install.md is current.
 | [s1.md](s1.md), [s2.md](s2.md), [s3.md](s3.md) | S1-S3: camera pictures, a simulated robot as objects, a board driving the rover |
 | [v4.md](v4.md) | V4: recording and playback (MCAP) |
 | [v3.md](v3.md) | V3: plots and a log list |
-| [v2.md](v2.md) ... [v2_6.md](v2_6.md) | V2: the graph on a busy network, its shapes and marks, machines, profiles |
+| [v2.md](v2.md) ... [v2_6.md](v2_6.md) | V2: the graph on a busy network, its shapes and marks, machines, profiles (the rooms' frames: [rooms.md](rooms.md)) |

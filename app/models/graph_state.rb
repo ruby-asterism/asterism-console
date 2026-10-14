@@ -29,7 +29,10 @@ class GraphState < ApplicationRecord
     bridge_seen_at.present? && bridge_seen_at > ALIVE_FOR.ago
   end
 
-  def as_payload
-    { "version" => version, "graph" => graph, "bridge" => info.merge("alive" => bridge_alive?), "rates" => rates || {} }
+  # rooms: false (a user who is not an admin) leaves the rooms out
+  # (Bridge::Graph.without_rooms).
+  def as_payload(rooms: false)
+    g = rooms ? graph : Bridge::Graph.without_rooms(graph)
+    { "version" => version, "graph" => g, "bridge" => info.merge("alive" => bridge_alive?), "rates" => rates || {} }
   end
 end

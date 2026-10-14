@@ -1,4 +1,5 @@
 require "test_helper"
+require_relative "../../test_helpers/acl_evaluator"
 
 class Relay::CloudConfigTest < ActiveSupport::TestCase
   PEERS = [
@@ -154,5 +155,61 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     sub = h["access_control"]["subjects"].find { _1["id"] == "room_01" }
     assert_equal [ "room-01" ], sub["cert_common_names"]
     assert_equal 96, h["transport"]["unicast"]["max_sessions"]
+  end
+
+  ROOM_PEERS = PEERS + [ { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
+                         { "name" => "room-02", "kind" => "client", "in_acl" => true, "room_slot" => "02" } ]
+  ROOM_KEYS = %w[
+    room/01/asterism/wasm-abc123 room/01/asterism/wasm-abc123/game room/01/asterism/wasm-abc123/game/table
+    room/01/asterism/wasm-abc123/game/table/call/console room/01/asterism/wasm-abc123/game/table/meta
+    room/01/asterism/wasm-abc123/@profile room/01/x room/01/** room/*/asterism/** room/02/asterism/wasm-def456/game
+  ].freeze
+  OUTSIDE_KEYS = %w[asterism/console/console asterism/alice/game/table asterism/** demo/x @/x/router room/**].freeze
+
+  test "the console watches the rooms (0.2.1): liveliness only, nothing written, nothing called" do
+    acl = Relay::CloudConfig.new(ROOM_PEERS).access_control
+    pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
+    assert_equal %w[console_rw admin_read console__rooms_in console__rooms_out], pol["console"]
+    allowed = []
+    Relay::CloudConfig::ALL.each do |message|
+      %w[ingress egress].each do |flow|
+        ROOM_KEYS.each { |key| allowed << [ message, flow, key ] if AclEvaluator.allowed?(acl, "console", message, flow, key) }
+      end
+    end
+    ins = allowed.select { _2 == "ingress" }.map(&:first).uniq.sort
+    outs = allowed.select { _2 == "egress" }.map(&:first).uniq.sort
+    assert_equal %w[declare_liveliness_subscriber liveliness_query], ins, "from the console: the watch only"
+    assert_equal %w[liveliness_token reply], outs, "to the console: the tokens and the replies only"
+    assert AclEvaluator.allowed?(acl, "console", "declare_liveliness_subscriber", "ingress", "room/*/asterism/**")
+    assert AclEvaluator.allowed?(acl, "console", "liveliness_token", "egress", "room/02/asterism/wasm-def456/game")
+    %w[put delete declare_queryable liveliness_token query declare_subscriber reply].each do |m|
+      ROOM_KEYS.each { |key| refute AclEvaluator.allowed?(acl, "console", m, "ingress", key), "console #{m} into #{key}" }
+    end
+    refute AclEvaluator.allowed?(acl, "console", "liveliness_token", "egress", "room/01/asterism/wasm-abc123/@profile"),
+           "@ chunks are not in **"
+  end
+
+  test "the rooms reach nothing outside their slot, also with the console watching them" do
+    acl = Relay::CloudConfig.new(ROOM_PEERS).access_control
+    Relay::CloudConfig::ALL.each do |message|
+      %w[ingress egress].each do |flow|
+        (OUTSIDE_KEYS + ROOM_KEYS).each do |key|
+          %w[room-01 room-02].each do |slot|
+            next unless AclEvaluator.allowed?(acl, slot, message, flow, key)
+            assert key.start_with?("room/#{slot.delete_prefix('room-')}/"), "#{slot} #{message} #{flow} #{key}"
+          end
+        end
+      end
+    end
+    refute AclEvaluator.allowed?(acl, "room-01", "declare_liveliness_subscriber", "ingress", "room/*/asterism/**")
+    refute AclEvaluator.allowed?(acl, :ws, "liveliness_token", "egress", "room/01/asterism/wasm-abc123/game")
+    refute AclEvaluator.allowed?(acl, "viewer", "liveliness_token", "egress", "room/01/asterism/wasm-abc123/game")
+  end
+
+  test "no room slots: the console has no rule for the rooms" do
+    acl = Relay::CloudConfig.new(PEERS).access_control
+    refute acl["rules"].any? { _1["id"].include?("rooms") }
+    other = Relay::CloudConfig.new(ROOM_PEERS, { "console" => "ops" }).access_control
+    refute other["rules"].any? { _1["id"].include?("rooms") }, "only the console's own certificate"
   end
 end
