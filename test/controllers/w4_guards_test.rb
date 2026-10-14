@@ -184,7 +184,8 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_select ".nav-group.admin a[href=?]", "/admin/relay/peers"
     assert_select "nav a.current[aria-current=page]", 1
     assert_select "nav a.current[href=?]", "/calls"
-    assert_select ".nav .who", /admin@example.com/, "no handle: the email address"
+    assert_select ".nav .who[title=?]", "admin@example.com (admin)"
+    assert_select ".nav .who", "admin", "no handle: the email address's local part"
     assert_select ".nav form[action=?]", "/session"
     get relay_roles_path
     assert_select "nav a.current[href=?]", "/admin/relay/peers" # the relay section

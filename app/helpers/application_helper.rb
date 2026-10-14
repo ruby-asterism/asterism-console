@@ -8,9 +8,10 @@ module ApplicationHelper
     link_to label, path, class: ("current" if current), aria: { current: ("page" if current) }
   end
 
-  # The name the menu shows for the signed-in user: the handle, or the
-  # email address when there is none yet.
+  # The short name the menu shows for the signed-in user: the handle, or
+  # the email address's local part when there is none yet (the whole
+  # address is in the link's title).
   def nav_who(user)
-    user.handle.presence || user.email_address
+    user.handle.presence || user.email_address.split("@").first
   end
 end

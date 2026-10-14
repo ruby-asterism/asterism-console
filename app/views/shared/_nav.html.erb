@@ -37,7 +37,7 @@
         <%= link_to account_path, class: ["who", ("current" if request.path == account_path)],
                     title: "#{current_user.email_address}#{' (admin)' if current_user.admin?}",
                     aria: { current: ("page" if request.path == account_path) } do %>
-          <%= nav_who(current_user) %><%= tag.span("admin", class: "nav-role") if current_user.admin? %>
+          <%= nav_who(current_user) %>
         <% end %>
         <%= button_to "Sign out", session_path, method: :delete, class: "small", form_class: "inline" %>
       </div>

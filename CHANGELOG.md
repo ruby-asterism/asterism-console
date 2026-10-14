@@ -23,9 +23,11 @@ before the update.
 - The menu is grouped by role: Watch (Graph, Plots, Logs, Call log,
   Recordings), Play ("Open the browser build" when the user can, Browser
   passes), Admin (Relay, Call permissions, Users; admins only, in their own
-  tint), then the account (the handle, or the email address) and Sign out.
-  The current page is marked. At phone width the groups fold behind a
-  "Menu" button.
+  tint), then the account (the handle, or the email address's first part)
+  and Sign out, on the title's row from about 1200 px up; the groups are
+  parted by thin lines, the current page is marked. At phone width they
+  fold behind a "Menu" button, with the group names. The graph's legend
+  keeps its small type.
 - Relay: Apply is no longer a tab (Registry and Roles are). While the
   registry differs from the file the cloud router runs with, both pages show
   a banner whose "Review and apply" opens the confirmation (now, when nobody
