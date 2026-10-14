@@ -8,6 +8,42 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.2.1
+
+What an update needs: set `CONSOLE_TIME_ZONE` in `.env` if the pages
+should not show UTC (e.g. `CONSOLE_TIME_ZONE=Asia/Tokyo`). No migration.
+The cloud router's ACL changes (when there are room slots): update with
+0.2.1's `update.sh`, which restarts the router on the new configuration
+itself (`git show v0.2.1:deploy/vps/update.sh > /tmp/asterism-update.sh`,
+then `sh /tmp/asterism-update.sh -C "$PWD" 0.2.1`, docs/install.md
+section 20); with 0.2.0's script, Apply once after the update.
+
+- Rooms in the graph (docs/rooms.md): an admin sees each open room as a
+  frame (its name, slot and end) holding the nodes in it (browser pages,
+  `wasm-xxxxxx`) with their apps and objects, joined to the router by
+  their sessions like other clients. A layer "Rooms", on by default for
+  admins. The objects in a room have no call form. A user who is not an
+  admin never receives the rooms: the graph's diffs go on two streams,
+  and the page's whole graph leaves them out. Recordings (admins only)
+  keep them. A room's pages now count as connected for "Apply when nobody
+  is connected" (before, their sessions carried nothing the console could
+  see), and a room's node is never taken for a registered name.
+- The cloud router's ACL lets the console's certificate watch the rooms
+  (when there are room slots): the liveliness watch and liveliness
+  queries on `room/*/asterism/**` and their answers, nothing else (no put,
+  subscription, queryable, query or token in a room). Checked against
+  zenohd 1.10.1.
+- `CONSOLE_TIME_ZONE` (any Rails or IANA name, UTC unless set): the
+  server's pages (`config.time_zone`) and the browser's times (graph
+  details, timelines, logs, plots, recordings) are in it; a time shown
+  alone carries the zone's name. Setup checks it.
+- `bin/asterism setup --from-update` (what `update.sh` runs now): when it
+  writes the cloud router a new configuration it also restarts the router
+  on it, as Apply does, so after an update the router runs the registry.
+  Its last lines, and `update.sh`'s, say so: Apply is needed only after
+  changing the registry later. A first setup says that the router starts
+  on the configuration it wrote.
+
 ## 0.2.0
 
 - Roles let advanced pub/sub's history through: a zenohd ACL's `**` does
@@ -41,9 +77,6 @@ room's link joins from a browser, without an account.
   parts of the nginx example (`location = /room`, the `asterism_room` and
   `asterism_room_conn` zones, the `asterism_room_door` upstream), the
   setup (it makes the slots and the signing key) and one Apply.
-- `deploy/vps/update.sh`: the restart line of the checks no longer prints
-  the unit's name twice ("…(the unit starts the stack)docker-compose-service@…").
-
 - `deploy/vps/update.sh`: the restart line of the checks no longer prints
   the unit's name twice ("…(the unit starts the stack)docker-compose-service@…").
 

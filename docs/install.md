@@ -112,7 +112,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.2.0 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.2.1 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -132,7 +132,13 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.2.0`).
+- `CONSOLE_VERSION`: the version you install (`0.2.1`).
+- `CONSOLE_TIME_ZONE`: the time zone the pages show every time in (the
+  server's pages, and the graph, timelines, logs and plots in the browser;
+  a time shown alone carries the zone's name). A Rails or IANA name
+  (`Asia/Tokyo`, `Europe/Berlin`, `America/New_York`); `UTC` unless set.
+  Setup refuses a name that is not a time zone. It does not change the
+  daily backup's hour (the container's time, `TZ`) or the logs' times.
 - `ASTERISM_BACKUP_HOUR`, `ASTERISM_BACKUP_KEEP`: when the daily backup of
   the databases runs and how many are kept (section 14).
 - `CONSOLE_HOSTS=asterism.example.org`
@@ -505,8 +511,8 @@ needs). Then, in `deploy/vps`:
 
 ```
 git fetch --tags
-./update.sh --dry-run 0.2.0      # the steps, nothing changed
-./update.sh 0.2.0
+./update.sh --dry-run 0.2.1      # the steps, nothing changed
+./update.sh 0.2.1
 ```
 
 `update.sh` (plain sh, git and docker compose) does in order:
@@ -518,14 +524,25 @@ git fetch --tags
    versions' images; when it fails, nothing has changed;
 3. checks out the tag, sets `CONSOLE_VERSION` in `.env`, `docker compose pull`
    (it lists the settings of `env.example` your `.env` does not mention);
-4. runs `bin/asterism setup` (the migrations; it changes nothing else that
-   is in place);
+4. runs `bin/asterism setup --from-update` (the migrations; it changes
+   nothing else that is in place). When the router's configuration made
+   from the registry differs from the router's file (a new version
+   generates it differently, or a restored backup's registry), it writes
+   the file and restarts the router on it, as Apply does;
 5. restarts: `systemctl restart <unit>` when the stack runs as a systemd
    unit (section 19), then `docker compose up -d --remove-orphans`;
 6. checks that every service runs, the console's ones on the new image,
    that the console answers with the new version, and that no other
    container of the project is left;
-7. prints the backup it took and the command that goes back (section 16).
+7. says whether the registry is applied (it is, unless the setup could not
+   restart the router), and prints the backup it took and the command
+   that goes back (section 16).
+
+After an update the router runs the registry: **Apply** (Admin > Relay) is
+needed only after you change the registry later. (The `update.sh` of
+0.2.0 and earlier runs the setup without `--from-update`: the setup then
+writes the file but leaves a running router as it is; Apply once, or take
+the new version's script as below.)
 
 When something fails before the restart, it puts the checkout and `.env`
 back; the running containers were not touched.
@@ -544,8 +561,8 @@ Options (`./update.sh --help`):
 | `--dry-run` | print the steps only |
 
 The console's containers are recreated with the new image; the router
-restarts only when its own image or settings change (or with the systemd
-unit). When the router restarts, home routers, nodes and browser pages
+restarts when its own image or settings change, when the setup wrote it a
+new configuration (step 4), or with the systemd unit. When the router restarts, home routers, nodes and browser pages
 connect again by themselves within seconds. Old images stay on the server
 for going back; remove them with `docker image rm` when you no longer need
 them.
@@ -676,8 +693,8 @@ project name `asterism` there, or compose makes new, empty volumes.
 by itself), and takes such a compose file with `-f`:
 
 ```
-./update.sh --sudo --unit asterism 0.2.0
-./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.2.0
+./update.sh --sudo --unit asterism 0.2.1
+./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.2.1
 ```
 
 ## 20. Updating from an earlier deployment
@@ -724,6 +741,24 @@ From 0.1.x to 0.2.0 (rooms, section 12):
 - **The update's setup** makes the room slots and the rooms' signing key;
   then **Apply** (Admin > Relay) so that the router lets the slots in and
   takes the new `max_sessions`.
+
+From 0.2.0 to 0.2.1 (rooms in the graph, the console's time zone):
+
+- **`.env`**: add `CONSOLE_TIME_ZONE` (e.g. `Asia/Tokyo`) if the pages
+  should not show UTC.
+- **The script**: take 0.2.1's `update.sh` (0.2.0's restarts the router
+  only when its own image or settings change, so it would leave the router
+  on the ACL without the console's watch of the rooms):
+
+  ```
+  git fetch --tags
+  git show v0.2.1:deploy/vps/update.sh > /tmp/asterism-update.sh
+  sh /tmp/asterism-update.sh -C "$PWD" 0.2.1
+  ```
+
+  With 0.2.0's script instead, Apply once after the update.
+- No migration; nginx is as in 0.2.0 (the compose file changes only its
+  default version).
 
 ## 21. When something is wrong
 
