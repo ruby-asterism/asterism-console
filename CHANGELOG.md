@@ -10,6 +10,13 @@ the command that goes back).
 
 ## 0.2.0
 
+- Roles let advanced pub/sub's history through: a zenohd ACL's `**` does
+  not reach keys with an `@adv` chunk, so the role form's "Fill in", the
+  seeded "match" role and a migration for existing roles add
+  `asterism/${node}/<app>/**/@adv/**` (read and write) and
+  `asterism/*/<app>/**/@adv/**` (read, ask) next to each app's plain lines.
+  Apply once after updating so the router gets them.
+
 Rooms (G2, docs/rooms.md): time-limited key spaces that anyone with a
 room's link joins from a browser, without an account.
 

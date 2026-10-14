@@ -1,6 +1,7 @@
 require "test_helper"
 require Rails.root.join("db/migrate/20261013100000_relay_roles").to_s
 require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
+require Rails.root.join("db/migrate/20261014170000_relay_role_adv_keys").to_s
 
 # A new console (db:prepare loads the schema and runs db/seeds.rb) and a
 # migrated one (the migration) start with the same role "match".
@@ -9,8 +10,13 @@ class RelayRoleSeedTest < ActiveSupport::TestCase
     RelayRole.delete_all
     load Rails.root.join("db/seeds.rb")
     seeded = RelayRole.sole
+    # A migrated console gets the role from the G1.5 migration, then the
+    # @adv lines from RelayRoleAdvKeys.
     migrated = RelayRole.new(RelayRoles.match_role("game"))
-    assert_equal migrated.to_config, seeded.to_config
+    adv = RelayRoleAdvKeys.with_adv(migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
+    migrated.assign_attributes(rw_templates: adv[:rw], read_templates: adv[:read], ask_templates: adv[:ask])
+    assert_equal migrated.to_config["templates"].transform_values(&:sort), seeded.to_config["templates"].transform_values(&:sort)
+    assert_equal migrated.to_config.except("templates"), seeded.to_config.except("templates")
     load Rails.root.join("db/seeds.rb")
     assert_equal 1, RelayRole.count
   end

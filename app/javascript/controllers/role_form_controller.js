@@ -64,9 +64,11 @@ function suggestions(app) {
     name: app.toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 41) || "app",
     description: `For the ${app} app: reads and writes its own ${app} keys, reads every node's ${app} keys, ` +
       `calls others' ${app} objects in its own name.`,
-    rw: `asterism/\${node}/${app}/**`,
-    read: `asterism/*/${app}/**`,
-    ask: `asterism/*/${app}/*/call/\${node}`,
+    // `**` does not reach keys with @adv (advanced pub/sub's history), so
+    // those lines go next to the plain ones.
+    rw: `asterism/\${node}/${app}/**\nasterism/\${node}/${app}/**/@adv/**`,
+    read: `asterism/*/${app}/**\nasterism/*/${app}/**/@adv/**`,
+    ask: `asterism/*/${app}/*/call/\${node}\nasterism/*/${app}/**/@adv/**`,
     watch: "asterism/**",
   }
 }

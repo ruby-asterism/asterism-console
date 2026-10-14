@@ -12,9 +12,9 @@ if RelayRole.none?
   RelayRole.create!(
     name: "match",
     description: RelayRoleMatchDescription.description("game"),
-    rw_templates: "asterism/${node}\nasterism/${node}/game/**\nasterism/${node}/@profile",
-    read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/@profile",
-    ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}",
+    rw_templates: "asterism/${node}\nasterism/${node}/game/**\nasterism/${node}/game/**/@adv/**\nasterism/${node}/@profile",
+    read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/game/**/@adv/**\nasterism/*/@profile",
+    ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}\nasterism/*/game/**/@adv/**",
     watch_templates: "asterism/**",
     for_browsers: true
   )
