@@ -348,6 +348,10 @@ applies it.
   `ASTERISM_RELAY_COMPOSE_DIR`, the console's directory by default), e.g.
   `docker compose restart zenohd-cloud` in the directory of your compose
   file. The router must read that file (`zenohd -c .../cloud.json5`).
+  With the development relay of the family-mruby workspace (the console
+  checked out at its root), that is `ASTERISM_RELAY_COMPOSE_DIR=..` and
+  `ASTERISM_RELAY_RESTART="docker compose -f docker-compose.yml -f
+  docker/asterism/docker-compose.relay.yml restart zenohd-cloud"`.
 
   What a restart does to the others: the home router and the bridge connect
   again by themselves; Asterism nodes on the cloud router (CRuby) lose their
