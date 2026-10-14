@@ -14,4 +14,16 @@ module ApplicationHelper
   def nav_who(user)
     user.handle.presence || user.email_address.split("@").first
   end
+
+  # The backups' warning for admins (lib/console_backup.rb): the last daily
+  # backup failed, or none for two days. nil when all is well or no backup
+  # ever ran here.
+  def backup_warning
+    ConsoleBackup::Status.warning(ConsoleBackup.dir(Rails.root.to_s))
+  end
+
+  # The last good backup's name and time, for the Users page.
+  def backup_status
+    ConsoleBackup::Status.read(ConsoleBackup.dir(Rails.root.to_s))
+  end
 end

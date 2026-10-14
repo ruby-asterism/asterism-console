@@ -1,4 +1,5 @@
 <% content_for(:title, "Users - Asterism Console") %>
+<%= render "shared/backup_warning" %>
 <section class="card">
   <h2>Users</h2>
   <table class="list">
@@ -25,6 +26,9 @@
     </tbody>
   </table>
   <p class="hint">Remove signs the user out everywhere. <%= link_to "Every browser pass", admin_browser_passes_path %>.</p>
+  <% if (b = backup_status) && b["last_ok_name"] %>
+    <p class="hint">Last backup: <code><%= b["last_ok_name"] %></code> (<%= b["last_ok_at"] %>)<%= ", next at #{b['next_at']}" if b["next_at"] %>.</p>
+  <% end %>
 </section>
 
 <section class="card">

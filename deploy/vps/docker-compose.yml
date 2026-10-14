@@ -13,6 +13,7 @@
 #   console   3000 (Puma, production)        127.0.0.1:${CONSOLE_PORT} (the web server)
 #   bridge    -- (a client of zenohd)        none
 #   signer    7450 (the CA's key)            none: on the "signer" network only, which only the console joins
+#   backup    -- (no network)                none: copies the databases into the "backups" volume once a day
 #
 # The console's image is the published one, by version:
 # ${CONSOLE_IMAGE}:${CONSOLE_VERSION} (ghcr.io/ruby-asterism/asterism-console;
@@ -20,11 +21,12 @@
 # docker-compose.build.yml (docs/install.md, "Building the image yourself").
 #
 # Settings and secrets: .env next to this file (env.example lists them;
-# never commit it).
+# never commit it). Updating: ./update.sh <version> (docs/install.md,
+# "Updating"); it takes a backup first.
 name: asterism
 
 x-console: &console
-  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.1.2}
+  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.1.3}
   init: true
   restart: unless-stopped
   env_file: ${ASTERISM_ENV_FILE:-.env}
@@ -77,10 +79,12 @@ services:
       ASTERISM_RELAY_CLOUD_NAME: ${ROUTER_NAME:-zenohd-cloud}
       ASTERISM_RELAY_CERTS_DIR: /certs
       ASTERISM_RELAY_BROWSERS: ws/[::]:7449
+      ASTERISM_BACKUP_DIR: /backups
     volumes:
       - storage:/app/storage
       - generated:/generated
       - certs:/certs
+      - backups:/backups
     ports:
       - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
     networks: [router, signer]
@@ -101,6 +105,20 @@ services:
     networks: [router]
     depends_on: [zenohd, console]
 
+  # The daily backup (0.1.3): a consistent copy of the console's databases
+  # into the "backups" volume at ASTERISM_BACKUP_HOUR (UTC unless TZ is set
+  # in .env), keeping the newest ASTERISM_BACKUP_KEEP. A failure shows on
+  # the admin pages (Relay, Users). bin/asterism backups lists them.
+  backup:
+    <<: *console
+    command: ["bin/asterism", "backup-daily"]
+    environment:
+      ASTERISM_BACKUP_DIR: /backups
+    volumes:
+      - storage:/app/storage
+      - backups:/backups
+    network_mode: none
+
   signer:
     <<: *console
     user: "1001:1001"
@@ -117,6 +135,7 @@ volumes:
   generated: {}    # the router's configuration, written by the console
   certs: {}        # the CA certificate and this server's own router / bridge keys
   signer_ca: {}    # the CA's private key: the signer's only (back it up off the server, docs/install.md)
+  backups: {}      # the console's database backups (bin/asterism backup; copy them off the server too)
 
 networks:
   router: {}

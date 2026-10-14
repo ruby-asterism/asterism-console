@@ -5,7 +5,44 @@ The console's versions (`VERSION`; the image
 number). Each version says what an update needs (docs/install.md,
 "Updating"). Database migrations run when the console starts; going back
 to an older version across a migration means restoring the backup made
-before the update.
+before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
+the command that goes back).
+
+## 0.1.3
+
+- Backups of the console's databases without anyone doing anything: a new
+  service, `backup`, copies them once a day (`ASTERISM_BACKUP_HOUR`,
+  default 3, UTC unless `TZ` is set) into a new volume, `backups`, and
+  keeps the newest `ASTERISM_BACKUP_KEEP` (default 7). Each backup is one
+  `.tar.gz` with a consistent copy of every database (SQLite's
+  `VACUUM INTO`, safe while the console runs) and a manifest (the console's
+  version, the time, the migration). When a backup fails, or none was made
+  for two days, Admin > Relay and Users show a warning; Users shows the
+  last backup.
+- `bin/asterism backup`, `bin/asterism backups` and
+  `bin/asterism restore <name>`. A restore refuses while the console, the
+  bridge or a backup uses the databases (they hold a lock file in
+  `storage/` now) and says what to stop; it checks the backup's version and
+  migration against the console's (docs/install.md, "Restoring").
+- `deploy/vps/update.sh <version>`: an update in one command on the server
+  (plain sh): a backup first, the tag, `CONSOLE_VERSION` in `.env`, pull,
+  `bin/asterism setup`, the restart (through a systemd unit when there is
+  one), a check that the new containers run and nothing old is left, and
+  the command that goes back (`update.sh <old version> --restore <the
+  backup it took>`). `--dry-run` prints the steps; `--sudo`, `-f` (a
+  compose file that includes this one), `--unit` (docs/install.md,
+  "Updating").
+- The CA is still backed up once, by hand, after the first setup (it never
+  changes); the daily backups do not include it.
+- Updating from 0.1.2 or earlier: 0.1.2 has no `update.sh`; take it from
+  the new tag (`git fetch --tags`, `git show v0.1.3:deploy/vps/update.sh >
+  /tmp/asterism-update.sh`, `sh /tmp/asterism-update.sh -C <deploy/vps> 0.1.3`,
+  with `--sudo` / `-f` as your server needs). It takes the first backup
+  with the 0.1.3 image. No migration. The compose file has a sixth service
+  (`backup`) and a new volume (`backups`); add `ASTERISM_BACKUP_HOUR` and
+  `ASTERISM_BACKUP_KEEP` to `.env` if the defaults (3 o'clock UTC, 7) do not
+  suit you. Going back to 0.1.2 removes the `backup` container and keeps
+  the `backups` volume.
 
 ## 0.1.2
 

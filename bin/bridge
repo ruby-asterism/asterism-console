@@ -9,6 +9,8 @@
 ENV["RAILS_MAX_THREADS"] ||= "12" # main, two receiving threads, the request workers
 require_relative "../config/environment"
 $stdout.sync = true
+# Held for the bridge's lifetime: bin/asterism restore waits for it to stop.
+ConsoleBackup::Lock.hold_shared(ENV["ASTERISM_STORAGE_DIR"].presence || Rails.root.join("storage").to_s)
 abort "bin/bridge: CONSOLE_FIXTURE is set (fixture mode shows a recorded network; unset it)" if
   Rails.application.config.x.console_fixture
 Bridge::Runner.new.run

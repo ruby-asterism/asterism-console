@@ -25,7 +25,7 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
 / [11 The first router and node](#11-the-first-router-and-node)
 / [12 Browser pages](#12-browser-pages-optional) / [13 Check](#13-check)
 / [14 Backups](#14-backups) / [15 Updating](#15-updating)
-/ [16 Rolling back](#16-rolling-back) / [17 Stopping and removing](#17-stopping-and-removing)
+/ [16 Restoring](#16-restoring) / [17 Stopping and removing](#17-stopping-and-removing)
 / [18 Building the image yourself](#18-building-the-image-yourself)
 / [19 Starting with the server](#19-starting-with-the-server)
 / [20 Updating from an earlier deployment](#20-updating-from-an-earlier-deployment)
@@ -48,8 +48,9 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
 | `console` (Rails) | 3000 | `127.0.0.1:CONSOLE_PORT` (3000) | the web server only (`https://asterism.example.org`) |
 | `bridge` | - | - | connects to `tls/zenohd:7448` with the console's own certificate |
 | `signer` (holds the CA's key) | 7450 | nothing | the console only, over an internal network |
+| `backup` (the daily backup of the databases) | - | - | no network |
 
-The console, the bridge, the door and the signer are one image,
+The console, the bridge, the door, the signer and the backup are one image,
 `ghcr.io/ruby-asterism/asterism-console:<version>` (amd64 and arm64). The
 router is the official `eclipse/zenoh:1.10.1`.
 
@@ -64,7 +65,8 @@ router is the official `eclipse/zenoh:1.10.1`.
   no docker rights).
 - **Data**: the console's databases (SQLite) and recordings in the
   `storage` volume, the router's configuration in `generated`, the server's
-  own certificates in `certs`.
+  own certificates in `certs`, the daily backups of the databases in
+  `backups` (the `backup` service, section 14).
 
 ## 2. What you need
 
@@ -108,7 +110,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.1.2 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.1.3 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -128,7 +130,9 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.1.2`).
+- `CONSOLE_VERSION`: the version you install (`0.1.3`).
+- `ASTERISM_BACKUP_HOUR`, `ASTERISM_BACKUP_KEEP`: when the daily backup of
+  the databases runs and how many are kept (section 14).
 - `CONSOLE_HOSTS=asterism.example.org`
 - `ASTERISM_RELAY_PUBLIC_ENDPOINT=tls/router.example.org:7448` (what routers
   and CRuby connect to; it goes into every certificate's `asterism.json`)
@@ -182,7 +186,7 @@ shred -u ca.key
 
 ```
 docker compose up -d
-docker compose ps                                  # five services, all "running"
+docker compose ps                                  # six services, all "running"
 docker compose logs zenohd | grep -E "run.sh|Zenoh can be reached"
 docker compose logs bridge | grep "bridge: zid"    # the console's node joined the router
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3000/up   # 200
@@ -392,8 +396,18 @@ certificate, or with one from another CA, is refused.
 
 ## 14. Backups
 
-**The CA** (only in the `signer_ca` volume). Keep an encrypted copy off the
-server, with `.env`:
+Two kinds of data need a copy, and they are handled differently:
+
+- **The CA** (its key, only in the `signer_ca` volume): made once by the
+  first setup and never changed afterwards. Take one encrypted copy off the
+  server right after the first setup (below). Updates do not touch it, so
+  there is nothing to back up again before an update.
+- **The console's databases** (users, the registry, the ledger, the call
+  log; a few hundred KB) in the `storage` volume. They change all the time
+  and are backed up **automatically, every day**, by the `backup` service,
+  and again by `update.sh` before every update.
+
+**The CA**, once, with `.env`:
 
 ```
 docker compose exec -T signer tar -C /ca -czf - ca | gpg --symmetric --cipher-algo AES256 -o ~/asterism-ca-$(date +%F).tgz.gpg
@@ -401,63 +415,148 @@ cp .env ~/asterism-env-$(date +%F) && chmod 600 ~/asterism-env-*
 # copy both off the server, then delete them here (shred -u)
 ```
 
-Keep the passphrase apart from the file. To restore into a new volume:
+Keep the passphrase apart from the file. To restore it into a new volume:
 `gpg -d asterism-ca-....tgz.gpg | docker compose run --rm -T --no-deps signer tar -C /ca -xzf -`.
 
-**The console's data** (users, registry, ledger, call log, recordings):
+**The console's databases.** The `backup` service copies them once a day at
+`ASTERISM_BACKUP_HOUR` (default 3, UTC unless `TZ` is set in `.env`) into
+the `backups` volume, as one `asterism-<date>-<time>-<version>[-<label>].tar.gz`
+each, and keeps the newest `ASTERISM_BACKUP_KEEP` (default 7; the backups
+`update.sh` takes and the ones made by hand count too). Each copy is made
+with SQLite's own online copy (`VACUUM INTO`), consistent while the console
+runs, and carries a small manifest (the console's version, the time, the
+migration). When it starts and the newest backup is more than a day old, it
+takes one at once.
 
 ```
-docker compose stop console bridge           # a consistent copy of the SQLite files
-docker compose run --rm --no-deps -T console tar -C /app -czf - storage > console-storage-$(date +%F).tgz
-docker compose start console bridge
+docker compose exec console bin/asterism backups        # the list, newest first
+docker compose exec console bin/asterism backup         # one more now (--label <word> names it)
+docker compose logs backup                              # when the next one runs, what happened
 ```
 
-To restore: `docker compose stop console bridge`, then
-`docker compose run --rm --no-deps -T console sh -c 'rm -rf /app/storage/* && tar -C /app -xzf -' < console-storage-<date>.tgz`,
-then `docker compose start console bridge`.
+When a backup fails, or none was made for two days, the admin pages
+(Admin > Relay and Users) show a warning until the next good one; Users
+also shows the last backup's name.
 
-The router's and the bridge's own certificates need no backup: `bin/asterism
-setup` issues them again.
+The backups stay on the server, in the `backups` volume: copy them off now
+and then (a disk that fails takes the volume with it):
+
+```
+docker compose run --rm --no-deps -T backup tar -C /backups -cf - . > asterism-backups-$(date +%F).tar
+```
+
+Not in the backups: the recordings (`storage/recordings`, MCAP files that
+can be large; copy them by hand if you keep them), the router's and the
+bridge's own certificates (`bin/asterism setup` issues them again) and the
+router's configuration (Apply writes it again).
 
 ## 15. Updating
 
-Read the version's notes in `CHANGELOG.md` first. Then:
+Read the version's notes in `CHANGELOG.md` first (they say what an update
+needs). Then, in `deploy/vps`:
 
 ```
-# 1. back up the console's data (section 14)
-# 2. the files of the new version (the compose file and the examples may change too)
-git fetch --tags && git checkout v0.2.0
-# 3. the version in .env, and any new lines of env.example
-sed -i 's/^CONSOLE_VERSION=.*/CONSOLE_VERSION=0.2.0/' .env
-diff <(grep -o '^[A-Z_]*=' env.example | sort) <(grep -o '^[A-Z_]*=' .env | sort)
-# 4. the new image, the setup (idempotent), the start
-docker compose pull
-docker compose run --rm console bin/asterism setup
-docker compose up -d
-docker compose ps
+git fetch --tags
+./update.sh --dry-run 0.1.4      # the steps, nothing changed
+./update.sh 0.1.4
 ```
 
-The console migrates its databases when it starts. `up -d` recreates the
-containers whose image or settings changed (the console's four; the router
-only when its own image or settings change). When the router restarts,
-home routers, nodes and browser pages connect again by themselves within
-seconds.
+`update.sh` (plain sh, git and docker compose) does in order:
 
-## 16. Rolling back
+1. checks `.env`, that the checkout has no local changes, the tag
+   `v<version>` and docker compose;
+2. takes a backup of the databases (`bin/asterism backup` in a one-off
+   container, labelled `before-<version>`), with the newer of the two
+   versions' images; when it fails, nothing has changed;
+3. checks out the tag, sets `CONSOLE_VERSION` in `.env`, `docker compose pull`
+   (it lists the settings of `env.example` your `.env` does not mention);
+4. runs `bin/asterism setup` (the migrations; it changes nothing else that
+   is in place);
+5. restarts: `systemctl restart <unit>` when the stack runs as a systemd
+   unit (section 19), then `docker compose up -d --remove-orphans`;
+6. checks that every service runs, the console's ones on the new image,
+   that the console answers with the new version, and that no other
+   container of the project is left;
+7. prints the backup it took and the command that goes back (section 16).
 
-The old image stays on the server until you remove it. To go back:
+When something fails before the restart, it puts the checkout and `.env`
+back; the running containers were not touched.
+
+Options (`./update.sh --help`):
+
+| Option | |
+|---|---|
+| `--sudo` | run docker and systemctl with sudo (when your user is not in the docker group) |
+| `-f FILE` | a compose file of your own that takes this one in (`include:`); also `COMPOSE_FILE`. Keep the project name `asterism` |
+| `-p NAME` | the compose project name, when not the compose file's |
+| `--unit UNIT` | the systemd unit to restart (also `ASTERISM_SYSTEMD_UNIT`); without it, `docker-compose-service@<project>` is used when that unit is active |
+| `--no-unit` | never use systemctl |
+| `-C DIR` | the `deploy/vps` directory, when the script runs from elsewhere |
+| `--restore NAME` | restore that backup on the way (section 16) |
+| `--dry-run` | print the steps only |
+
+The console's containers are recreated with the new image; the router
+restarts only when its own image or settings change (or with the systemd
+unit). When the router restarts, home routers, nodes and browser pages
+connect again by themselves within seconds. Old images stay on the server
+for going back; remove them with `docker image rm` when you no longer need
+them.
+
+**From a version before 0.1.3** (it has no `update.sh` yet): take the
+script from the new tag and run it from there; it checks the tag out
+itself:
 
 ```
-docker compose down
-git checkout v0.1.0
-sed -i 's/^CONSOLE_VERSION=.*/CONSOLE_VERSION=0.1.0/' .env
-# if the newer version migrated the databases (CHANGELOG says so), restore the backup of section 14
-docker compose up -d
+git fetch --tags
+git show v0.1.3:deploy/vps/update.sh > /tmp/asterism-update.sh
+sh /tmp/asterism-update.sh -C "$PWD" 0.1.3
 ```
 
-A newer version's migrations are not undone by starting an older image:
-restore the data you backed up before updating. Then Apply once, so the
-router's configuration is the older console's again.
+## 16. Restoring
+
+**Going back to the version before an update**, with the data as it was
+before it: the command `update.sh` printed at the end, i.e.
+
+```
+./update.sh 0.1.3 --restore asterism-20261101-030000-0.1.3-before-0.1.4.tar.gz
+```
+
+It takes a backup of the current data first (kept, not rotated), stops the
+console, the bridge and the backup service, restores the backup named with
+the newer version's image (it can read the older one's data), checks out
+the older tag, sets `.env`, runs the older version's setup and restarts.
+A newer version's migrations are not undone by starting an older image;
+the restore is what takes them back. Then Apply once (Admin > Relay), so
+the router's configuration is the older console's again. When the older
+version has no `update.sh` (before 0.1.3), the command printed takes the
+script from the newer tag first.
+
+**Restoring a backup without changing the version** (data entered by
+mistake, a broken database):
+
+```
+docker compose exec console bin/asterism backups
+docker compose stop console bridge backup
+docker compose run --rm --no-deps console bin/asterism restore asterism-20261101-030000-0.1.3-daily.tar.gz
+docker compose start console bridge backup
+```
+
+or in one command, `./update.sh <the running version> --restore <name>`
+(it also takes a backup of the current data first).
+
+`bin/asterism restore` refuses while the console, the bridge or a backup
+uses the databases (it says what to stop); `--force` restores anyway. It
+checks the backup's manifest: a backup from another console version is
+noted; one whose databases have migrations newer than this console knows
+is refused (restore it with that version's image, or go back with
+`update.sh`); restoring across a migration says which version to run with
+it. It replaces only the databases that are in the backup and checks each
+against the manifest's checksum first.
+
+**A new server**: install as in sections 4-7 with your `.env`, restore the
+CA (section 14) before `bin/asterism setup`, copy a backup into the
+`backups` volume (`docker compose run --rm --no-deps -T backup tar -C /backups -xf - < asterism-backups-<date>.tar`)
+and restore it as above.
 
 ## 17. Stopping and removing
 
@@ -523,6 +622,14 @@ Stop it with `sudo systemctl stop asterism` (that runs `down`), and check
 `docker ps -a` as in section 17. A compose file of your own may also take
 this one in (`include:` with `project_directory: .../deploy/vps`); keep the
 project name `asterism` there, or compose makes new, empty volumes.
+`update.sh` (section 15) restarts through the unit when you give it with
+`--unit asterism` (a unit named `docker-compose-service@<project>` is found
+by itself), and takes such a compose file with `-f`:
+
+```
+./update.sh --sudo --unit asterism 0.1.4
+./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.1.4
+```
 
 ## 20. Updating from an earlier deployment
 
@@ -550,8 +657,9 @@ server, `CONSOLE_IMAGE_TAG` in `.env`):
   Before 0.1.0 the router's door could leave passes in the nginx error log
   when the router was restarting: empty `asterism-router.error.log` (and
   its rotated copies) once.
-- Then back up, pull, `bin/asterism setup` (it keeps your CA, users and
-  registry, and issues nothing that is valid), `docker compose up -d`.
+- Then back up the CA (section 14) and update as in section 15 (the
+  setup keeps your CA, users and registry, and issues nothing that is
+  valid).
 
 ## 21. When something is wrong
 

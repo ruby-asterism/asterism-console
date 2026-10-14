@@ -24,4 +24,24 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     patch admin_user_path(users(:user), admin: true)
     refute users(:user).reload.admin?
   end
+
+  test "the backups' state: a failed backup warns on Users and Relay, the last good one is named" do
+    dir = Dir.mktmpdir("backups")
+    ENV["ASTERISM_BACKUP_DIR"] = dir
+    sign_in_as(users(:admin))
+    get admin_users_path
+    assert_select ".backup-warning", 0
+    ConsoleBackup::Status.record(dir, ok: true, name: "asterism-20261014-030000-0.1.3-daily.tar.gz")
+    get admin_users_path
+    assert_select ".backup-warning", 0
+    assert_select "p.hint code", "asterism-20261014-030000-0.1.3-daily.tar.gz"
+    ConsoleBackup::Status.record(dir, ok: false, error: "no space left on device", now: Time.now + 1)
+    get admin_users_path
+    assert_select ".backup-warning", /no space left on device/
+    get relay_peers_path
+    assert_select ".backup-warning", /no space left on device/
+  ensure
+    ENV.delete("ASTERISM_BACKUP_DIR")
+    FileUtils.rm_rf(dir) if dir
+  end
 end

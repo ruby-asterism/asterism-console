@@ -10,6 +10,7 @@
     <span class="tabs-aside hint">The cloud router runs this registry.</span>
   <% end %>
 </nav>
+<%= render "shared/backup_warning" %>
 <% if banner && relay_unapplied? %>
   <div class="apply-banner" role="status">
     <span>Changes not yet applied to the cloud router</span>

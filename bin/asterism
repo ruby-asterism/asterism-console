@@ -5,6 +5,13 @@
 #   docker compose run --rm console bin/asterism setup
 #   docker compose run --rm console bin/asterism version
 #
+# and keeps the console's databases (0.1.3, lib/console_backup.rb):
+#
+#   bin/asterism backup [--label L] [--no-rotate]   # one .tar.gz into /backups
+#   bin/asterism backups                            # list them, newest first
+#   bin/asterism restore <name> [--force]           # console and bridge stopped
+#   bin/asterism backup-daily                       # the "backup" service's loop
+#
 # setup does, in order, and only what is not done yet (run it again any
 # time; it changes nothing that is in place):
 #
@@ -22,10 +29,13 @@
 #   7. the cloud router's configuration from the registry (cloud.json5)
 #
 # Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
+# Updating a server: deploy/vps/update.sh (it takes a backup first).
 require "io/console"
+require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
+USAGE_LINES = 1..31
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -157,9 +167,98 @@ def write_router_config
   end
 end
 
+# --- backups (lib/console_backup.rb; no Rails needed) ---
+
+def backup_lib
+  require File.join(ROOT, "config/boot")
+  require File.join(ROOT, "lib/console_backup")
+  ConsoleBackup
+end
+
+def storage_dir = ENV["ASTERISM_STORAGE_DIR"].to_s.empty? ? File.join(ROOT, "storage") : ENV["ASTERISM_STORAGE_DIR"]
+def rails_env = ENV.fetch("RAILS_ENV", "development")
+def backup_dir = backup_lib.dir(ROOT)
+
+def human_size(n) = n < 1024 * 1024 ? format("%.0f KB", n / 1024.0) : format("%.1f MB", n / 1048576.0)
+
+def cmd_backup(args)
+  opts = { rotate: true }
+  OptionParser.new do |o|
+    o.banner = "bin/asterism backup [--label L] [--data-version V] [--no-rotate]"
+    o.on("--label L", "a word added to the name (letters, digits, . and -)") { opts[:label] = _1 }
+    o.on("--data-version V", "the console version whose data this is (deploy/vps/update.sh passes the running one)") { opts[:data_version] = _1 }
+    o.on("--no-rotate", "keep every older backup this time") { opts[:rotate] = false }
+  end.parse!(args)
+  lib = backup_lib
+  dir = backup_dir
+  begin
+    keep = lib.keep
+    e = lib::Maker.new(storage: storage_dir, backup_dir: dir, rails_env: rails_env, version: version, root: ROOT,
+                       data_version: opts[:data_version], label: opts[:label]).run
+  rescue ConsoleBackup::Error, SystemCallError => err
+    lib::Status.record(dir, ok: false, error: err.message)
+    abort "asterism backup: #{err.message}"
+  end
+  gone = opts[:rotate] ? lib.rotate(dir, keep: keep) : []
+  lib::Status.record(dir, ok: true, name: e.name, keep: keep)
+  puts "made #{File.join(dir, e.name)} (#{human_size(e.bytes)})"
+  puts "deleted #{gone.join(', ')} (keeping the newest #{keep})" if gone.any?
+  puts "BACKUP_NAME=#{e.name}"
+end
+
+def cmd_backups
+  lib = backup_lib
+  dir = backup_dir
+  list = lib.list(dir)
+  puts "#{list.size} backup#{'s' unless list.size == 1} in #{dir} (keeping the newest #{lib.keep}), newest first:"
+  list.each do |e|
+    m = (e.manifest rescue {})
+    puts format("  %-52s %8s  console %-8s migration %s", e.name, human_size(e.bytes), m["console_version"] || "?", m["migration"] || "?")
+  end
+  if (w = lib::Status.warning(dir))
+    puts "WARNING: #{w}"
+  end
+end
+
+def cmd_restore(args)
+  lib = backup_lib
+  force = false
+  OptionParser.new do |o|
+    o.banner = "bin/asterism restore <name> [--force]"
+    o.on("--force", "restore even while something uses the databases, or a newer console's data") { force = true }
+  end.parse!(args)
+  name = args.shift or abort("bin/asterism restore <name> (bin/asterism backups lists them)")
+  r = lib::Restorer.new(storage: storage_dir, backup_dir: backup_dir, name: name, version: version, root: ROOT,
+                        force: force, rails_env: rails_env)
+  notes = r.run
+  notes.each { puts "note: #{_1}" }
+  m = r.entry.manifest
+  puts "restored #{name} (console #{m['console_version']}, taken #{m['taken_at']}, migration #{m['migration']})"
+  puts "Start the console again: docker compose start console bridge backup (or deploy/vps/update.sh, which does it)"
+rescue ConsoleBackup::Error => e
+  abort "asterism restore: #{e.message}"
+end
+
+def cmd_backup_daily
+  lib = backup_lib
+  $stdout.sync = true
+  lib::Daily.new(storage: storage_dir, backup_dir: backup_dir, rails_env: rails_env, version: version, root: ROOT,
+                 hour: lib.hour, keep: lib.keep).loop_forever
+rescue ConsoleBackup::Error => e
+  abort "asterism backup-daily: #{e.message}"
+end
+
 case ARGV.first
 when "version", "--version", "-v"
   puts "asterism-console #{version}"
+when "backup"
+  cmd_backup(ARGV.drop(1))
+when "backups"
+  cmd_backups
+when "restore"
+  cmd_restore(ARGV.drop(1))
+when "backup-daily"
+  cmd_backup_daily
 when "setup"
   say "asterism-console #{version}: setup"
   check_settings
@@ -178,6 +277,6 @@ when "setup"
       then TLS in front of the console and the browsers' door, and sign in as the admin.
   TEXT
 else
-  puts File.read(__FILE__).lines[1..22].join.gsub(/^# ?/, "")
+  puts File.read(__FILE__).lines[USAGE_LINES].join.gsub(/^# ?/, "")
   exit(ARGV.empty? ? 0 : 2)
 end
