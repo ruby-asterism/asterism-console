@@ -67,7 +67,7 @@ class RelayApply < ApplicationRecord
   def when_text
     case mode
     when "idle" then "when nobody is connected"
-    when "at" then "at #{run_at.utc.strftime('%Y-%m-%d %H:%M')} UTC"
+    when "at" then "at #{run_at.in_time_zone.strftime('%Y-%m-%d %H:%M %Z')}"
     else "now"
     end
   end

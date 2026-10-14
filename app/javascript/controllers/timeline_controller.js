@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { clock } from "lib/time_zone"
 import uPlot from "uplot"
 
 // A recording's timeline (like rqt_bag): one row per channel with its
@@ -124,7 +125,7 @@ export default class extends Controller {
       g.beginPath(); g.moveTo(x, AXIS_H - 6); g.lineTo(x, h); g.stroke()
       g.fillText(`${+s.toFixed(3)} s`, x + 2, AXIS_H - 10)
     }
-    g.fillText(new Date(this.startMs).toLocaleTimeString(), 6, AXIS_H - 10)
+    g.fillText(clock(this.startMs, { millis: false, zone: true }), 6, AXIS_H - 10)
     // The rows.
     this.channels.forEach((ch, i) => {
       const y = AXIS_H + i * ROW_H
@@ -443,9 +444,9 @@ function niceStep(totalS, maxTicks) {
   return 7200
 }
 
+// In the console's time zone (lib/time_zone.js), with its name.
 function fmtClock(ms) {
-  const d = new Date(ms)
-  return `${d.toLocaleTimeString([], { hour12: false })}.${String(d.getMilliseconds()).padStart(3, "0")}`
+  return clock(ms, { zone: true })
 }
 
 function dl(rows) {

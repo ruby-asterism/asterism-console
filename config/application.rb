@@ -33,7 +33,11 @@ module AsterismConsole
     # These settings can be overridden in specific environments using the files
     # in config/environments, which are processed later.
     #
-    # config.time_zone = "Central Time (US & Canada)"
+    # The console's time zone (CONSOLE_TIME_ZONE, 0.2.1): every time a page
+    # shows is in it, the server's (config.time_zone) and the browser's (the
+    # layout tells the pages, app/javascript/lib/time_zone.js). A Rails name
+    # ("Tokyo") or an IANA one ("Asia/Tokyo"); UTC unless set.
+    config.time_zone = ENV["CONSOLE_TIME_ZONE"].presence || "UTC"
     # config.eager_load_paths << Rails.root.join("extras")
   end
 end

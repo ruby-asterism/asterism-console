@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { clock as zoneClock } from "lib/time_zone"
 
 // The graph rewind of a recording: a time slider over the recording, steps
 // from one change of the network structure to the next, and the list of
@@ -94,9 +95,10 @@ export default class extends Controller {
   }
 }
 
+// In the console's time zone (lib/time_zone.js), with its name: it is
+// shown alone.
 function clock(ms) {
-  const d = new Date(ms)
-  return `${d.toLocaleTimeString([], { hour12: false })}.${String(d.getMilliseconds()).padStart(3, "0")}`
+  return zoneClock(ms, { zone: true })
 }
 
 function esc(v) {

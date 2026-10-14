@@ -30,7 +30,7 @@
   <main class="body log-body">
     <div class="log-wrap" data-logs-target="wrap">
       <table class="log-table">
-        <thead><tr><th>Time</th><th>Level</th><th>Node</th><th>Message</th><th>File:line</th><th>Function</th></tr></thead>
+        <thead><tr><th>Time (<%= Time.zone.now.strftime("%Z") %>)</th><th>Level</th><th>Node</th><th>Message</th><th>File:line</th><th>Function</th></tr></thead>
         <tbody data-logs-target="rows"></tbody>
       </table>
       <p class="hint empty-note" data-logs-target="empty">Waiting for log lines (/rosout of the ROS 2 nodes, and asterism/&lt;node&gt;/&lt;app&gt;/log). The bridge listens only while this page is open.</p>

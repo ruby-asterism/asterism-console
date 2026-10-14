@@ -375,14 +375,15 @@ module ConsoleBackup
 
     # A warning for the console's admins, or nil when all is well (or when
     # no backup has run here at all: development, or a fresh server).
-    def warning(backup_dir, now: Time.now)
+    # format: how a time is written (the console passes its time zone's).
+    def warning(backup_dir, now: Time.now, format: ->(t) { t.utc.strftime("%Y-%m-%d %H:%M UTC") })
       s = read(backup_dir) or return nil
       ok_at = s["last_ok_at"] && Time.iso8601(s["last_ok_at"])
       err_at = s["last_error_at"] && Time.iso8601(s["last_error_at"])
       if err_at && (ok_at.nil? || err_at > ok_at)
-        "The last backup failed (#{err_at.utc.strftime('%Y-%m-%d %H:%M')} UTC): #{s['last_error']}"
+        "The last backup failed (#{format.call(err_at)}): #{s['last_error']}"
       elsif ok_at && now - ok_at > STALE
-        "No backup since #{ok_at.utc.strftime('%Y-%m-%d %H:%M')} UTC: is the backup service running? (docker compose ps backup)"
+        "No backup since #{format.call(ok_at)}: is the backup service running? (docker compose ps backup)"
       end
     rescue ArgumentError
       nil

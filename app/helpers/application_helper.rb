@@ -19,7 +19,8 @@ module ApplicationHelper
   # backup failed, or none for two days. nil when all is well or no backup
   # ever ran here.
   def backup_warning
-    ConsoleBackup::Status.warning(ConsoleBackup.dir(Rails.root.to_s))
+    ConsoleBackup::Status.warning(ConsoleBackup.dir(Rails.root.to_s),
+                                  format: ->(t) { t.in_time_zone.strftime("%Y-%m-%d %H:%M %Z") })
   end
 
   # The last good backup's name and time, for the Users page.

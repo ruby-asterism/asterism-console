@@ -1,4 +1,5 @@
 import { Controller } from "@hotwired/stimulus"
+import { clock } from "lib/time_zone"
 import { createConsumer } from "@rails/actioncable"
 
 // The log page (like rqt_console). The page leases "*" (POST /logs/lease,
@@ -144,10 +145,9 @@ function row(l) {
     `<td class="msg">${esc(l.msg)}</td><td class="where">${esc(where)}</td><td class="fn">${esc(l.function)}</td></tr>`
 }
 
+// In the console's time zone (lib/time_zone.js; the column's head names it).
 function fmtTime(ms) {
-  const d = new Date(ms)
-  const p = (n, w = 2) => String(n).padStart(w, "0")
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`
+  return clock(ms)
 }
 
 function randomToken() {

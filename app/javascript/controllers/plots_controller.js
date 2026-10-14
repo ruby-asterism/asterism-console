@@ -1,5 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 import uPlot from "uplot"
+import { consoleZone } from "lib/time_zone"
 import { createConsumer } from "@rails/actioncable"
 
 // The plot page (like rqt_plot). A plot holds series, each a field (a path)
@@ -245,6 +246,8 @@ export default class extends Controller {
       legend: { show: true, live: true },
       cursor: { drag: { x: true, y: false } },
       scales: { x: { time: true } },
+      // The time axis in the console's time zone (lib/time_zone.js).
+      tzDate: (ts) => uPlot.tzDate(new Date(ts * 1e3), consoleZone()),
       axes: [
         { stroke: "#5f6670", grid: { stroke: "#eceff3", width: 1 }, ticks: { stroke: "#dde1e6" } },
         { stroke: "#5f6670", grid: { stroke: "#eceff3", width: 1 }, ticks: { stroke: "#dde1e6" }, size: 60 },

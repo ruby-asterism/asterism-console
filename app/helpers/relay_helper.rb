@@ -39,7 +39,16 @@ module RelayHelper
     safe_join(lines.map { tag.code(_1) }, tag.br)
   end
 
+  # A time in the console's time zone (CONSOLE_TIME_ZONE), with the zone's
+  # abbreviation (it is often shown alone).
   def when_text(t)
-    t ? l(t, format: "%Y-%m-%d %H:%M") : "-"
+    t ? l(t.in_time_zone, format: "%Y-%m-%d %H:%M %Z") : "-"
+  end
+
+  # An ISO 8601 time (a file's, a status's) as when_text writes it.
+  def iso_when(text)
+    when_text(Time.iso8601(text.to_s))
+  rescue ArgumentError
+    text.to_s
   end
 end
