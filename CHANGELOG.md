@@ -8,6 +8,15 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+- `deploy/vps/update.sh`: with a systemd unit, the restart is the unit's
+  alone. 0.1.3 also ran `docker compose up -d` right after `systemctl
+  restart`, which raced the unit's own `docker compose up` for the
+  containers' names ("container name ... is already in use") and failed the
+  update after everything else had been done (the stack was up under the
+  unit).
+
 ## 0.1.3
 
 - Backups of the console's databases without anyone doing anything: a new

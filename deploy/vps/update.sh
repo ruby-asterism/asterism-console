@@ -18,7 +18,8 @@
 #      restores the backup named
 #   5. bin/asterism setup (the migrations; idempotent)
 #   6. the restart: systemctl restart <unit> when the stack runs as a systemd
-#      unit, then docker compose up -d --remove-orphans
+#      unit (and nothing else: the unit starts the stack), otherwise
+#      docker compose up -d --remove-orphans
 #   7. checks that every service runs, the console's ones on the new image,
 #      and that no other container of the project is left
 #   8. prints how to go back (this script with the old version and
@@ -321,7 +322,7 @@ main() {
     UNIT="docker-compose-service@$PROJECT"
   fi
   say "  $DIR (checkout $TOP at $OLD_REF), project $PROJECT"
-  say "  console $FROM -> $VERSION ($IMAGE), restart: ${UNIT:+systemctl restart $UNIT, then }docker compose up -d"
+  say "  console $FROM -> $VERSION ($IMAGE), restart: ${UNIT:+systemctl restart $UNIT (the unit starts the stack)}${UNIT:-docker compose up -d}"
   [ -z "$RESTORE" ] || say "  then the data of $RESTORE"
   [ "$DRY" = 0 ] || say "  dry run: nothing below is run"
 
@@ -363,10 +364,14 @@ main() {
 
   ARMED=0
   step "Restart"
+  # A systemd unit runs `docker compose up` itself: starting the stack a
+  # second time here would race it for the containers' names. With a unit,
+  # the restart is the unit's alone; verify then waits for it.
   if [ -n "$UNIT" ]; then
     act $SUDO systemctl restart "$UNIT"
+  else
+    act compose up -d --remove-orphans
   fi
-  act compose up -d --remove-orphans
   verify
   trap - EXIT
 

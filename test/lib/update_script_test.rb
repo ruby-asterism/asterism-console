@@ -94,8 +94,9 @@ class UpdateScriptTest < ActiveSupport::TestCase
     assert st.success?, out
     assert_includes out, "+ sudo docker compose -f /opt/wrap/asterism/docker-compose.yml pull"
     assert_includes out, "+ sudo env CONSOLE_VERSION=0.1.3 docker compose -f /opt/wrap/asterism/docker-compose.yml run --rm --no-deps -T console bin/asterism backup"
-    order = lines_matching(out, "+ sudo systemctl restart docker-compose-service@asterism", "up -d --remove-orphans")
-    assert_equal order.sort, order
+    assert_includes out, "+ sudo systemctl restart docker-compose-service@asterism"
+    # The unit starts the stack itself; a second `up -d` would race it for the containers' names.
+    assert_not_includes out, "+ sudo docker compose -f /opt/wrap/asterism/docker-compose.yml up -d"
     assert_includes out, "--sudo --unit docker-compose-service@asterism -f /opt/wrap/asterism/docker-compose.yml 0.1.2 --restore"
     assert_unchanged
   end
