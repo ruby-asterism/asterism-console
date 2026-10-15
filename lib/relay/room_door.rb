@@ -398,8 +398,13 @@ module Relay
       b0, b1 = read_exact(io, 2).unpack("CC")
       raise IOError, "an unmasked frame" if (b1 & 0x80).zero?
       len = b1 & 0x7f
-      len = read_exact(io, 2).unpack1("n") if len == 126
-      len = read_exact(io, 8).unpack1("Q>") if len == 127
+      # The 7-bit length decides alone: a 16-bit length of exactly 127 is a
+      # 127-byte frame, not the mark of a 64-bit length.
+      len = case len
+      when 126 then read_exact(io, 2).unpack1("n")
+      when 127 then read_exact(io, 8).unpack1("Q>")
+      else len
+      end
       raise IOError, "a #{len}-byte frame" if len > @max_message
       mask = read_exact(io, 4)
       data = read_exact(io, len)

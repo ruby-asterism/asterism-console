@@ -98,8 +98,11 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
       b0, b1 = @sock.read(2)&.unpack("CC")
       return nil unless b1
       len = b1 & 0x7f
-      len = @sock.read(2).unpack1("n") if len == 126
-      len = @sock.read(8).unpack1("Q>") if len == 127
+      len = case len
+      when 126 then @sock.read(2).unpack1("n")
+      when 127 then @sock.read(8).unpack1("Q>")
+      else len
+      end
       [ b0 & 0x0f, @sock.read(len) ]
     rescue IOError, SystemCallError
       nil
@@ -219,6 +222,16 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     c.frame("ping".b, opcode: 0x9)
     assert_equal [ 0xA, "ping".b ], c.read_message
     assert_equal({ @room_a => 1 }, @door.status["rooms"])
+  end
+
+  test "every frame length reads right, 127 and 126 among them (16-bit lengths)" do
+    c = client(token)
+    c.read_message # the InitAck
+    [ 125, 126, 127, 128, 200, 65_535 - 2 ].each do |n|
+      data = SecureRandom.bytes(n)
+      c.frame(data)
+      assert_equal [ 0x2, data ], c.read_message, "a #{n}-byte message"
+    end
   end
 
   test "too large a message closes the connection" do
