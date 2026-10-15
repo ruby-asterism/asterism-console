@@ -6,6 +6,7 @@
     invite. Inside, everyone with the link is alike; what they may do there is up to the app. Nothing in a room reaches
     the registered routers and nodes, and nothing of theirs reaches the room.</p>
   <%= render "door", door: @door %>
+  <%= render "games", games: @games %>
   <% if @ready.empty? %>
     <p class="error">No room slot is ready: run <code>bin/asterism setup</code> (it makes the slots' certificates), then
       apply in Relay so that the cloud router lets them in.</p>
@@ -18,12 +19,12 @@
   <h2>Make a room</h2>
   <%= form_with url: admin_rooms_path, scope: :room, class: "grid-form", data: { turbo: false } do |f| %>
     <label>Name <%= f.text_field :name, required: true, maxlength: 60, placeholder: "Othello on Friday" %></label>
-    <label>Opens <span class="field-help">The app the link starts (a path on the page, e.g. /app/test/othello.app.rb), or
-        nothing for the page's own start.</span>
-      <%= f.text_field :app, list: "room-apps", placeholder: "/app/test/othello.app.rb" %></label>
-    <datalist id="room-apps">
-      <% BrowserPage.apps.each do |label, value| %><% next if value.blank? %><option value="<%= value %>"><%= label %></option><% end %>
-    </datalist>
+    <label>Opens <span class="field-help">The app the link starts<% if @games_apps.any? %>. A room that opens
+        <%= safe_join(@games_apps.map { tag.code(_1) }, ", ") %> gets a table from the game host<% end %>.</span>
+      <%= f.select :app, [ [ "Nothing (the page's own start)", "" ] ] + @apps, selected: @apps.first&.last %></label>
+    <label>Or another app <span class="field-help">A path on the page, e.g. /app/test/othello.app.rb (over the
+        choice above).</span>
+      <%= f.text_field :app_other, placeholder: "/app/test/othello.app.rb" %></label>
     <label>Hours <span class="field-help">How long it is open: <%= @hours %> unless you say, at most <%= @max_hours %>.
         Its links stop working then and the door closes its connections.</span>
       <%= f.number_field :hours, value: @hours, min: 0.25, max: @max_hours, step: 0.25 %></label>
@@ -40,7 +41,7 @@
     <p class="hint">None yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Links</th></tr></thead>
+      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><% if @games_on %><th>Tables</th><% end %><th>Links</th></tr></thead>
       <tbody>
         <% @rooms.each do |r| %>
           <tr>
@@ -51,6 +52,7 @@
             <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
             <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span></td>
             <td><%= r.open? ? (@door ? "#{@door.dig('rooms', r.uid) || 0} / #{r.max_connections}" : "? / #{r.max_connections}") : "-" %></td>
+            <% if @games_on %><td><%= room_tables_text(r, @games, @games_apps) %></td><% end %>
             <td><%= r.links_made %></td>
           </tr>
         <% end %>

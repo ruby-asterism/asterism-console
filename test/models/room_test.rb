@@ -51,7 +51,8 @@ class RoomTest < ActiveSupport::TestCase
     other.close!(nil)
     Relay::RoomFiles.write!
     data = JSON.parse(File.read(Relay::RoomFiles.path))
-    assert_equal({ room.slot => { "room" => room.uid, "until" => room.expires_at.to_i, "max" => 8 } }, data["slots"])
+    assert_equal({ room.slot => { "room" => room.uid, "until" => room.expires_at.to_i, "max" => 8, "app" => "" } },
+                 data["slots"])
     assert_equal [ other.uid ], data["revoked"].map { _1["room"] }
     assert_equal [ @signer.kid ], data["keys"].map { _1["kid"] }
     refute_includes File.read(Relay::RoomFiles.path), token

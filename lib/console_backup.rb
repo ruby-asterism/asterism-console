@@ -12,6 +12,13 @@
 # being written). The newest ASTERISM_BACKUP_KEEP backups (default 7) are
 # kept, older ones deleted. Recordings (storage/recordings) are not in it.
 #
+# ASTERISM_BACKUP_EXTRA ("name=/dir,...") adds directories of other
+# services that the backup service mounts (read-only), e.g. a game host's
+# saved tables (games=/extra/games): their regular files go into the same
+# .tar.gz under extra/<name>/, listed in the manifest. A restore leaves
+# them alone (they belong to the other service; docs/install.md says how
+# to put them back by hand). A missing directory is noted, not an error.
+#
 # The CA's key is not here: it lives in the signer's volume, made once, and
 # the first setup asks for an encrypted copy off the server
 # (docs/install.md, "Backups").
@@ -68,6 +75,15 @@ module ConsoleBackup
     d = env["ASTERISM_BACKUP_DIR"].to_s
     return d unless d.empty?
     File.directory?("/backups") ? "/backups" : File.join(root, "tmp/backups")
+  end
+
+  # ASTERISM_BACKUP_EXTRA -> [[name, dir]].
+  def extras(env = ENV)
+    env["ASTERISM_BACKUP_EXTRA"].to_s.split(",").map(&:strip).reject(&:empty?).map do |item|
+      name, dir = item.split("=", 2)
+      raise Error, "ASTERISM_BACKUP_EXTRA: #{item.inspect} is not name=/dir" unless dir && name.match?(/\A[0-9A-Za-z_.-]+\z/)
+      [ name, dir ]
+    end
   end
 
   # The latest migration the code knows (db/migrate), "0" when none.
@@ -166,8 +182,10 @@ module ConsoleBackup
   # Makes one backup; returns its Entry. Raises Error when there is nothing
   # to back up or a copy fails (no partial file is left behind).
   class Maker
-    def initialize(storage:, backup_dir:, rails_env:, version:, root:, data_version: nil, label: nil, now: Time.now)
+    def initialize(storage:, backup_dir:, rails_env:, version:, root:, data_version: nil, label: nil, now: Time.now,
+                   extras: ConsoleBackup.extras)
       @storage, @backup_dir, @rails_env, @version, @root = storage, backup_dir, rails_env, version, root
+      @extras = extras
       @data_version = data_version.to_s.empty? ? version : data_version
       @label = label.to_s.empty? ? nil : label
       @now = now.utc
@@ -222,6 +240,21 @@ module ConsoleBackup
       raise Error, "could not copy #{File.basename(src)}: #{e.message}"
     end
 
+    # One extra directory's regular files (not *.tmp, not links), read
+    # whole: a service that writes a file to a temporary name and renames
+    # it (as the game host does) is read as the old or the new file.
+    def extra_files(name, dir)
+      return { "name" => name, "dir" => dir, "missing" => true, "files" => 0, "bytes" => 0, "paths" => [] } unless File.directory?(dir)
+      paths = Dir.glob("**/*", base: dir).sort.filter_map do |rel|
+        p = File.join(dir, rel)
+        next if File.symlink?(p) || !File.file?(p) || rel.end_with?(".tmp")
+        [ rel, File.binread(p) ]
+      rescue SystemCallError
+        nil
+      end
+      { "name" => name, "dir" => dir, "files" => paths.size, "bytes" => paths.sum { _1[1].bytesize }, "paths" => paths }
+    end
+
     def write_tar(name, work, files)
       primary = files.find { _1["file"] == "#{@rails_env}.sqlite3" }
       manifest = {
@@ -230,6 +263,8 @@ module ConsoleBackup
         "migration" => primary&.dig("migration"), "code_migration" => ConsoleBackup.code_migration(@root),
         "databases" => files
       }
+      extra = @extras.map { |name, dir| extra_files(name, dir) }
+      manifest["extra"] = extra.map { _1.except("paths") } unless extra.empty?
       partial = File.join(@backup_dir, ".#{name}.partial")
       File.open(partial, "wb", 0o600) do |io|
         Zlib::GzipWriter.wrap(io) do |gz|
@@ -239,6 +274,11 @@ module ConsoleBackup
             files.each do |f|
               p = File.join(work, f["file"])
               tar.add_file_simple(f["file"], 0o600, File.size(p)) { |t| File.open(p, "rb") { |s| IO.copy_stream(s, t) } }
+            end
+            extra.each do |x|
+              x["paths"].each do |rel, data|
+                tar.add_file_simple("extra/#{x['name']}/#{rel}", 0o600, data.bytesize) { _1.write(data) }
+              end
             end
           end
         end

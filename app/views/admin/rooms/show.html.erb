@@ -9,8 +9,10 @@
     <dt>Until</dt><dd><%= when_text(@room.closed_at || @room.expires_at) %></dd>
     <dt>Connections</dt><dd><%= @door ? (@door.dig("rooms", @room.uid) || 0) : "?" %> of at most <%= @room.max_connections %></dd>
     <dt>Links made</dt><dd><%= @room.links_made %></dd>
+    <% if @games_on %><dt>Tables</dt><dd><%= room_tables_text(@room, @games, @games_apps) %></dd><% end %>
   </dl>
   <%= render "door", door: @door %>
+  <%= render "games", games: @games %>
 </section>
 
 <% if @token %>

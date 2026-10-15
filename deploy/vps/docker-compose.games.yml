@@ -1,0 +1,26 @@
+# Add this file when a game host (asterism-games, its deploy/vps) runs next
+# to the console (docs/install.md, "A game host"):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.games.yml up -d
+#   (or COMPOSE_FILE=docker-compose.yml:docker-compose.games.yml in .env)
+#
+# It gives the console the host's status (the rooms' page shows each room's
+# tables) and puts the host's saved tables into the daily backup
+# (extra/games/ in the same .tar.gz). The game host's own compose project
+# makes its volume; start it once before this file is used, or make the
+# volume by hand: docker volume create asterism-games_state.
+services:
+  console:
+    environment:
+      ASTERISM_GAMES_STATUS_URL: ${ASTERISM_GAMES_STATUS_URL:-http://asterism-games:7460/status}
+
+  backup:
+    environment:
+      ASTERISM_BACKUP_EXTRA: games=/extra/games
+    volumes:
+      - games_state:/extra/games:ro
+
+volumes:
+  games_state:
+    external: true
+    name: ${GAMES_STATE_VOLUME:-asterism-games_state}

@@ -257,3 +257,56 @@ class ConsoleBackupDailyTest < ActiveSupport::TestCase
     refute daily.due_at_start?
   end
 end
+
+# ASTERISM_BACKUP_EXTRA: another service's directory in the same backup.
+class ConsoleBackupExtraTest < ActiveSupport::TestCase
+  ROOT = Rails.root.to_s
+
+  setup do
+    @tmp = Dir.mktmpdir("console-backup")
+    @storage = File.join(@tmp, "storage")
+    @backups = File.join(@tmp, "backups")
+    FileUtils.mkdir_p(@storage)
+  end
+
+  teardown { FileUtils.rm_rf(@tmp) }
+
+  def make_db(name)
+    db = SQLite3::Database.new(File.join(@storage, name))
+    db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version varchar NOT NULL PRIMARY KEY)")
+    db.execute("INSERT OR IGNORE INTO schema_migrations VALUES ('20261014090000')")
+    db
+  end
+
+  def maker(now:, **kw)
+    ConsoleBackup::Maker.new(storage: @storage, backup_dir: @backups, rails_env: "production",
+                             version: "0.1.3", root: ROOT, now: now, **kw)
+  end
+
+  test "extra directories go into the backup under extra/, a restore leaves them" do
+    make_db("production.sqlite3").close
+    games = File.join(@tmp, "games")
+    FileUtils.mkdir_p(File.join(games, "rooms", "01"))
+    File.write(File.join(games, "rooms", "01", "mahjong1.json"), "{\"status\":\"play\"}")
+    File.write(File.join(games, "rooms", "01", "mahjong1.json.tmp"), "half")
+    e = maker(now: Time.utc(2026, 10, 15, 3, 0, 0), extras: [ [ "games", games ], [ "gone", File.join(@tmp, "nothing") ] ]).run
+    x = e.manifest["extra"]
+    assert_equal [ "games", 1, false ], [ x[0]["name"], x[0]["files"], x[0].key?("missing") ]
+    assert x[1]["missing"]
+    names = []
+    Zlib::GzipReader.open(e.path) do |gz|
+      Gem::Package::TarReader.new(gz) { |tar| tar.each { names << _1.full_name } }
+    end
+    assert_includes names, "extra/games/rooms/01/mahjong1.json"
+    refute names.any? { _1.end_with?(".tmp") }
+    ConsoleBackup::Restorer.new(storage: @storage, backup_dir: @backups, name: e.name, version: "0.1.3", root: ROOT).run
+    assert_equal [ "production.sqlite3" ], Dir.children(@storage).grep(/sqlite3\z/)
+  end
+
+  test "ASTERISM_BACKUP_EXTRA" do
+    assert_equal [ [ "games", "/extra/games" ], [ "b", "/x" ] ],
+                 ConsoleBackup.extras({ "ASTERISM_BACKUP_EXTRA" => "games=/extra/games, b=/x" })
+    assert_equal [], ConsoleBackup.extras({})
+    assert_raises(ConsoleBackup::Error) { ConsoleBackup.extras({ "ASTERISM_BACKUP_EXTRA" => "nodir" }) }
+  end
+end

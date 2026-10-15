@@ -10,7 +10,10 @@
 #
 # Settings: ADMIN_EMAIL, ADMIN_PASSWORD (bootstrap), PLAY_DIST (a browser
 # build's dist, served at https://play.localtest), HOME_ROUTER_NAME (the
-# home router's row, whose .tar is extracted in certs/), HOME_ROUTER_BIND.
+# home router's row, whose .tar is extracted in certs/), HOME_ROUTER_BIND,
+# GAMES=1 (a game host next to the console: deploy/vps/docker-compose.games.yml;
+# its volume GAMES_STATE_VOLUME, asterism-games-rehearsal_state, comes from
+# asterism-games' deploy/vps run with ASTERISM_PROJECT=asterism-rehearsal).
 require "openssl"
 require "securerandom"
 require "fileutils"
@@ -24,7 +27,9 @@ PROJECT = "asterism-rehearsal"
 def compose(*args, env: {})
   cmd = [ "docker", "compose", "-p", PROJECT, "-f", File.join(ROOT, "deploy/vps/docker-compose.yml"),
           "-f", File.join(ROOT, "deploy/vps/docker-compose.build.yml"),
-          "-f", File.join(HERE, "docker-compose.rehearsal.yml"), "--env-file", ENV_FILE, *args ]
+          "-f", File.join(HERE, "docker-compose.rehearsal.yml"),
+          *(ENV["GAMES"] == "1" ? [ "-f", File.join(ROOT, "deploy/vps/docker-compose.games.yml") ] : []),
+          "--env-file", ENV_FILE, *args ]
   puts "$ #{cmd.join(' ')}"
   system(env, *cmd) || abort("failed: #{args.first}")
 end
@@ -45,7 +50,9 @@ def prepare
                .sub(/^CONSOLE_ADMIN_NETS=.*/, "CONSOLE_ADMIN_NETS=172.31.240.50/32")
                .sub(/^SECRET_KEY_BASE=.*/, "SECRET_KEY_BASE=#{SecureRandom.hex(64)}")
                .sub(/^ASTERISM_SIGNER_TOKEN=.*/, "ASTERISM_SIGNER_TOKEN=#{SecureRandom.hex(32)}")
-    text += "\n# The rehearsal's compose reads this file for the services too.\nASTERISM_ENV_FILE=../local/.env\n"
+    text += "\n# The rehearsal's compose reads this file for the services too.\nASTERISM_ENV_FILE=../local/.env\n" \
+            "# A game host's volume (GAMES=1): asterism-games' deploy/vps as project asterism-games-rehearsal.\n" \
+            "GAMES_STATE_VOLUME=asterism-games-rehearsal_state\n"
     File.open(ENV_FILE, File::WRONLY | File::CREAT | File::EXCL, 0o600) { _1.write(text) }
     puts "made #{ENV_FILE}"
   end

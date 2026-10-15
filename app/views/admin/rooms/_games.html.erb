@@ -1,0 +1,13 @@
+<%# The game host (Relay::GamesStatus), when one is set: whether it answers and its rooms with tables. %>
+<% if Relay::GamesStatus.configured? %>
+  <% if games %>
+    <p class="hint">The game host (asterism-games <%= games["version"] %>, up since <%= when_text(Time.iso8601(games["since"])) rescue games["since"] %>):
+      <%= pluralize(games["rooms"].to_h.size, "room") %> with tables (at most <%= games["max"] %>),
+      <%= (games["rss_kb"].to_i / 1024.0).round %> MB<% unless games.dig("rooms_file", "ok") %>,
+      <span class="error">it cannot read the rooms' file</span><% end %><% if games["without_table"].present? %>,
+      <span class="error">rooms without a table (more than its limit): <%= games["without_table"].join(", ") %></span><% end %>.</p>
+  <% else %>
+    <p class="error">The game host does not answer on <code><%= Relay::Settings.games_status_url %></code>: rooms that open its
+      table get none until it is back.</p>
+  <% end %>
+<% end %>

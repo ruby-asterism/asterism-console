@@ -29,6 +29,19 @@ module RoomPage
     t.match?(%r{\Ahttps?://[^/\s]+}) && fragment.to_s.include?("{room}") && !uri_part.include?("{room}")
   end
 
+  # What a room's link may open, offered on the rooms' page: the apps of
+  # ASTERISM_ROOM_APPS ("Othello=/app/test/othello.app.rb,Mahjong=/app/game/mahjong/mahjong.app.rb")
+  # first, then the roles' browser apps. [[label, value]] (no blank one).
+  def apps(env = ENV)
+    listed = env["ASTERISM_ROOM_APPS"].to_s.split(",").filter_map do |item|
+      label, path = item.split("=", 2).map(&:strip)
+      path, label = label, nil if path.nil?
+      next if path.blank? || !Room::APP.match?(path)
+      [ label.presence ? "#{label} (#{path})" : path, path ]
+    end
+    (listed + BrowserPage.apps.reject { _1[1].blank? }).uniq { _1[1] }
+  end
+
   def url(room:, app: "", router: PassLink.router, env: ENV)
     t = template(env) or return nil
     values = { "router" => router.to_s, "room" => room.to_s, "app" => app.to_s }

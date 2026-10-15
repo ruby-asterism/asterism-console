@@ -117,7 +117,7 @@ on by default); a user who is not an admin never receives them.
   node, no session of a room) to everyone else; the same for the whole
   graph the page asks for. Recordings (admins only) keep the rooms.
 
-## A room's host (later)
+## A room's host (0.2.2)
 
 A process that holds a room's state (a mahjong table, say) can join from
 inside the server with the slot's certificate, without the door:
@@ -126,6 +126,23 @@ inside the server with the slot's certificate, without the door:
 `Asterism.connect(credentials: "room-01.tar", config: { "namespace" => "room/01" }, node: "table", app: ...)`.
 The namespace makes its keys the room's (`asterism/...` inside, as the
 browsers see them).
+
+- **Which rooms a host serves.** `rooms.json` says for each open room what
+  its link opens (`"app"`; the door does not use it). A host reads the file
+  (the `rooms` volume, read-only) and serves the rooms that open its app.
+  asterism-games does so for the mahjong table: the admin chooses "Opens:
+  Mahjong" when making the room (`ASTERISM_ROOM_APPS` lists the choices) and
+  the room has a table a second later, with nothing else to do.
+- **A slot used again.** A host must drop what it kept for a room when the
+  room is over: the room is in `revoked`, its end has passed, or its slot
+  holds another room's ID. asterism-games removes the room's saved tables
+  then, so the next room on the slot starts from nothing.
+- **Watching it.** `docker-compose.games.yml` gives the console the host's
+  `GET /status` (`ASTERISM_GAMES_STATUS_URL`): the rooms' page says whether
+  the host answers, and each room's tables (state and counts only). In the
+  graph the host's node and its objects show in the room's frame like any
+  node in a room. The same file puts the host's saved tables into the daily
+  backup (`ASTERISM_BACKUP_EXTRA`).
 
 ## What a room does not protect
 

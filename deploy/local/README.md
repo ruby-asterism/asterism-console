@@ -16,6 +16,9 @@ PLAY_DIST=<a browser build's dist> deploy/local/rehearse up
 # issue the home router's row (e.g. home-a) in the console, "Save all (.tar)",
 # and extract it in deploy/local/certs/ (tar xf home-a.tar -C deploy/local/certs), then:
 HOME_ROUTER=1 HOME_ROUTER_NAME=home-a deploy/local/rehearse up
+# a game host next to the console (asterism-games): start its deploy/vps as project
+# asterism-games-rehearsal with ASTERISM_PROJECT=asterism-rehearsal in its .env, then:
+GAMES=1 PLAY_DIST=<dist> deploy/local/rehearse up
 deploy/local/rehearse down               # VOLUMES=1 also drops the volumes (the rehearsal's CA too)
 ```
 

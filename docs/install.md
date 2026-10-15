@@ -112,7 +112,7 @@ The compose file, its router script and the web server examples are in
 
 ```
 sudo mkdir -p /srv/asterism && sudo chown "$USER" /srv/asterism && cd /srv/asterism
-git clone --branch v0.2.1 --depth 1 https://github.com/ruby-asterism/asterism-console.git
+git clone --branch v0.2.2 --depth 1 https://github.com/ruby-asterism/asterism-console.git
 cd asterism-console/deploy/vps
 ```
 
@@ -132,7 +132,7 @@ openssl rand -hex 32      # -> ASTERISM_SIGNER_TOKEN
 
 Edit `.env` (every line is explained in it):
 
-- `CONSOLE_VERSION`: the version you install (`0.2.1`).
+- `CONSOLE_VERSION`: the version you install (`0.2.2`).
 - `CONSOLE_TIME_ZONE`: the time zone the pages show every time in (the
   server's pages, and the graph, timelines, logs and plots in the browser;
   a time shown alone carries the zone's name). A Rails or IANA name
@@ -428,6 +428,25 @@ app. How it works: [rooms.md](rooms.md).
   full rooms behind one address), the `asterism_room` and
   `asterism_room_conn` zones of `nginx/asterism-http.conf` and the
   `asterism_room_door` upstream of `nginx/asterism-upstreams.conf`.
+- **What a link opens** (0.2.2): `ASTERISM_ROOM_APPS` lists the apps the
+  rooms' page offers ("Label=/path", comma separated; env.example has
+  Othello and Mahjong), before the roles' browser apps; "Or another app"
+  takes any other path.
+
+### A game host (optional, 0.2.2)
+
+A game host (asterism-games, its `docs/install.md`) runs next to the
+console as a compose project of its own and serves a mahjong table in each
+room whose link opens the table's screen (Opens: Mahjong): it reads
+`rooms.json` and the slots' certificates from the `rooms` volume
+(read-only) and joins zenohd with the room's slot certificate. On the
+console's side add `docker-compose.games.yml` (`COMPOSE_FILE=docker-compose.yml:docker-compose.games.yml`
+in `.env`, or `-f` on every command, update.sh included) once the host's
+volume exists: the rooms' page then shows the host (whether it answers,
+its rooms and each table's state and counts, `ASTERISM_GAMES_STATUS_URL`)
+and the daily backup takes the host's saved tables in (`extra/games/` of
+the same file, `ASTERISM_BACKUP_EXTRA`). The graph shows the host's node
+and its tables in each room's frame, like any node in a room.
 
 ## 13. Check
 
@@ -511,8 +530,8 @@ needs). Then, in `deploy/vps`:
 
 ```
 git fetch --tags
-./update.sh --dry-run 0.2.1      # the steps, nothing changed
-./update.sh 0.2.1
+./update.sh --dry-run 0.2.2      # the steps, nothing changed
+./update.sh 0.2.2
 ```
 
 `update.sh` (plain sh, git and docker compose) does in order:
@@ -693,8 +712,8 @@ project name `asterism` there, or compose makes new, empty volumes.
 by itself), and takes such a compose file with `-f`:
 
 ```
-./update.sh --sudo --unit asterism 0.2.1
-./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.2.1
+./update.sh --sudo --unit asterism 0.2.2
+./update.sh --sudo -f /etc/compose/asterism/docker-compose.yml 0.2.2
 ```
 
 ## 20. Updating from an earlier deployment
@@ -759,6 +778,18 @@ From 0.2.0 to 0.2.1 (rooms in the graph, the console's time zone):
   With 0.2.0's script instead, Apply once after the update.
 - No migration; nginx is as in 0.2.0 (the compose file changes only its
   default version).
+
+From 0.2.1 to 0.2.2 (what a room opens, a game host, a fix in the door):
+
+- **The door**: a browser message of exactly 127 bytes was read as the
+  start of a 64-bit length, and the connection was cut (a game that sends
+  such messages, the mahjong table, could not be played in a room). 0.2.2
+  reads it right; nothing to do but update.
+- **`.env`**: add `ASTERISM_ROOM_APPS` (env.example) for the rooms' page's
+  choice of apps.
+- **A game host** (optional): section 12, "A game host".
+- No migration, no change to nginx or the router's configuration:
+  `./update.sh 0.2.2`.
 
 ## 21. When something is wrong
 

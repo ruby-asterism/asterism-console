@@ -52,4 +52,47 @@ class Admin::RoomsControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
     assert_equal 0, Room.count
   end
+
+  test "the apps a room opens, and the game host's tables" do
+    ENV["ASTERISM_ROOM_APPS"] = "Othello=/app/test/othello.app.rb,Mahjong=/app/game/mahjong/mahjong.app.rb"
+    status = { "version" => "0.3.0", "since" => Time.now.utc.iso8601, "max" => 3, "apps" => [ "/app/game/mahjong/mahjong.app.rb" ],
+               "rooms_file" => { "ok" => true }, "rooms" => {}, "without_table" => [], "rss_kb" => 51200 }
+    server = TCPServer.new("127.0.0.1", 0)
+    ENV["ASTERISM_GAMES_STATUS_URL"] = "http://127.0.0.1:#{server.addr[1]}/status"
+    th = Thread.new do
+      loop do
+        c = server.accept
+        while (l = c.gets) && l != "\r\n"; end
+        body = JSON.generate(status)
+        c.write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n#{body}")
+        c.close
+      end
+    end
+    sign_in_as(users(:admin))
+    get admin_rooms_path
+    assert_select "select[name='room[app]'] option[value='/app/game/mahjong/mahjong.app.rb']", text: /Mahjong/
+    assert_select "select[name='room[app]'] option[value='/app/test/othello.app.rb']", text: /Othello/
+    assert_match "gets a table from the game host", response.body
+    post admin_rooms_path, params: { room: { name: "Mahjong night", app: "/app/game/mahjong/mahjong.app.rb", hours: "2" } }
+    room = Room.last
+    assert_equal "/app/game/mahjong/mahjong.app.rb", room.app
+    assert_equal "/app/game/mahjong/mahjong.app.rb", JSON.parse(File.read(Relay::RoomFiles.path)).dig("slots", room.slot, "app")
+    get admin_rooms_path
+    assert_match "waiting for the game host", response.body
+    status["rooms"] = { room.slot => { "room" => room.uid, "state" => "up",
+                                       "tables" => { "mahjong1" => { "st" => "play", "humans" => 3, "cpus" => 1, "members" => 5 } } } }
+    get admin_room_path(room)
+    assert_match "mahjong1: playing, 3 seated, 1 CPU, 5 at the table", response.body
+    delete admin_room_path(room)
+    post admin_rooms_path, params: { room: { name: "Other", app: "", app_other: "/app/test/other.app.rb", hours: "1" } }
+    assert_equal "/app/test/other.app.rb", Room.last.app
+    ENV["ASTERISM_GAMES_STATUS_URL"] = "http://127.0.0.1:1/status"
+    get admin_rooms_path
+    assert_match "The game host does not answer", response.body
+  ensure
+    th&.kill
+    server&.close
+    ENV.delete("ASTERISM_ROOM_APPS")
+    ENV.delete("ASTERISM_GAMES_STATUS_URL")
+  end
 end

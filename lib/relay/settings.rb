@@ -36,6 +36,10 @@
 #   ASTERISM_ROOMS_DIR            storage/relay/rooms (what the door reads: rooms.json, the
 #                                       slots' certificates in certs/)
 #   ASTERISM_DOOR_STATUS_URL      http://127.0.0.1:7453/status (the door's connection counts)
+#   ASTERISM_GAMES_STATUS_URL     none (a game host's GET /status, e.g. http://asterism-games:7460/status:
+#                                       the rooms' page shows its tables)
+#   ASTERISM_ROOM_APPS            none (what a room's link may open, "Label=/path,...", offered first
+#                                       on the rooms' page; the roles' browser apps follow)
 require "shellwords"
 
 module Relay
@@ -89,6 +93,12 @@ module Relay
 
     def door_status_url(env = ENV)
       env["ASTERISM_DOOR_STATUS_URL"].presence || "http://127.0.0.1:7453/status"
+    end
+
+    # A game host next to the console (asterism-games, its GET /status):
+    # the rooms' page shows its tables. nil: no game host.
+    def games_status_url(env = ENV)
+      env["ASTERISM_GAMES_STATUS_URL"].presence
     end
 
     def browser_node_prefix(env = ENV)

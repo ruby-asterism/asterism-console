@@ -20,10 +20,13 @@ module Admin
       @busy = Room.open_now.index_by(&:slot)
       @room = Room.new(max_connections: Relay::Settings.room_max_connections)
       @hours, @max_hours = Relay::Settings.room_hours
+      @apps = RoomPage.apps
+      games
     end
 
     def create
-      @room = Room.open!(name: params.dig(:room, :name), app: params.dig(:room, :app), hours: params.dig(:room, :hours),
+      app = params.dig(:room, :app_other).to_s.strip.presence || params.dig(:room, :app)
+      @room = Room.open!(name: params.dig(:room, :name), app: app, hours: params.dig(:room, :hours),
                          max_connections: params.dig(:room, :max_connections), by: current_user)
       write_files
       Rails.logger.info("rooms: #{current_user.log_name} opened room #{@room.uid} (#{@room.name}) on slot #{@room.slot} " \
@@ -35,6 +38,7 @@ module Admin
 
     def show
       @door = Relay::DoorStatus.fetch
+      games
     end
 
     # Another link (another key) for an open room.
@@ -60,6 +64,13 @@ module Admin
       @room = Room.find(params[:id])
     end
 
+    # The game host's status (Relay::GamesStatus), when one is set.
+    def games
+      @games_on = Relay::GamesStatus.configured?
+      @games = @games_on ? Relay::GamesStatus.fetch : nil
+      @games_apps = @games_on ? Array(@games&.dig("apps")) : []
+    end
+
     def write_files
       Relay::RoomFiles.write!
     rescue SystemCallError => e
@@ -71,6 +82,7 @@ module Admin
       @token = token
       @link = RoomPage.url(room: token, app: @room.app.to_s)
       @door = Relay::DoorStatus.fetch
+      games
       response.headers["Cache-Control"] = "no-store"
       response.headers["Referrer-Policy"] = "no-referrer"
       render :show, status: status

@@ -8,6 +8,32 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.2.2
+
+What an update needs: nothing beyond `./update.sh 0.2.2`; add
+`ASTERISM_ROOM_APPS` to `.env` for the choice of apps (env.example). No
+migration, no change to nginx or the router's configuration.
+
+- The door (rooms): a browser's message of exactly 127 bytes was read as
+  if a 64-bit length followed, and the connection was cut ("a ...-byte
+  frame" in the door's log). The 7-bit length now decides alone. The
+  mahjong table's calls hit it within a minute of play.
+- The rooms' page offers the apps a room's link opens as a choice
+  (`ASTERISM_ROOM_APPS`, "Label=/path,...", then the roles' browser apps),
+  with "Or another app" for any other path.
+- `rooms.json` says what each open room's link opens (`"app"`): a game
+  host next to the console (asterism-games) serves tables in the rooms that
+  open its table (docs/rooms.md, "A room's host").
+- A game host on the rooms' page (`ASTERISM_GAMES_STATUS_URL`): whether it
+  answers, its rooms with tables and each table's state and counts, a
+  "Tables" column in the list of rooms and on a room's page.
+- Backups: `ASTERISM_BACKUP_EXTRA` ("name=/dir,...") adds another
+  service's directory to the daily backup under `extra/<name>/` (listed in
+  the manifest; a restore leaves it alone). `deploy/vps/docker-compose.games.yml`
+  sets it, and the status URL, for a game host next to the console
+  (docs/install.md section 12, "A game host").
+- `deploy/local/rehearse`: `GAMES=1` adds that file to the rehearsal.
+
 ## 0.2.1
 
 What an update needs: set `CONSOLE_TIME_ZONE` in `.env` if the pages

@@ -8,6 +8,7 @@ console's databases, from the published image.
 | File | |
 |---|---|
 | `docker-compose.yml` | the stack (project `asterism`); the console's image is `${CONSOLE_IMAGE}:${CONSOLE_VERSION}` |
+| `docker-compose.games.yml` | add it when a game host (asterism-games) runs next to the console: its status on the rooms' page, its saved tables in the daily backup (install.md 12) |
 | `docker-compose.build.yml` | add it to build the image here instead of pulling it (install.md 18) |
 | `env.example` | the settings, copied to `.env` (never committed) |
 | `update.sh` | updating (or going back) in one command: a backup, the tag, `.env`, pull, setup, restart, a check (install.md 15, 16) |
@@ -22,7 +23,7 @@ lists the options for sudo, a systemd unit and a compose file of your own):
 
 ```
 git fetch --tags
-./update.sh 0.2.1
+./update.sh 0.2.2
 # going back, with the data from before the update (update.sh prints this line):
 ./update.sh 0.1.3 --restore asterism-<date>-<time>-0.1.3-before-0.1.4.tar.gz
 ```
