@@ -13,6 +13,7 @@
   <% end %>
 </nav>
 <%= render "shared/backup_warning" %>
+<%= render "relay/peers/router_watch" %>
 <% if banner && relay_unapplied? %>
   <div class="apply-banner" role="status">
     <span>Changes not yet applied to the cloud router</span>

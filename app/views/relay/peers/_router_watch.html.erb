@@ -1,0 +1,8 @@
+<%# The router watch (0.3.2, Bridge::RouterWatch): when the bridge last
+    restarted the cloud router by itself because it took no new sessions,
+    and why. A notice for a day, a hint after that. %>
+<% if (w = router_watch_restart) %>
+  <div class="<%= w[:recent] ? 'notice-bar' : 'hint' %> router-watch" role="status">
+    Last automatic restart of the cloud router: <%= w[:at] %>. <%= w[:reason] %>
+  </div>
+<% end %>

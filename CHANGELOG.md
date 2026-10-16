@@ -8,6 +8,42 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.2
+
+What an update needs: `./update.sh 0.3.2`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.1
+to 0.3.2".
+
+- zenohd 1.10.1 can get stuck: while it answers a query on its admin space
+  (the token table, the linkstate, which the bridge reads every 2 seconds)
+  it holds a read lock on its routing tables and takes it again to send
+  the reply; when a connection, a declaration or a disconnection waits for
+  the write lock in between, neither goes on. From then on it takes no new
+  session, the sessions it has drop as their lease runs out, and it does
+  not recover by itself. The fault is in zenohd (a fix is under way); until
+  a fixed zenohd is in the image, the console restarts it.
+- The router watch (`Bridge::RouterWatch`, a thread of the bridge): every
+  `ASTERISM_RELAY_WATCH_EVERY` seconds (30) it opens a brand-new session to
+  the router with the console's certificate (a session the bridge already
+  has would not notice), allowing `ASTERISM_RELAY_WATCH_TIMEOUT` seconds
+  (10), and closes it. After `ASTERISM_RELAY_WATCH_FAILS` failures in a row
+  (2) it asks for the router's restart as Apply does (`restart.request`,
+  `bin/relay_restart_request`): a stuck router is restarted some 50 to 80
+  seconds after it stops. Nothing is counted for
+  `ASTERISM_RELAY_WATCH_GRACE` seconds (60) after any restart request (an
+  apply's or its own) or while an apply runs; when its restarts do not help,
+  each next one waits twice as long (up to 30 minutes) until a check
+  passes. `ASTERISM_RELAY_WATCH_EVERY=0` turns it off; it runs only where
+  the console writes the router's configuration.
+- The probe sessions carry an ID the watch chose, and the graph leaves them
+  out: no node, no session, the same counts as before.
+- The bridge logs each failed check and each restart with its reason
+  (`bridge: router watch: ...`); Admin > Relay shows the last automatic
+  restart, its time and reason (`router_watch.json` next to the router's
+  generated configuration).
+- The compose file gives the bridge the `generated` volume (read-write) and
+  the restart settings Apply uses.
+
 ## 0.3.1
 
 What an update needs: `./update.sh 0.3.1`, and removing a

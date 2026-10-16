@@ -23,6 +23,10 @@
 #     file (Bridge::Recorder) until it is stopped or reaches a limit;
 #   - plays recordings back onto the network (Playback rows, admins only;
 #     Bridge::Player);
+#   - watches whether the router still takes new sessions and asks for its
+#     restart when it does not (Bridge::RouterWatch, 0.3.2: zenohd 1.10.1
+#     can stop taking them), on a thread of its own that keeps going while
+#     the bridge connects again;
 #   - asks each Asterism node that appears for its profile (V2.5,
 #     Bridge::Profiles) on a worker thread of its own, follows the notices
 #     put on asterism/*/@profile, keeps the icons (NodeIcon), and tells its
@@ -135,6 +139,7 @@ module Bridge
       @players = {} # playback id => Player
       @profiles = Profiles.new
       @profile_queue = Queue.new # [node, notice or nil] for the profile worker
+      @watch = nil # Bridge::RouterWatch (run)
       @stop = false
     end
 
@@ -147,6 +152,7 @@ module Bridge
       Types.setup
       @objects ||= Objects.new
       trap_signals
+      start_watch
       until @stop
         begin
           serve
@@ -160,7 +166,34 @@ module Bridge
         t = mono + RETRY_AFTER
         sleep 0.1 while !@stop && mono < t
       end
+      @watch&.stop
       mark_stopped
+    end
+
+    # The router watch (Bridge::RouterWatch), with the bridge's locator and
+    # certificate. ASTERISM_RELAY_WATCH_EVERY=0 turns it off.
+    def start_watch
+      file = ENV["ASTERISM_ZENOH_CONFIG"].to_s
+      probe = RouterWatch.zenoh_probe(@locator, @config.is_a?(Hash) ? @config : nil,
+                                      config_file: (file unless file.empty?))
+      @watch = RouterWatch.new(**RouterWatch.settings, probe: probe, log: ->(text) { say "bridge: #{text}" })
+      @watch.start!
+    rescue ArgumentError => e
+      say "bridge: router watch off: #{e.message}"
+      @watch = nil
+    end
+
+    # The admin space without the router watch's probe sessions: they are
+    # not part of the network (nor of the graph).
+    def without_probes(admin)
+      hidden = @watch&.hidden_zids.to_a.map { Graph.norm_zid(_1) }
+      return admin if hidden.empty?
+      admin.each_value do |info|
+        router = info["router"]
+        next unless router.is_a?(Hash) && router["sessions"].is_a?(Array)
+        router["sessions"] = router["sessions"].reject { hidden.include?(Graph.norm_zid(_1["peer"])) }
+      end
+      admin
     end
 
     def serve
@@ -319,6 +352,7 @@ module Bridge
         rz = key.split("/")[1]
         (admin[rz] ||= { "tokens" => {}, "linkstate" => {} })["tokens"][key.split("/token/", 2)[1]] = v
       end
+      admin = without_probes(admin)
       own = own_links
       peers = peer_links
       reg = registry

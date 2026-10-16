@@ -30,7 +30,7 @@
 name: asterism
 
 x-console: &console
-  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.1}
+  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.2}
   init: true
   restart: unless-stopped
   env_file: ${ASTERISM_ENV_FILE:-.env}
@@ -117,6 +117,10 @@ services:
     networks: [router, signer]
     depends_on: [signer]
 
+  # The bridge also watches the router (0.3.2, Bridge::RouterWatch): a new
+  # session every ASTERISM_RELAY_WATCH_EVERY seconds; when zenohd takes none
+  # (zenohd 1.10.1 can get stuck), it asks for the router's restart as Apply
+  # does, through restart.request in the "generated" volume.
   bridge:
     <<: *console
     command: ["bin/bridge"]
@@ -126,9 +130,14 @@ services:
       ASTERISM_TLS_CERT: /certs/console.pem
       ASTERISM_TLS_KEY: /certs/console.key
       ASTERISM_CONSOLE_NODE: console
+      ASTERISM_RELAY_GENERATED_DIR: /generated
+      ASTERISM_RELAY_RESTART: /app/bin/relay_restart_request
+      ASTERISM_RELAY_COMPOSE_DIR: /app
+      ASTERISM_RELAY_CLOUD_NAME: ${ROUTER_NAME:-zenohd-cloud}
     volumes:
       - storage:/app/storage
       - certs:/certs:ro
+      - generated:/generated
     networks: [router]
     depends_on: [zenohd, console]
 

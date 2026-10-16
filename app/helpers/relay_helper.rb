@@ -54,6 +54,16 @@ module RelayHelper
     t ? l(t.in_time_zone, format: "%Y-%m-%d %H:%M %Z") : "-"
   end
 
+  # The router watch's last automatic restart (Bridge::RouterWatch.status):
+  # { at:, reason:, recent: (within a day) }, or nil when it never restarted.
+  def router_watch_restart
+    st = Bridge::RouterWatch.status or return nil
+    at = Time.iso8601(st["restarted_at"].to_s)
+    { at: when_text(at), reason: st["reason"].to_s, recent: at > 1.day.ago }
+  rescue ArgumentError
+    nil
+  end
+
   # An ISO 8601 time (a file's, a status's) as when_text writes it.
   def iso_when(text)
     when_text(Time.iso8601(text.to_s))

@@ -357,6 +357,25 @@ applies it.
   checked out at its root), that is `ASTERISM_RELAY_COMPOSE_DIR=..` and
   `ASTERISM_RELAY_RESTART="docker compose -f docker-compose.yml -f
   docker/asterism/docker-compose.relay.yml restart zenohd-cloud"`.
+- **The router watch** (0.3.2, `lib/bridge/router_watch.rb`): zenohd 1.10.1
+  can get stuck so that it takes no new session (and keeps the ones it has
+  until their lease runs out), and never comes back by itself. The bridge
+  therefore opens a brand-new session to its router every
+  `ASTERISM_RELAY_WATCH_EVERY` seconds (30) with its own certificate, allows
+  `ASTERISM_RELAY_WATCH_TIMEOUT` seconds (10) for it to open, and closes it.
+  After `ASTERISM_RELAY_WATCH_FAILS` failures in a row (2) it asks for the
+  router's restart the same way Apply does (the restart command above), and
+  logs why (`bridge: router watch: ...`). Nothing is counted for
+  `ASTERISM_RELAY_WATCH_GRACE` seconds (60) after any restart request (an
+  apply's or its own) or while an apply runs; restarts that do not help
+  wait twice as long each time (up to 30 minutes) until a check passes.
+  With the defaults a stuck router is restarted some 50 to 80 seconds after
+  it stops. The probe sessions carry an ID the watch chose, so the graph
+  leaves them out. Admin > Relay shows the last automatic restart and its
+  reason (from `router_watch.json` next to the generated file). It runs
+  only where the console writes the router's configuration (the generated
+  file exists); `ASTERISM_RELAY_WATCH_EVERY=0` turns it off. A stopgap until
+  a zenohd without the fault is in the image.
 
   What a restart does to the others: the home router and the bridge connect
   again by themselves; Asterism nodes on the cloud router (CRuby) lose their

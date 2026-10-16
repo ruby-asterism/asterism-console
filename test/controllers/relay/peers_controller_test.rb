@@ -60,6 +60,29 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the relay pages show the router watch's last automatic restart (0.3.2)" do
+    Dir.mktmpdir do |dir|
+      old = ENV["ASTERISM_RELAY_GENERATED_DIR"]
+      ENV["ASTERISM_RELAY_GENERATED_DIR"] = dir
+      sign_in_as(users(:admin))
+      get relay_peers_path
+      assert_select ".router-watch", 0
+      File.write(File.join(dir, Bridge::RouterWatch::STATUS_FILE),
+                 JSON.generate("state" => "ok", "restarted_at" => 2.hours.ago.utc.iso8601,
+                               "reason" => "2 checks in a row could not open a new session (last: timeout)"))
+      get relay_peers_path
+      assert_select ".notice-bar.router-watch", /Last automatic restart of the cloud router: .*2 checks in a row/
+      get relay_applies_path
+      assert_select ".router-watch", 1
+      File.write(File.join(dir, Bridge::RouterWatch::STATUS_FILE),
+                 JSON.generate("restarted_at" => 3.days.ago.utc.iso8601, "reason" => "x"))
+      get relay_peers_path
+      assert_select ".hint.router-watch", 1
+    ensure
+      ENV["ASTERISM_RELAY_GENERATED_DIR"] = old
+    end
+  end
+
   test "bad names and keys are not saved" do
     sign_in_as(users(:admin))
     [ { name: "../x" }, { name: "ca" }, { rw_keys: "a b\n" }, { ro_keys: "x?y" }, { kind: "bridge" },

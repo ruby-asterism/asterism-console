@@ -47,7 +47,7 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
 | `zenohd` (eclipse/zenoh 1.10.1) | `tls/7448` mutual TLS; `ws/7449` | `ROUTER_TLS_BIND:ROUTER_TLS_PORT` (0.0.0.0:7448) | home routers, CRuby, directly |
 | `door` (the browsers' WebSockets) | 7451; 7452 (rooms); 7453 (its counts) | `127.0.0.1:ROUTER_WS_PORT` (7449), `127.0.0.1:ROOM_DOOR_PORT` (7452) | the web server only (`wss://router.example.org:7443`, with a pass; `/room` with a room's key); 7453 the console only |
 | `console` (Rails) | 3000 | `127.0.0.1:CONSOLE_PORT` (3000) | the web server only (`https://asterism.example.org`) |
-| `bridge` | - | - | connects to `tls/zenohd:7448` with the console's own certificate |
+| `bridge` | - | - | connects to `tls/zenohd:7448` with the console's own certificate; also watches that the router takes new sessions and asks for its restart when it does not (section 21) |
 | `signer` (holds the CA's key) | 7450 | nothing | the console only, over an internal network |
 | `backup` (the daily backup of the databases) | - | - | no network |
 
@@ -873,6 +873,18 @@ From 0.3.0 to 0.3.1 (the rooms' certificates out of the registry):
   --restore <backup>`, section 16): the rows are gone and 0.3.0 reads the
   slots from them.
 
+From 0.3.1 to 0.3.2 (the router watch, section 21 "The router takes no new
+connection"):
+
+- `./update.sh 0.3.2`. No migration, no change to `.env`, nginx or the
+  router's configuration. The compose file gives the bridge the
+  `generated` volume (where it asks for the router's restart, as Apply
+  does), so the update recreates the bridge.
+- **Check**: `docker compose logs bridge | grep "router watch"` says "a new
+  session every 30 s, 10 s to open, restart after 2 failures in a row
+  (grace 60 s)", and nothing more while the router is well.
+- Going back to 0.3.1 is `./update.sh 0.3.1` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
@@ -882,6 +894,25 @@ From 0.3.0 to 0.3.1 (the rooms' certificates out of the registry):
   in the browser's address bar.
 - **The router waits** (`run.sh: waiting for /generated/cloud.json5`): run
   `bin/asterism setup` (or Admin > Relay, "Review and apply").
+- **The router takes no new connection** (0.3.2 restarts it by itself):
+  zenohd 1.10.1 can get stuck while it answers the console's questions
+  about the network and someone connects or leaves at the same moment.
+  Nobody new gets in (CRuby times out, a browser page gets no answer after
+  the door), the ones connected drop as their lease runs out, and it does
+  not recover by itself. The bridge's router watch opens a new session to
+  the router every 30 seconds; after 2 failures in a row it asks for the
+  router's restart as Apply does, so it comes back within about a minute
+  and a half of getting stuck, and everyone reconnects by themselves as
+  after an apply. `docker compose logs bridge | grep "router watch"` shows
+  the checks that failed and the restarts with their reason; Admin > Relay
+  shows the last automatic restart. The settings, in `.env` (seconds):
+  `ASTERISM_RELAY_WATCH_EVERY=30` (between checks; 0 turns the watch off),
+  `ASTERISM_RELAY_WATCH_TIMEOUT=10` (for a session to open),
+  `ASTERISM_RELAY_WATCH_FAILS=2` (failures in a row that restart it),
+  `ASTERISM_RELAY_WATCH_GRACE=60` (nothing counted after a restart request
+  or an apply, while zenohd starts). When the restarts do not help (the
+  router does not come up), each next one waits twice as long, up to 30
+  minutes; see `docker compose logs zenohd`.
 - **The bridge does not join** (`bridge: ...` errors): the router's
   certificate must name `zenohd` (setup does this) and the bridge's
   certificate must be from the same CA (`bin/asterism setup` again).
