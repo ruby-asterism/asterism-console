@@ -448,6 +448,14 @@ and the daily backup takes the host's saved tables in (`extra/games/` of
 the same file, `ASTERISM_BACKUP_EXTRA`). The graph shows the host's node
 and its tables in each room's frame, like any node in a room.
 
+**Permanent tables** (0.2.3, asterism-games 0.4.0): the same host can keep
+tables outside the rooms for the boards with certificates and the browsers
+with a pass. The console's side is two roles and a row of the registry
+(`games-host` for the host's row `games`, `games` for the players' rows and
+the browsers), then Apply; the rows' templates and what they keep closed:
+[rooms.md](rooms.md), "A game host's permanent tables". The host's
+`games.tar` goes to the host (its docs/install.md, "Permanent tables").
+
 ## 13. Check
 
 ```
@@ -790,6 +798,13 @@ From 0.2.1 to 0.2.2 (what a room opens, a game host, a fix in the door):
 - **A game host** (optional): section 12, "A game host".
 - No migration, no change to nginx or the router's configuration:
   `./update.sh 0.2.2`.
+
+From 0.2.2 to 0.2.3 (a game host's permanent tables on the rooms' page):
+
+- `./update.sh 0.2.3`. No migration, no change to `.env`, nginx or the
+  router's configuration.
+- The permanent tables themselves are roles, a row and an Apply (section
+  12, "A game host"), when the game host is 0.4.0 or later.
 
 ## 21. When something is wrong
 

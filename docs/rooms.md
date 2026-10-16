@@ -144,6 +144,75 @@ browsers see them).
   node in a room. The same file puts the host's saved tables into the daily
   backup (`ASTERISM_BACKUP_EXTRA`).
 
+## A game host's permanent tables (0.2.3)
+
+A game host can also keep tables outside the rooms, on the registered side
+of the router, for the boards that connect with their own certificates and
+for the browsers with a pass (asterism-games 0.4.0, its README "Permanent
+tables"). It is one more process of the host with a certificate of its
+own, a row of the registry like any other node, and nothing in the
+console's code is particular to it: two roles and a row.
+
+- **The host's role** (Admin > Relay > Roles, "New role"), `games-host`:
+
+  ```
+  Read and write   asterism/${node}
+                   asterism/${node}/games/**
+                   asterism/${node}/@profile
+  Watch            asterism/**
+  Browsers have this role: no
+  ```
+
+  The host's place and nothing more: it puts its tables' states
+  (`asterism/games/games/<table>/state`) and answers the calls on them, as
+  its own node only. It reads nobody's keys and calls nobody.
+- **The players' role**, `games` (the boards and the browsers that may sit
+  at the tables):
+
+  ```
+  Read             asterism/*/games/**
+  Ask              asterism/*/games/*/call/${node}
+                   asterism/*/games/*/meta
+  Browsers have this role: yes
+  Opens in a browser page: /app/game/mahjong/mahjong.app.rb
+  ```
+
+  The tables' states and presence to read, the tables to call in its own
+  name only. It writes nothing: a board's own presence comes from the role
+  it has already ("match", the app `game` the table's screen runs as).
+  Give it to the rows of the boards (Edit, tick `games` next to `match`);
+  "Opens in a browser page" puts the table's screen among the apps of "Open
+  the browser build".
+- **The host's row**: Register, kind `client`, name `games` (the
+  certificate's name is the host's node ID), role `games-host`. Open it,
+  "Issue a certificate", "Save all (.tar)": `games.tar` goes to the game
+  host (asterism-games docs/install.md, "Permanent tables").
+- **Apply** (the banner "Review and apply"): the router takes the new rows
+  and roles when it restarts. Everyone connected comes back within seconds;
+  "When nobody is connected" waits instead.
+
+What these roles keep closed (`test/lib/relay/game_host_roles_test.rb`):
+
+- A board sees the tables and calls them, but only in its own name: it
+  cannot call as another board or a browser, answer a table's calls, write
+  a table's state, or make a table of its own (its node's `games` keys are
+  not its to write). A board's seat is held by its node ID, which only that
+  board's certificate can call under, so no one else gets its token, and
+  with it its hand.
+- The browsers are one subject at the router (section "Browsers" of
+  docs/g1_5.md): a browser calls under the browsers' node IDs
+  (`wasm-$*`), never a board's. One browser can still call under another
+  browser's node ID, and a table gives a node its seat's token back when it
+  joins again, so a browser player's hand is as safe as the other pass
+  holders are trusted. The boards' seats are not affected.
+- The rooms are as before: a room's slot reaches only `room/<slot>/**`, and
+  the host's row and the players' rows reach nothing of a room. The host's
+  room processes keep using the slots' certificates.
+
+The rooms' page shows the permanent tables under the game host's line
+(state and counts, the same as a room's tables), and the graph shows the
+host's node `games` and its tables on the registered side.
+
 ## What a room does not protect
 
 Everyone in a room has the same key, so inside the room nobody is told

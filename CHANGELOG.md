@@ -8,6 +8,19 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.2.3
+
+What an update needs: nothing beyond `./update.sh 0.2.3`. No migration,
+no change to `.env`, nginx or the router's configuration.
+
+- A game host's permanent tables (asterism-games 0.4.0): the rooms' page
+  shows them under the game host's line (the host's node, whether its
+  process is up or waits for its certificate, each table's state and
+  counts). The tables themselves need no code in the console: two roles
+  (`games-host` for the host's row, `games` for the boards and the
+  browsers) and a row, docs/rooms.md "A game host's permanent tables", with
+  a test that asks the ACL what those roles allow and keep closed.
+
 ## 0.2.2
 
 What an update needs: nothing beyond `./update.sh 0.2.2`; add

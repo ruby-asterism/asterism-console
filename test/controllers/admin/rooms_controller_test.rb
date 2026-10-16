@@ -83,6 +83,19 @@ class Admin::RoomsControllerTest < ActionDispatch::IntegrationTest
                                        "tables" => { "mahjong1" => { "st" => "play", "humans" => 3, "cpus" => 1, "members" => 5 } } } }
     get admin_room_path(room)
     assert_match "mahjong1: playing, 3 seated, 1 CPU, 5 at the table", response.body
+    assert_no_match "Permanent tables", response.body
+    status["permanent"] = { "node" => "games", "state" => "up", "table_names" => %w[mahjong1 mahjong2],
+                            "tables" => { "mahjong1" => { "st" => "wait", "humans" => 1, "cpus" => 0, "members" => 2 },
+                                          "mahjong2" => { "st" => "play", "humans" => 2, "cpus" => 2, "members" => 2, "away" => 1 } } }
+    get admin_rooms_path
+    assert_match "Permanent tables of the node <code>games</code>", response.body
+    assert_match "mahjong1: in its lobby, 1 seated, 0 CPU, 2 at the table", response.body
+    assert_match "mahjong2: playing, 2 seated, 2 CPU, 2 at the table, 1 away", response.body
+    status["permanent"] = { "node" => nil, "state" => "no certificate", "table_names" => %w[mahjong1 mahjong2], "tables" => {} }
+    get admin_rooms_path
+    assert_match "waiting for its certificate", response.body
+    assert_match "mahjong2: -", response.body
+    status.delete("permanent")
     delete admin_room_path(room)
     post admin_rooms_path, params: { room: { name: "Other", app: "", app_other: "/app/test/other.app.rb", hours: "1" } }
     assert_equal "/app/test/other.app.rb", Room.last.app
