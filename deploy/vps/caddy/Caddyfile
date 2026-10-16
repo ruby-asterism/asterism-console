@@ -6,7 +6,7 @@
 #                                       /admin only from the admins' addresses
 #   wss://router.example.org:7443       the browsers' door (127.0.0.1:ROUTER_WS_PORT),
 #                                       only after the console says the pass is live;
-#                                       /room: the rooms' door (127.0.0.1:ROOM_DOOR_PORT)
+#                                       /room, /room/seat: the rooms' door (127.0.0.1:ROOM_DOOR_PORT)
 #
 # Replace the names, the addresses and the ports (.env). Caddy logs no
 # requests unless a "log" directive asks it to; if you add one, the door's
@@ -45,6 +45,20 @@ router.example.org:7443 {
 		header Upgrade websocket
 	}
 	handle @room {
+		reverse_proxy 127.0.0.1:7452 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	# A page's seat in a room (0.3.0, docs/rooms.md "Seats"): a POST whose body
+	# holds the key and the page's secret (keep bodies out of any log you add).
+	@seat {
+		path /room/seat
+		method POST OPTIONS
+	}
+	handle @seat {
+		request_body {
+			max_size 2KB
+		}
 		reverse_proxy 127.0.0.1:7452 {
 			header_up X-Forwarded-For {remote_host}
 		}

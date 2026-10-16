@@ -21,6 +21,25 @@
 # 4. closes the connection when the key ends (24 hours at most), when its
 #    room is closed early, or when the room's slot is given to another room.
 #
+# Seats (0.3.0, docs/rooms.md "Seats"): for a slot whose seats the router's
+# configuration lets in (rooms.json "seats"), step 3 is different. The page
+# first takes a seat: POST /room/seat with {"t": <the room's key>, "s": <its
+# secret for the room>} in the body (never in the URL or a header); the
+# door checks the key as above, looks the SHA-256 of "<room>:<secret>" up in
+# its seats' table (a file of its own, seats_file: it never holds a
+# secret) and answers {"node": "wasm-0103", "seat": "03"}: the same seat for
+# the same secret until the room is over, a free seat for a new one, a seat
+# nobody has been connected on for seat_idle seconds (30 minutes) when no
+# seat is free, else 409. The WebSocket then comes as before, and the door
+# answers 101 itself and waits for the first message: a Text with
+# {"s": <the secret>}. Only when its seat is in the table does it connect
+# to zenohd, with the seat's certificate (room-<slot>-s<seat>), whose ACL
+# binds the page's writes and calls to the seat's node ID. Otherwise it
+# closes the WebSocket: 4403 (no seat for this secret), 4408 (no secret in
+# time), 4426 (a Binary first: a page from before 0.3.0; legacy_slot lets
+# such a page in with the slot's certificate, as before), 1013 (zenohd is
+# not there). A room that is over loses its seats.
+#
 # Keys whose signature does not check are counted per address; past
 # BAD_LIMIT in BAD_WINDOW seconds such an address is answered 429 for
 # BAD_BLOCK seconds, and its refusals are no longer logged one by one. A
@@ -30,7 +49,10 @@
 #
 # Answers: 400 not a WebSocket request to /room, 403 a key that does not
 # check, 410 a room that has ended or is closed, 429 see above, 503 the
-# room or the door is full or zenohd is not there. The key is never logged.
+# room or the door is full or zenohd is not there. POST /room/seat: 200,
+# 400 (no key and secret in the body), 403, 404 (the room's slot has no
+# seats), 409 (every seat is taken), 410, 429. Neither the key nor a secret
+# (nor its hash) is ever logged.
 #
 # Plain Ruby (the standard library and lib/relay/room_token.rb): two
 # threads per connection, so run it with a small thread stack
@@ -56,15 +78,30 @@ module Relay
     CHECK_SECONDS = 0.5
     # A key may say it ends up to this far past the signer's cap (clocks).
     SKEW = 300
-    STATUS = { 400 => "Bad Request", 403 => "Forbidden", 410 => "Gone", 429 => "Too Many Requests",
-               503 => "Service Unavailable" }.freeze
+    STATUS = { 200 => "OK", 204 => "No Content", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found",
+               405 => "Method Not Allowed", 409 => "Conflict", 410 => "Gone", 411 => "Length Required",
+               429 => "Too Many Requests", 503 => "Service Unavailable" }.freeze
+    # Seats (0.3.0).
+    BODY_MAX = 2048
+    SECRET = /\A[0-9a-f]{32}\z/
+    SEAT_IDLE = 1800.0
+    SEAT_WAIT = 5.0
+    TOUCH_EVERY = 60.0
+    # WebSocket close codes the page can tell apart.
+    CLOSE_NO_SEAT = 4403
+    CLOSE_NO_SECRET = 4408
+    CLOSE_OLD_PAGE = 4426
+    CLOSE_TRY_AGAIN = 1013
 
     # One connection: the browser's socket, zenohd's, and what it is for.
-    Conn = Struct.new(:client, :tls, :room, :slot, :ends_at, :ip, :opened_at, :closing, keyword_init: true) do
+    Conn = Struct.new(:client, :tls, :room, :slot, :seat, :ends_at, :ip, :opened_at, :closing, :upgraded,
+                      keyword_init: true) do
+      def label = "room #{room} slot #{slot}#{" seat #{seat}" if seat}"
+
       def close(reason, log)
         return if closing
         self.closing = true
-        log.call("room #{room} slot #{slot}: closing a connection from #{ip} (#{reason})")
+        log.call("#{label}: closing a connection from #{ip} (#{reason})")
         [ tls, client ].each do |s|
           s&.close
         rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
@@ -78,10 +115,15 @@ module Relay
     # listen / status_listen: "host:port" (port 0: any free one, for tests).
     # upstream: zenohd's mutual-TLS listener; tls_name: the name its
     # certificate carries. rooms_file: Relay::RoomFiles' file. certs_dir:
-    # room-<slot>.pem / .key and ca.pem.
+    # room-<slot>.pem / .key, room-<slot>-s<seat>.pem / .key and ca.pem.
+    # seats_file: the seats' table (nil: kept in memory only). seat_idle:
+    # seconds without a connection after which a seat may go to another
+    # secret. legacy_slot: a page from before 0.3.0 (no secret) gets in to a
+    # room with seats with the slot's certificate.
     def initialize(listen:, upstream:, rooms_file:, certs_dir:, status_listen: nil, tls_name: nil,
                    total: 48, per_room: RoomToken::MAX_CONNECTIONS, max_message: 65_535,
-                   max_hours: RoomToken::MAX_HOURS, head_seconds: HEAD_SECONDS, log: ->(m) { $stdout.puts(m) })
+                   max_hours: RoomToken::MAX_HOURS, head_seconds: HEAD_SECONDS, seats_file: nil,
+                   seat_idle: SEAT_IDLE, seat_wait: SEAT_WAIT, legacy_slot: false, log: ->(m) { $stdout.puts(m) })
       @listen = listen
       @upstream = upstream
       @tls_name = tls_name || split_hostport(upstream)[0]
@@ -93,13 +135,20 @@ module Relay
       @max_message = max_message
       @max_hours = max_hours
       @head_seconds = head_seconds
+      @seats_file = seats_file
+      @seat_idle = seat_idle
+      @seat_wait = seat_wait
+      @legacy_slot = legacy_slot
+      @seats = {}
+      @seats_ok = true
+      @touched_at = 0.0
       @log = log
       @lock = Mutex.new
       @conns = []
       @pending = 0
       @bad = Hash.new { |h, k| h[k] = [] }
       @blocked = {}
-      @rooms = { "keys" => {}, "slots" => {}, "revoked" => {} }
+      @rooms = { "keys" => {}, "slots" => {}, "revoked" => {}, "ok" => false, "prefix" => "wasm-" }
       @rooms_mtime = :none
       @contexts = {}
       @threads = []
@@ -110,6 +159,7 @@ module Relay
     def start
       @server = TCPServer.new(*split_hostport(@listen))
       @listen_port = @server.addr[1]
+      load_seats
       reload_rooms
       @threads << Thread.new { accept_loop }
       @threads << Thread.new { watch_loop }
@@ -119,7 +169,9 @@ module Relay
         @threads << Thread.new { status_loop }
       end
       log("rooms: listening on #{@listen}, to #{@upstream} (TLS name #{@tls_name}), at most #{@total} " \
-          "connections, #{@per_room} per room, messages up to #{@max_message} bytes")
+          "connections, #{@per_room} per room, messages up to #{@max_message} bytes; seats in " \
+          "#{@seats_file || 'memory'}, given again after #{@seat_idle.round} s without a connection" \
+          "#{', pages without a seat let in with the slot certificate' if @legacy_slot}")
       self
     end
 
@@ -136,6 +188,7 @@ module Relay
         { "rooms" => live.group_by(&:room).transform_values(&:size),
           "slots" => live.group_by(&:slot).transform_values(&:size),
           "total" => live.size, "limit" => @total, "per_room" => @per_room, "pending" => @pending,
+          "seats" => @seats.transform_values { _1["seats"].size },
           "refused" => @counts.dup, "since" => @started_at.iso8601 }
       end
     end
@@ -177,8 +230,10 @@ module Relay
       data = mtime ? JSON.parse(File.read(@rooms_file)) : {}
       keys = Array(data["keys"]).to_h { [ _1["kid"], OpenSSL::PKey.read(_1["public_key"]) ] }
       revoked = Array(data["revoked"]).to_h { [ _1["room"], _1["until"].to_i ] }
+      prefix = data["seat_node_prefix"].to_s.match?(/\A[A-Za-z0-9][A-Za-z0-9_.-]{0,20}\z/) ? data["seat_node_prefix"] : "wasm-"
       @lock.synchronize do
-        @rooms = { "keys" => keys, "slots" => data["slots"].is_a?(Hash) ? data["slots"] : {}, "revoked" => revoked }
+        @rooms = { "keys" => keys, "slots" => data["slots"].is_a?(Hash) ? data["slots"] : {}, "revoked" => revoked,
+                   "ok" => !mtime.nil?, "prefix" => prefix }
         @rooms_mtime = mtime
       end
       log("rooms: #{mtime ? 'read' : 'no'} #{@rooms_file}: #{keys.size} key(s), #{@rooms['slots'].size} open room(s), " \
@@ -187,7 +242,7 @@ module Relay
       # A file being written is replaced whole (rename), so this is a broken
       # file: let no room in until it is good again.
       @lock.synchronize do
-        @rooms = { "keys" => {}, "slots" => {}, "revoked" => {} }
+        @rooms = { "keys" => {}, "slots" => {}, "revoked" => {}, "ok" => false, "prefix" => "wasm-" }
         @rooms_mtime = mtime
       end
       log("rooms: #{@rooms_file} is unreadable (#{e.class}): no room is let in until it is fixed")
@@ -211,30 +266,42 @@ module Relay
           "answering 429 to its keys that do not check for #{BAD_BLOCK.round} s")
     end
 
+    # The key's claims, or [nil, status, why, quiet]. Under the lock.
+    def check_key(token, ip, now)
+      @blocked.delete(ip) if @blocked[ip] && @blocked[ip] <= now
+      reason = nil
+      begin
+        claims = RoomToken.verify(token, @rooms["keys"], now: now.to_i)
+      rescue RoomToken::Invalid => e
+        reason = e.message
+      end
+      if reason == "expired"
+        return [ nil, 410, "the key has ended" ]
+      elsif reason
+        blocked = @blocked.key?(ip)
+        bad_key(ip, now)
+        return [ nil, blocked ? 429 : 403, "a key that does not check (#{reason})", blocked ]
+      end
+      return [ nil, 403, "a key that ends past the cap" ] if claims["exp"] > now + @max_hours * 3600 + SKEW
+      return [ nil, 410, "room #{claims['room']} is closed or no longer on slot #{claims['slot']}" ] unless
+        room_open?(claims["room"], claims["slot"], now)
+      [ claims ]
+    end
+
+    # The seats of a slot the router lets in (rooms.json), 0: none.
+    def seat_count(slot)
+      held = @rooms["slots"][slot]
+      held.is_a?(Hash) ? held["seats"].to_i.clamp(0, 99) : 0
+    end
+
     # [claims, conn] or [nil, status, why, quiet]. Takes a place for the
     # connection (under the lock) when it passes: release it with #forget.
     def admit(token, ip)
       reload_rooms
       now = Time.now.to_f
-      claims = nil
-      reason = nil
       @lock.synchronize do
-        @blocked.delete(ip) if @blocked[ip] && @blocked[ip] <= now
-        begin
-          claims = RoomToken.verify(token, @rooms["keys"], now: now.to_i)
-        rescue RoomToken::Invalid => e
-          reason = e.message
-        end
-        if reason == "expired"
-          return [ nil, 410, "the key has ended" ]
-        elsif reason
-          blocked = @blocked.key?(ip)
-          bad_key(ip, now)
-          return [ nil, blocked ? 429 : 403, "a key that does not check (#{reason})", blocked ]
-        end
-        return [ nil, 403, "a key that ends past the cap" ] if claims["exp"] > now + @max_hours * 3600 + SKEW
-        return [ nil, 410, "room #{claims['room']} is closed or no longer on slot #{claims['slot']}" ] unless
-          room_open?(claims["room"], claims["slot"], now)
+        claims, code, why, quiet = check_key(token, ip, now)
+        return [ nil, code, why, quiet ] unless claims
         live = @conns.reject(&:closing)
         held = @rooms["slots"][claims["slot"]]
         limit = [ claims["max"], held["max"].to_i.positive? ? held["max"].to_i : claims["max"], @per_room ].min
@@ -266,6 +333,7 @@ module Relay
           end
         end
         cut.each { |c, why| c.close(why, @log) }
+        seats_housekeeping(now)
       end
     rescue StandardError => e
       log("rooms: the watch stopped (#{e.class}: #{e.message}); restarting it")
@@ -304,6 +372,7 @@ module Relay
       line = head.to_s.lines.first.to_s
       verb, target, = line.split(" ", 3)
       path, query = target.to_s.split("?", 2)
+      return serve_seat(client, head, verb, ip) if head && path == "/room/seat"
       key = head.to_s[/^Sec-WebSocket-Key:\s*(\S+)/i, 1]
       unless head && verb == "GET" && path == "/room" && key && head.match?(/^Upgrade:\s*websocket\s*$/i)
         @lock.synchronize { @counts["400"] += 1 }
@@ -321,64 +390,296 @@ module Relay
       conn.client = client
       @lock.synchronize { @pending -= 1 }
       pending = false
-      tls = connect_upstream(claims["slot"])
-      unless tls
-        answer(client, 503)
-        return log("rooms: room #{claims['room']} slot #{claims['slot']}: zenohd is not there; answered 503 to #{ip}")
+      seats = @lock.synchronize { seat_count(claims["slot"]) }
+      first_up = nil
+      if seats.positive?
+        tls, first_up = open_with_seat(conn, key, claims, ip)
+        return unless tls
+      else
+        tls = connect_upstream("room-#{claims['slot']}")
+        unless tls
+          answer(client, 503)
+          return log("rooms: room #{claims['room']} slot #{claims['slot']}: zenohd is not there; answered 503 to #{ip}")
+        end
+        conn.tls = tls
+        if conn.closing # cut while connecting
+          tls.close rescue nil
+          return
+        end
+        switch(conn, key)
       end
-      conn.tls = tls
-      if conn.closing # cut while connecting
-        tls.close rescue nil
-        return
-      end
-      accept = Base64.strict_encode64(Digest::SHA1.digest(key + WS_GUID))
-      client.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" \
-                   "Sec-WebSocket-Accept: #{accept}\r\n\r\n")
       [ client, tls.to_io ].each { _1.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) rescue nil }
       n = @lock.synchronize { @conns.count { _1.room == claims["room"] && !_1.closing } }
-      log("rooms: room #{claims['room']} slot #{claims['slot']}: open from #{ip} (#{n} in the room), until " \
+      log("rooms: #{conn.label}: open from #{ip} (#{n} in the room), until " \
           "#{Time.at(conn.ends_at).utc.strftime('%Y-%m-%dT%H:%M:%SZ')}")
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      pump(conn)
-      log("rooms: room #{claims['room']} slot #{claims['slot']}: closed from #{ip} after " \
+      pump(conn, first_up)
+      log("rooms: #{conn.label}: closed from #{ip} after " \
           "#{(Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)} s")
     rescue StandardError => e
       log("rooms: #{e.class}: #{e.message}")
-      answer(client, 503) if conn.nil? || conn.tls.nil?
+      answer(client, 503) unless conn&.upgraded
     ensure
       @lock.synchronize { @pending -= 1 } if pending
       if conn
         conn.closing = true
         forget(conn)
+        @lock.synchronize { touch_seat(conn.room, conn.seat, Time.now.to_f) && save_seats } if conn.seat
       end
       [ conn&.tls, client ].each { _1&.close rescue nil }
     end
 
-    def context(slot)
-      cert_file = File.join(@certs_dir, "room-#{slot}.pem")
+    def switch(conn, key)
+      accept = Base64.strict_encode64(Digest::SHA1.digest(key + WS_GUID))
+      conn.upgraded = true
+      conn.client.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" \
+                   "Sec-WebSocket-Accept: #{accept}\r\n\r\n")
+    end
+
+    # A room with seats: 101, then the first message decides. Returns
+    # [tls, a batch to send first or nil], or nil (the WebSocket is closed
+    # with a code that says why).
+    def open_with_seat(conn, key, claims, ip)
+      client = conn.client
+      slot = claims["slot"]
+      switch(conn, key)
+      unless client.wait_readable(@seat_wait)
+        return refuse_ws(conn, CLOSE_NO_SECRET, "no secret", "no first message within #{@seat_wait} s", ip)
+      end
+      fin, op, data = ws_read_frame(client)
+      first_up = nil
+      case op
+      when 0x1
+        secret = fin ? self.class.secret_of(data) : nil
+        seat = secret && @lock.synchronize { seat_for(claims["room"], secret, Time.now.to_f) }
+        return refuse_ws(conn, CLOSE_NO_SEAT, "no seat", "no seat for its secret (POST /room/seat first)", ip) unless seat
+        conn.seat = seat
+        name = "room-#{slot}-s#{seat}"
+      when 0x2
+        unless @legacy_slot && fin
+          return refuse_ws(conn, CLOSE_OLD_PAGE, "this room needs a newer page", "a page without a seat (before 0.3.0)", ip)
+        end
+        first_up = data
+        name = "room-#{slot}"
+      else
+        return refuse_ws(conn, 1002, "", "WebSocket opcode #{op} first", ip)
+      end
+      tls = connect_upstream(name)
+      return refuse_ws(conn, CLOSE_TRY_AGAIN, "zenohd is not there", "zenohd is not there", ip) unless tls
+      conn.tls = tls
+      if conn.closing
+        tls.close rescue nil
+        return nil
+      end
+      [ tls, first_up ]
+    end
+
+    def refuse_ws(conn, code, reason, why, ip)
+      @lock.synchronize { @counts["ws#{code}"] += 1 }
+      ws_write(conn.client, 0x8, [ code ].pack("n") + reason.b, Mutex.new) rescue nil
+      log("rooms: #{conn.label}: refused #{ip}: closed #{code} (#{why})")
+      nil
+    end
+
+    # The secret from the first Text ({"s": "<32 hex>"}), or nil.
+    def self.secret_of(text)
+      s = JSON.parse(text.force_encoding(Encoding::UTF_8))["s"]
+      s.is_a?(String) && SECRET.match?(s) ? s : nil
+    rescue JSON::ParserError, NoMethodError, TypeError, EncodingError
+      nil
+    end
+
+    # ---------------------------------------------------------- the seats
+
+    def self.seat_hash(room, secret) = Digest::SHA256.hexdigest("#{room}:#{secret}")
+
+    # POST /room/seat (and its CORS preflight). The body is never logged.
+    def serve_seat(client, head, verb, ip)
+      return seat_answer(client, 204, nil) if verb == "OPTIONS"
+      return seat_answer(client, 405, nil, ip: ip, why: "#{verb} /room/seat") unless verb == "POST"
+      return seat_answer(client, 411, nil, ip: ip, why: "no Content-Length") if head.match?(/^Transfer-Encoding:/i)
+      len = head[/^Content-Length:\s*(\d+)\s*$/i, 1]
+      return seat_answer(client, 411, nil, ip: ip, why: "no Content-Length") unless len
+      return seat_answer(client, 400, nil, ip: ip, why: "a #{len}-byte body") if len.to_i > BODY_MAX
+      body = read_body(client, len.to_i)
+      data = begin
+        body && JSON.parse(body.force_encoding(Encoding::UTF_8))
+      rescue JSON::ParserError, EncodingError
+        nil
+      end
+      token = data.is_a?(Hash) ? data["t"] : nil
+      secret = data.is_a?(Hash) ? data["s"] : nil
+      unless token.is_a?(String) && secret.is_a?(String) && SECRET.match?(secret)
+        return seat_answer(client, 400, nil, ip: ip, why: "no key and secret in the body")
+      end
+      reload_rooms
+      now = Time.now.to_f
+      code, out, why, quiet = @lock.synchronize do
+        claims, c, w, q = check_key(token, ip, now)
+        next [ c, nil, w, q ] unless claims
+        n = seat_count(claims["slot"])
+        next [ 404, { "error" => "no seats" }, "room #{claims['room']} slot #{claims['slot']} has no seats" ] if n.zero?
+        seat, how = assign_seat(claims, secret, n, now)
+        next [ 409, { "error" => "full" }, "room #{claims['room']}: all #{n} seats are taken" ] unless seat
+        [ 200, { "node" => "#{@rooms['prefix']}#{claims['slot']}#{seat}", "seat" => seat },
+          "room #{claims['room']} slot #{claims['slot']} seat #{seat} (#{how})" ]
+      end
+      seat_answer(client, code, out, ip: ip, why: why, quiet: quiet)
+    end
+
+    def read_body(io, len)
+      body = +""
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @head_seconds
+      while body.bytesize < len
+        left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        return nil if left <= 0 || !io.wait_readable(left)
+        body << io.readpartial(len - body.bytesize)
+      end
+      body
+    rescue EOFError, IOError, SystemCallError
+      nil
+    end
+
+    # The answer to a seat request: JSON (or nothing), for any origin (the
+    # page is on another name than the router; no cookie is involved).
+    def seat_answer(client, code, data, ip: nil, why: nil, quiet: false)
+      body = data ? JSON.generate(data) : ""
+      client.write("HTTP/1.1 #{code} #{STATUS[code]}\r\nContent-Type: application/json\r\n" \
+                   "Content-Length: #{body.bytesize}\r\nCache-Control: no-store\r\n" \
+                   "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\n" \
+                   "Access-Control-Allow-Headers: Content-Type\r\nAccess-Control-Max-Age: 600\r\n" \
+                   "Connection: close\r\n\r\n#{body}")
+      return if code == 204
+      @lock.synchronize { @counts["seat_#{code}"] += 1 }
+      return if quiet
+      log(code == 200 ? "rooms: #{why}: for a page from #{ip}" : "rooms: refused a seat to #{ip}: #{code} (#{why})")
+    rescue IOError, SystemCallError
+      nil
+    end
+
+    # A seat for the secret in the room (under the lock): [seat, how] or
+    # nil when every seat is taken.
+    def assign_seat(claims, secret, n, now)
+      room = claims["room"]
+      entry = (@seats[room] ||= { "slot" => claims["slot"], "until" => claims["exp"], "seats" => {} })
+      h = self.class.seat_hash(room, secret)
+      seats = entry["seats"]
+      if (got = seats[h]) && got["seat"].to_i.between?(1, n)
+        got["at"] = now
+        save_seats
+        return [ got["seat"], "again" ]
+      end
+      taken = seats.values.map { _1["seat"] }
+      seat = (1..n).map { format("%02d", _1) }.find { !taken.include?(_1) }
+      how = "new"
+      unless seat
+        live = @conns.reject(&:closing).select { _1.room == room }.map(&:seat)
+        old_h, old = seats.reject { |_, v| live.include?(v["seat"]) || now - v["at"].to_f < @seat_idle }
+                          .min_by { |_, v| v["at"].to_f }
+        return nil unless old_h
+        seats.delete(old_h)
+        seat = old["seat"]
+        how = "given again: nobody on it for #{((now - old['at'].to_f) / 60).round} min"
+      end
+      seats[h] = { "seat" => seat, "at" => now }
+      save_seats
+      [ seat, how ]
+    end
+
+    # The seat of the secret in the room, touched (under the lock), or nil.
+    def seat_for(room, secret, now)
+      entry = @seats[room] or return nil
+      got = entry["seats"][self.class.seat_hash(room, secret)] or return nil
+      return nil unless got["seat"].to_i.between?(1, seat_count(entry["slot"]))
+      got["at"] = now
+      save_seats
+      got["seat"]
+    end
+
+    def touch_seat(room, seat, now)
+      got = @seats.dig(room, "seats")&.values&.find { _1["seat"] == seat } or return false
+      got["at"] = now
+      true
+    end
+
+    # On the watch: a room that is over loses its seats (only when the
+    # rooms' file reads: a broken file is not a closed room); a seat with a
+    # connection is touched every TOUCH_EVERY seconds, so a door started
+    # again knows it was in use.
+    def seats_housekeeping(now)
+      @lock.synchronize do
+        dirty = false
+        if @rooms["ok"]
+          @seats.keys.each do |room|
+            next if room_open?(room, @seats[room]["slot"], now)
+            n = @seats.delete(room)["seats"].size
+            dirty = true
+            log("rooms: room #{room}: its #{n} seat(s) are cleared (the room is over)")
+          end
+        end
+        if now - @touched_at >= TOUCH_EVERY
+          @touched_at = now
+          @conns.reject(&:closing).each { |c| dirty = true if c.seat && touch_seat(c.room, c.seat, now) }
+        end
+        save_seats if dirty
+      end
+    end
+
+    def load_seats
+      return unless @seats_file && File.exist?(@seats_file)
+      data = JSON.parse(File.read(@seats_file))
+      rooms = data["rooms"]
+      raise TypeError unless rooms.is_a?(Hash)
+      @seats = rooms.select do |room, e|
+        room.match?(RoomToken::ROOM) && e.is_a?(Hash) && e["slot"].to_s.match?(RoomToken::SLOT) && e["seats"].is_a?(Hash)
+      end
+      log("rooms: read #{@seats_file}: #{@seats.size} room(s) with seats")
+    rescue JSON::ParserError, SystemCallError, TypeError, NoMethodError => e
+      @seats = {}
+      log("rooms: #{@seats_file} is unreadable (#{e.class}): starting with no seats taken")
+    end
+
+    # Writes the seats' table (under the lock). Only hashes, never a secret.
+    def save_seats
+      return true unless @seats_file
+      tmp = "#{@seats_file}.tmp"
+      File.write(tmp, JSON.generate({ "format" => 1, "rooms" => @seats }))
+      File.chmod(0o600, tmp)
+      File.rename(tmp, @seats_file)
+      @seats_ok = true
+    rescue SystemCallError => e
+      log("rooms: cannot write #{@seats_file} (#{e.class}): the seats are kept in memory only") if @seats_ok
+      @seats_ok = false
+      true
+    end
+
+    # The TLS context for a certificate of the rooms' directory: room-<slot>
+    # or room-<slot>-s<seat>.
+    def context(name)
+      cert_file = File.join(@certs_dir, "#{name}.pem")
       mtime = File.mtime(cert_file)
-      cached = @contexts[slot]
+      cached = @contexts[name]
       return cached[1] if cached && cached[0] == mtime
       ctx = OpenSSL::SSL::SSLContext.new
       ctx.min_version = OpenSSL::SSL::TLS1_2_VERSION
       ctx.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
-      ctx.key = OpenSSL::PKey.read(File.read(File.join(@certs_dir, "room-#{slot}.key")))
+      ctx.key = OpenSSL::PKey.read(File.read(File.join(@certs_dir, "#{name}.key")))
       ctx.ca_file = File.join(@certs_dir, "ca.pem")
       ctx.verify_mode = OpenSSL::SSL::VERIFY_PEER
       ctx.verify_hostname = true
-      @contexts[slot] = [ mtime, ctx ]
+      @contexts[name] = [ mtime, ctx ]
       ctx
     end
 
-    def connect_upstream(slot)
+    def connect_upstream(name)
       tcp = Socket.tcp(*split_hostport(@upstream), connect_timeout: 3)
-      tls = OpenSSL::SSL::SSLSocket.new(tcp, context(slot))
+      tls = OpenSSL::SSL::SSLSocket.new(tcp, context(name))
       tls.hostname = @tls_name
       tls.sync_close = true
       tls.connect
       tls
     rescue SystemCallError, IOError, OpenSSL::SSL::SSLError, SocketError => e
-      log("rooms: slot #{slot}: no TLS link to #{@upstream} (#{e.class}: #{e.message})")
+      log("rooms: #{name}: no TLS link to #{@upstream} (#{e.class}: #{e.message})")
       tcp&.close rescue nil
       nil
     end
@@ -453,10 +754,11 @@ module Relay
       end
     end
 
-    def pump(conn)
+    def pump(conn, first_up = nil)
       client = conn.client
       tls = conn.tls
       wlock = Mutex.new
+      tls.write([ first_up.bytesize ].pack("v") + first_up) if first_up
       up = Thread.new do # browser -> zenohd
         msg = +""
         loop do
@@ -475,7 +777,7 @@ module Relay
           end
         end
       rescue EOFError, IOError, SystemCallError, OpenSSL::SSL::SSLError => e
-        log("rooms: room #{conn.room}: from the browser: #{e.message}") unless conn.closing || e.is_a?(EOFError)
+        log("rooms: #{conn.label}: from the browser: #{e.message}") unless conn.closing || e.is_a?(EOFError)
       ensure
         conn.close("the browser side ended", ->(_) { }) unless conn.closing
       end

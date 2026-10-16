@@ -135,7 +135,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     @dir = Dir.mktmpdir
     ca = Relay::CertAuthority.create(@dir)
     ca.issue("zenohd-test", dns: %w[localhost])
-    %w[room-01 room-02].each { ca.issue(_1) }
+    %w[room-01 room-02 room-01-s01 room-01-s02 room-02-s01].each { ca.issue(_1) }
     @key = OpenSSL::PKey.generate_key("ED25519")
     @kid = Relay::RoomToken.kid(@key)
     @rooms_file = File.join(@dir, "rooms.json")
@@ -153,13 +153,16 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
   teardown do
     @clients&.each(&:close)
     @door&.stop
+    @seat_door&.stop
     @upstream&.close
     FileUtils.rm_rf(@dir)
   end
 
   def write_rooms(slots, revoked: [], keys: [ @key ])
     data = { "format" => 1, "keys" => keys.map { { "kid" => Relay::RoomToken.kid(_1), "public_key" => _1.public_to_pem } },
-             "slots" => slots.transform_values { |room, max| { "room" => room, "until" => Time.now.to_i + 3600, "max" => max } },
+             "slots" => slots.transform_values { |room, max, seats| { "room" => room, "until" => Time.now.to_i + 3600, "max" => max,
+                                                                       "seats" => seats.to_i } },
+             "seat_node_prefix" => "wasm-", "hosts" => [ "games" ],
              "revoked" => revoked.map { { "room" => _1, "until" => Time.now.to_i + 3600 } } }
     tmp = "#{@rooms_file}.tmp"
     File.write(tmp, JSON.generate(data))
@@ -298,5 +301,187 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     assert_equal "200", res.code
     body = JSON.parse(res.body)
     assert_equal [ 1, 5 ], body.values_at("total", "limit")
+  end
+
+  # ------------------------------------------------------------ seats (0.3.0)
+
+  SECRET_A = "a1" * 16
+  SECRET_B = "b2" * 16
+  SECRET_C = "c3" * 16
+
+  # A door whose slot 01 has 2 seats (slot 02 none), its own seats' file.
+  def seat_door(**opts)
+    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16 ] })
+    @seats_file ||= File.join(@dir, "seats.json")
+    @seat_door = Relay::RoomDoor.new(listen: "127.0.0.1:0", upstream: "127.0.0.1:#{@upstream.port}", tls_name: "localhost",
+                                     rooms_file: @rooms_file, certs_dir: @dir, total: 10, head_seconds: 1,
+                                     seats_file: @seats_file, seat_wait: 1, log: ->(m) { @logs << m }, **opts).start
+  end
+
+  # POST /room/seat: [status, body (parsed), the raw answer].
+  def seat(tok, secret, door: @seat_door, body: nil, ip: nil, verb: "POST")
+    s = TCPSocket.new("127.0.0.1", door.listen_port)
+    body ||= JSON.generate({ "t" => tok, "s" => secret })
+    head = "#{verb} /room/seat HTTP/1.1\r\nHost: router.test\r\nContent-Type: text/plain\r\n" \
+           "Content-Length: #{body.bytesize}\r\nOrigin: https://play.test\r\n"
+    head += "X-Forwarded-For: #{ip}\r\n" if ip
+    s.write(head + "\r\n" + body)
+    raw = s.read
+    code = raw[/\AHTTP\/1.1 (\d+)/, 1].to_i
+    text = raw.split("\r\n\r\n", 2)[1].to_s
+    [ code, text.empty? ? nil : JSON.parse(text), raw ]
+  ensure
+    s&.close
+  end
+
+  def seat_client(tok, secret, door: @seat_door)
+    c = Client.new(door.listen_port, tok).tap { @clients << _1 }
+    c.frame(JSON.generate({ "s" => secret }), opcode: 0x1) if secret
+    c
+  end
+
+  # The close code of a WebSocket the door closed (nil: not closed).
+  def close_code(c)
+    loop do
+      op, data = c.read_message(2)
+      return nil unless op
+      return data.unpack1("n") if op == 0x8
+    end
+  end
+
+  test "a seat: the same secret the same seat, another secret another, then 409" do
+    seat_door
+    tok = token
+    code, a, raw = seat(tok, SECRET_A)
+    assert_equal [ 200, { "node" => "wasm-0101", "seat" => "01" } ], [ code, a ]
+    assert_includes raw, "Access-Control-Allow-Origin: *"
+    assert_includes raw, "Cache-Control: no-store"
+    assert_equal [ 200, { "node" => "wasm-0101", "seat" => "01" } ], seat(token, SECRET_A).first(2), "another link, same seat"
+    assert_equal [ 200, { "node" => "wasm-0102", "seat" => "02" } ], seat(tok, SECRET_B).first(2)
+    assert_equal [ 409, { "error" => "full" } ], seat(tok, SECRET_C).first(2)
+    assert_equal({ @room_a => 2 }, @seat_door.status["seats"])
+    assert_equal 0, @upstream.accepts, "taking a seat connects nothing"
+  end
+
+  test "a seat request is checked like a key; a slot without seats says so" do
+    seat_door
+    assert_equal 403, seat("x.y", SECRET_A).first
+    assert_equal 410, seat(token(exp: Time.now.to_i - 5), SECRET_A).first
+    assert_equal 400, seat(token, "short").first
+    assert_equal 400, seat(nil, nil, body: "{not json #{SECRET_A}").first
+    # Answered 400 without reading the body (the client may see the reset
+    # first; nginx refuses such a body itself, client_max_body_size 2k).
+    big = begin
+      seat(nil, nil, body: "x" * 3000).first
+    rescue Errno::ECONNRESET, Errno::EPIPE
+      0
+    end
+    assert_includes [ 400, 0 ], big
+    assert_equal [ 404, { "error" => "no seats" } ], seat(token(room: @room_b, slot: "02"), SECRET_A).first(2)
+    assert_equal 204, seat(nil, nil, verb: "OPTIONS", body: "").first, "the CORS preflight"
+    assert_equal 405, seat(nil, nil, verb: "GET", body: "").first
+  end
+
+  test "the WebSocket of a room with seats: the secret first, then the seat's certificate" do
+    seat_door
+    tok = token
+    seat(tok, SECRET_A)
+    c = seat_client(tok, SECRET_A)
+    assert_equal 101, c.status
+    op, = c.read_message
+    assert_equal 0x2, op, "the InitAck"
+    assert_equal [ "room-01-s01" ], @upstream.names
+    c.frame("hello".b)
+    assert_equal [ 0x2, "hello".b ], c.read_message
+    d = seat_client(tok, SECRET_A)
+    d.read_message
+    assert_equal [ "room-01-s01", "room-01-s01" ], @upstream.names, "a page's second session, the same seat"
+    assert_equal({ @room_a => 2 }, @seat_door.status["rooms"])
+  end
+
+  test "no seat, no secret, an old page: closed, and nothing reaches zenohd" do
+    seat_door
+    tok = token
+    c = seat_client(tok, SECRET_B)
+    assert_equal 101, c.status
+    assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(c), "a secret without a seat"
+    old = seat_client(tok, nil)
+    old.frame("\x01\x02InitSyn".b)
+    assert_equal Relay::RoomDoor::CLOSE_OLD_PAGE, close_code(old), "a page before 0.3.0 (Binary first)"
+    quiet = seat_client(tok, nil)
+    assert_equal Relay::RoomDoor::CLOSE_NO_SECRET, close_code(quiet), "nothing within seat_wait"
+    bad = seat_client(tok, nil)
+    bad.frame("not json", opcode: 0x1)
+    assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(bad)
+    assert_equal 0, @upstream.accepts
+  end
+
+  test "legacy_slot: an old page gets in with the slot's certificate, its first batch goes on" do
+    seat_door(legacy_slot: true)
+    old = seat_client(token, nil)
+    old.frame("InitSyn".b)
+    op, = old.read_message
+    assert_equal 0x2, op
+    assert_equal [ 0x2, "InitSyn".b ], old.read_message, "the stand-in echoes the first batch"
+    assert_equal [ "room-01" ], @upstream.names
+  end
+
+  test "a slot without seats works as before 0.3.0" do
+    seat_door
+    c = client(token(room: @room_b, slot: "02"))
+    assert_equal 101, c.status
+    c.read_message
+    assert_equal [ "room-02" ], @upstream.names
+  end
+
+  test "a seat nobody is on for seat_idle goes to a new secret; a seat in use does not" do
+    seat_door(seat_idle: 0.6)
+    tok = token
+    seat(tok, SECRET_A)
+    seat(tok, SECRET_B)
+    a = seat_client(tok, SECRET_A)
+    a.read_message
+    sleep 0.8
+    assert_equal [ 200, { "node" => "wasm-0102", "seat" => "02" } ], seat(tok, SECRET_C).first(2),
+                 "B's seat (no connection for 0.8 s), not A's (connected)"
+    assert_equal 409, seat(tok, SECRET_B).first, "B now has none, and A's is in use"
+    a.close
+    assert wait_until { @seat_door.status["total"].zero? }
+    assert_equal 409, seat(tok, SECRET_B).first, "A just left"
+    sleep 0.8
+    code, got = seat(tok, SECRET_B)
+    assert_equal 200, code, "both idle now: the one idle longest (C's, never used) goes to B"
+    assert_equal "wasm-0102", got["node"]
+  end
+
+  test "the seats outlive the door, end with their room, and hold no secret" do
+    seat_door
+    tok = token
+    seat(tok, SECRET_A)
+    seat(tok, SECRET_B)
+    @seat_door.stop
+    seat_door
+    assert_equal [ 200, { "node" => "wasm-0102", "seat" => "02" } ], seat(tok, SECRET_B).first(2), "after a restart"
+    text = File.read(@seats_file)
+    assert_equal "600", format("%o", File.stat(@seats_file).mode & 0o777)
+    [ SECRET_A, SECRET_B ].each { refute_includes text, _1 }
+    write_rooms({ "02" => [ @room_b, 16 ] }, revoked: [ @room_a ])
+    assert wait_until { @seat_door.status["seats"].empty? }, "a closed room's seats are cleared"
+    refute_includes File.read(@seats_file), @room_a
+    # The logs: neither the secrets, their hashes, nor the key.
+    hashes = [ SECRET_A, SECRET_B, SECRET_C ].map { Relay::RoomDoor.seat_hash(@room_a, _1) }
+    (([ SECRET_A, SECRET_B, SECRET_C, tok ] + hashes)).each do |x|
+      assert(@logs.none? { _1.include?(x) }, "never logged")
+    end
+  end
+
+  test "a broken rooms' file clears no seat" do
+    seat_door
+    seat(token, SECRET_A)
+    File.write(@rooms_file, "{broken")
+    t = Time.now + 5000
+    File.utime(t, t, @rooms_file)
+    sleep 1.2
+    assert_equal({ @room_a => 1 }, @seat_door.status["seats"])
   end
 end

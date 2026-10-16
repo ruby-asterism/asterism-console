@@ -27,10 +27,13 @@
 #      ("console"); issued again when missing, from another CA, ending
 #      within 30 days or not naming the router's public name
 #   7. the rooms (G2, docs/rooms.md): the room slots' certificates
-#      (room-01 .. room-NN, ASTERISM_ROOM_SLOTS) for the door, the signer's
-#      key that signs the rooms' keys, and the door's file (rooms.json)
+#      (room-01 .. room-NN, ASTERISM_ROOM_SLOTS) and their seats' (0.3.0,
+#      room-NN-s01 .. room-NN-s16, ASTERISM_ROOM_SEATS) for the door, and
+#      the signer's key that signs the rooms' keys
 #   8. the cloud router's configuration from the registry (cloud.json5); a
 #      router starting later starts on it
+#   9. the door's file (rooms.json), which says which slots have seats in
+#      that configuration
 #
 # Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
 # Updating a server: deploy/vps/update.sh (it takes a backup first). It runs
@@ -42,7 +45,7 @@ require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
-USAGE_LINES = 1..38
+USAGE_LINES = 1..41
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -176,7 +179,7 @@ def ensure_rooms(ca_pem)
   if n.zero?
     done "no room slots (ASTERISM_ROOM_SLOTS=0)"
   else
-    Relay::RoomSlots.ensure!(ca_pem) { |slot, what| done "room-#{slot}: #{what}" }
+    Relay::RoomSlots.ensure!(ca_pem) { |name, what| done "#{name}: #{what}" }
     done "in #{Relay::RoomSlots.certs_dir} (the door reads them; apply so that the cloud router lets them in)"
   end
   client = Relay::SignerClient.from_env(root: ROOT)
@@ -187,10 +190,17 @@ def ensure_rooms(ca_pem)
     made = client.make_room_key
     done "made the rooms' signing key #{made['kid']} (in the signer's volume)"
   end
-  Relay::RoomFiles.write!
-  done "wrote #{Relay::RoomFiles.path}"
 rescue Relay::SignerClient::Error => e
   fail!("the signer: #{e.message}")
+end
+
+def write_rooms_file
+  step "The rooms' file (for the door)"
+  Relay::RoomFiles.write!
+  seats = Relay::RoomFiles.seats_in_config
+  done "wrote #{Relay::RoomFiles.path}"
+  done(seats.empty? ? "no slot has seats in the router's configuration" :
+       "seats in the router's configuration: #{seats.map { |slot, n| "#{slot} (#{n})" }.join(', ')}")
 end
 
 # Writes the configuration when it is not the registry's. Returns what
@@ -331,6 +341,7 @@ when "setup"
   ensure_identities(ca_pem)
   ensure_rooms(ca_pem)
   router = write_router_config(update: update)
+  write_rooms_file
   if update
     say "\nDone. update.sh restarts the stack next."
     say(router == "written-not-restarted" ? "The cloud router still runs its previous configuration: Apply once (Admin > Relay)." :

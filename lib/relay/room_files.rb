@@ -4,8 +4,20 @@
 #
 #   {"format": 1, "written_at": "...",
 #    "keys":    [{"kid": "...", "public_key": "<PEM>"}],     the signer's public keys
-#    "slots":   {"01": {"room": "<uid>", "until": <Unix s>, "max": 16, "app": "/app/..."}},
-#    "revoked": [{"room": "<uid>", "until": <Unix s>}]}
+#    "slots":   {"01": {"room": "<uid>", "until": <Unix s>, "max": 16, "app": "/app/...", "seats": 16}},
+#    "revoked": [{"room": "<uid>", "until": <Unix s>}],
+#    "seat_node_prefix": "wasm-", "hosts": ["games"]}
+#
+# "seats" (0.3.0, docs/rooms.md "Seats"): how many seats of the slot the
+# router's configuration (the generated cloud.json5) lets in, 0 when none
+# (a console before 0.3.0, ASTERISM_ROOM_SEATS=0, or not applied yet). The
+# door gives the browsers of a room with seats a seat each and connects
+# with the seat's certificate; without seats it connects with the slot's,
+# as before. A seat's node ID is seat_node_prefix, the slot and the seat
+# (wasm-0103). "hosts": the game hosts that join the rooms with their own
+# certificates (ASTERISM_ROOM_HOSTS), whose node IDs (<host>$*) nobody in a
+# room can write under or call as. A game host reads both to know which
+# callers the router has bound to their names.
 #
 # A key passes the door only when its signature checks with one of the
 # keys, it has not ended, its slot holds its room now, and its room is not
@@ -32,14 +44,26 @@ module Relay
       File.join(Settings.rooms_dir(env), "rooms.json")
     end
 
-    def content(at: Time.current, keys: nil)
+    def content(at: Time.current, keys: nil, seats: seats_in_config)
       open_rooms = Room.open_now(at).order(:id).to_a
       slots = open_rooms.to_h { [ _1.slot, { "room" => _1.uid, "until" => _1.expires_at.to_i, "max" => _1.max_connections,
-                                            "app" => _1.app.to_s } ] }
+                                            "app" => _1.app.to_s, "seats" => seats.fetch(_1.slot, 0) } ] }
       revoked = Room.where.not(closed_at: nil).where("expires_at > ?", at).order(:id)
                     .map { { "room" => _1.uid, "until" => _1.expires_at.to_i } }
       { "format" => 1, "written_at" => at.utc.iso8601, "keys" => keys || public_keys, "slots" => slots,
-        "revoked" => revoked }
+        "revoked" => revoked, "seat_node_prefix" => Settings.browser_node_prefix, "hosts" => Settings.room_hosts }
+    end
+
+    # {slot => seats}: the seats 01 .. n of each slot that the router's
+    # configuration file lets in (all of them, in order: a gap stops the
+    # count, so the door never hands out a seat the router refuses).
+    def seats_in_config(path = Settings.config_path)
+      names = CloudConfig.subjects_of(File.exist?(path) ? File.read(path) : nil) || []
+      wanted = Settings.seat_names
+      Settings.slot_names.to_h do |slot|
+        n = wanted.take_while { names.include?(Settings.seat_peer_name(slot, _1)) }.size
+        [ slot, n ]
+      end.select { _2.positive? }
     end
 
     # The signer's public keys, or the ones in the file now.

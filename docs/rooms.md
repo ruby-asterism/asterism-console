@@ -12,14 +12,15 @@ with them.
 | Who | your routers, boards, robots, long-running things | people you invite for a while |
 | Getting in | a certificate from the console's CA (mutual TLS, port 7448) | the room's link (a signed key), through the door (`wss://.../room`) |
 | How long | the certificate's days | the room's hours (3 unless said, at most 24) |
-| Keys | what the roles allow | the room's key space only: `room/<slot>/**` |
+| Keys | what the roles allow | the room's key space only: `room/<slot>/**`; inside it each page writes and calls only under its seat's node ID (0.3.0) |
 | Made by | an admin | an admin (Admin > Rooms) |
 
 ## The parts
 
 ```
- browser (room link) --wss:///room?t=<key>--> nginx --> door (7452) --mutual TLS as room-<slot>--> zenohd tls/7448
-                                                         |  reads /rooms/rooms.json, /rooms/certs/
+ browser (room link) --POST /room/seat {t, s}--> nginx --> door (7452): a seat for the page's secret
+                     --wss:///room?t=<key>, first message {s}--> door --mutual TLS as room-<slot>-s<seat>--> zenohd tls/7448
+                                                         |  reads /rooms/rooms.json, /rooms/certs/; writes /seats/seats.json
  console --(signs keys)--> signer (the rooms' signing key, like the CA's key)
          --(writes)------> /rooms/rooms.json (the signer's public keys, the open rooms, the closed ones)
 ```
@@ -46,14 +47,16 @@ with them.
   the key on its WebSocket URL (`wss://<router>/room?t=<key>`, never over
   plain ws) and gives every Zenoh key it uses the prefix `room/<slot>`
   (picoruby-asterism-zenoh's namespace), so the apps run unchanged in the
-  room. In a room the page is a node under its own ID (`wasm-<6 hex>`):
+  room. In a room the page is a node under its seat's ID (`wasm-0103`,
+  0.3.0, "Seats" below; before 0.3.0 an ID of its own, `wasm-<6 hex>`):
   there are no accounts in a room.
 - **The door** (`lib/relay/room_door.rb`, in `bin/ws_door`) reads the
   request, checks the key (signature with the public keys in
   `rooms.json`, its end, that its room still holds its slot and is not
-  revoked) and the limits, and only then connects to zenohd: nothing
-  reaches zenohd before that, not a connection and not a byte. It answers
-  101 itself and moves the batches: one WebSocket Binary message is one
+  revoked) and the limits, and (in a room with seats) the page's secret
+  in the WebSocket's first message, and only then connects to zenohd,
+  with the seat's certificate: nothing reaches zenohd before that, not a
+  connection and not a byte. It answers 101 itself and moves the batches: one WebSocket Binary message is one
   Zenoh batch, on TLS a batch is a 2-byte length and the batch; it lowers
   the first InitAck's batch size by 2 for the length. It cuts a room's
   connections when the key ends, when the room is closed, and when the
@@ -90,8 +93,8 @@ on by default); a user who is not an admin never receives them.
   queryable, no query (an Asterism call is a query), no token: the console
   cannot write into a room or call an object in one, and nothing it does
   reaches the rooms' sessions. The `@profile` of a room's nodes is not
-  read: a room's ACL (`room/<slot>/**`) does not reach `@` chunks, so the
-  pages cannot put one anyway. The tests check this with an evaluator of
+  read (from 0.3.0 a seat may put its own, "Seats" below; the console's
+  rules do not reach `@` chunks). The tests check this with an evaluator of
   the rules (`test/lib/relay/cloud_config_test.rb`); a run against zenohd
   1.10.1 with two room slots showed the watch and the liveliness query
   answering the rooms' tokens, and a put, a call and a token of the console
@@ -119,13 +122,16 @@ on by default); a user who is not an admin never receives them.
 
 ## A room's host (0.2.2)
 
-A process that holds a room's state (a mahjong table, say) can join from
-inside the server with the slot's certificate, without the door:
-`/rooms/certs/room-<slot>.tar` (the format of the console's "Save all
-(.tar)") and, with the asterism gem,
-`Asterism.connect(credentials: "room-01.tar", config: { "namespace" => "room/01" }, node: "table", app: ...)`.
+A process that holds a room's state (a mahjong table, say) joins from
+inside the server, without the door, with the room's namespace:
+`Asterism.connect(credentials: "games.tar", config: { "namespace" => "room/01" }, app: ...)`.
 The namespace makes its keys the room's (`asterism/...` inside, as the
-browsers see them).
+browsers see them). From 0.3.0 a game host joins with **its own
+certificate** (a registry row named in `ASTERISM_ROOM_HOSTS`, "games"; the
+same row as its permanent tables), and the rooms' tables under its name
+are its alone ("Seats" below). Before 0.3.0 it joined with the slot's
+certificate, `/rooms/certs/room-<slot>.tar`, which every page of the room
+held too; that file is still made (an admin's tests, CRuby).
 
 - **Which rooms a host serves.** `rooms.json` says for each open room what
   its link opens (`"app"`; the door does not use it). A host reads the file
@@ -205,20 +211,124 @@ What these roles keep closed (`test/lib/relay/game_host_roles_test.rb`):
   browser's node ID, and a table gives a node its seat's token back when it
   joins again, so a browser player's hand is as safe as the other pass
   holders are trusted. The boards' seats are not affected.
-- The rooms are as before: a room's slot reaches only `room/<slot>/**`, and
-  the host's row and the players' rows reach nothing of a room. The host's
-  room processes keep using the slots' certificates.
+- The rooms: a room's slot and seats reach only `room/<slot>/**`, and the
+  players' rows reach nothing of a room. The host's row reaches the rooms
+  from 0.3.0, as a room's host does ("Seats" below): its own names in
+  every room (`room/*/asterism/games$*`) to write, the rooms to read and
+  receive, calls only under its own names.
 
 The rooms' page shows the permanent tables under the game host's line
 (state and counts, the same as a room's tables), and the graph shows the
 host's node `games` and its tables on the registered side.
 
+## Seats (0.3.0)
+
+Before 0.3.0 every page of a room came through the door with the slot's
+one certificate, so the router saw the whole room as one client: a page
+could write where another page writes, answer calls for another page or
+for the room's table, and call under another page's node ID. zenohd
+1.10.1 cannot put a name from the connection into a rule (its subjects and
+rules are fixed when it starts, and a rule's key is a plain string), so
+the names a room may use are made beforehand: **seats**.
+
+- **Certificates.** Each slot has `ASTERISM_ROOM_SEATS` (16) seats,
+  `room-01-s01` ... `room-01-s16`, each a registry row (marked room slot,
+  hidden from the registry's list, one line under it) with a certificate
+  whose key `bin/asterism setup` makes on the server, like the slot's. The
+  files go to `/rooms/certs/` for the door only (no `.tar`). A seat's node
+  ID is the browsers' prefix, the slot and the seat: `wasm-0103` is seat 03
+  of slot 01.
+- **The ACL** (`Relay::CloudConfig`, `test/lib/relay/room_seats_acl_test.rb`).
+  A seat reads its whole room (subscriptions, liveliness, gets on
+  `room/<slot>/**`, its `@adv` part, the nodes' `@profile`) and receives
+  everything there; it writes (put, delete, queryable, liveliness token,
+  reply) only under `room/<slot>/asterism/<its node>` (with its `@profile`
+  and `@adv` keys); it calls (a get on `.../call/<caller>`) only as
+  itself. zenohd lets a deny win over an allow inside one subject, and an
+  allow of any subject win over the other subjects, so each seat has two
+  subjects for its one certificate: the common name alone, with "no calls"
+  (a deny on `room/<slot>/asterism/*/*/*/call/**`), and the common name
+  with `link_protocols: ["tls"]`, with "calls as itself" (an allow on
+  `.../call/<its node>`). Meta and profile gets need no caller and stay
+  open. A get with a wildcard (`**`, `.../call/*`) reaches the callee only
+  as a wildcard key, which Asterism answers with nothing. Declared key
+  expressions, fragmented messages and the like are solved by zenohd
+  before the ACL looks: the ACL judges the whole key.
+- **The slot's certificate** keeps its key space, with denies on what
+  belongs to others: the seats' nodes and the game hosts' names, for
+  writes and as the caller of a call. The door no longer uses it (unless
+  `WS_DOOR_ROOM_LEGACY=1`, below); an admin can test with
+  `room-01.tar`.
+- **Game hosts** (`ASTERISM_ROOM_HOSTS`, `games` unless set; `-` for none):
+  the row of that name (the host's own certificate) gets, next to its
+  roles, the rooms' tables: writes under `room/*/asterism/games$*` (the
+  host in each room's namespace, and its bots named `games-...`), the rooms
+  to read and receive, calls under its own names only, meta and profiles.
+  Nobody else in a room can write there or call as the host.
+- **Taking a seat.** The page keeps a secret of its own for the room (16
+  random bytes, hex) and, before it starts, posts it with the room's key:
+  `POST https://<router>/room/seat`, body `{"t": "<key>", "s": "<secret>"}`
+  (`Content-Type: text/plain` keeps the request simple for CORS; the door
+  answers the preflight anyway). The door checks the key as for the
+  WebSocket and answers `{"node": "wasm-0103", "seat": "03"}`: the same
+  seat for the same secret until the room is over, a free seat for a new
+  secret, and when none is free a seat nobody has been connected on for
+  `WS_DOOR_SEAT_IDLE` seconds (1800), else `409 {"error": "full"}`. `404
+  {"error": "no seats"}`: the room's slot has no seats in the router's
+  configuration (a console before 0.3.0, `ASTERISM_ROOM_SEATS=0`, or not
+  applied yet); the page then runs as before 0.3.0. 403 / 410 / 429 as for
+  the WebSocket.
+- **The WebSocket.** As before, `wss://<router>/room?t=<key>`. In a room
+  with seats the door answers 101 and waits (5 s) for the first message, a
+  Text `{"s": "<secret>"}`, looks the seat up, and only then connects to
+  zenohd with the seat's certificate. A page has up to 4 sessions on one
+  seat. The door closes the WebSocket with 4403 (no seat for this secret:
+  take one first), 4408 (no secret in time), 4426 (a Binary message first:
+  a page from before 0.3.0), 1013 (zenohd is not there; try again). The
+  room's connection limits are as before.
+- **The seats' table** is the door's own file (`WS_DOOR_SEATS_FILE`,
+  `/seats/seats.json` on the `seats` volume, 0600): per room the SHA-256 of
+  "<room ID>:<secret>" and the seat, never a secret. It survives a restart
+  of the door. A room that is over (closed, ended, its slot given to
+  another room) loses its seats within a second.
+- **Nothing of the secret in a log.** It is never in a URL or a header:
+  the POST's body and the WebSocket's first message only, and nginx logs
+  neither. The door logs "room ... slot 01 seat 03 (new): for a page from
+  <address>". (The room's key, as before, is in the WebSocket's URL; nginx
+  writes the request line into its error log when the door itself is not
+  running, e.g. while it restarts.)
+- **The pages from before 0.3.0** send no secret. `WS_DOOR_ROOM_LEGACY=1`
+  lets them in with the slot's certificate while the new browser build is
+  not published yet (they cannot write as a seat or a host then; among
+  themselves they are as unprotected as before). Set it back to 0 once the
+  page that takes seats is out.
+- **A game host trusts the router** (asterism-games 0.5.0): `rooms.json`
+  says, per open room, how many seats its slot has in the router's
+  configuration (`"seats"`), the seats' node prefix and the hosts. A host
+  takes a call from a seat's node ID, or from its own names, as it comes,
+  and checks the others (the old pages' `wasm-<6 hex>`) with their secret
+  until it is told not to. A seat given to a new page after its idle time:
+  the table drops the old member (its hand goes to a CPU) when the seat's
+  node has not called for as long.
+- **Measured** (zenohd 1.10.1, 8 slots of 16 seats, the rehearsal of
+  deploy/local): the configuration 197 KB (19 KB without seats), 338 rules,
+  269 subjects; zenohd from its first log line to listening 24-26 ms (5-7
+  ms without seats), resident 17.5 MB (12.0 MB without seats). A subject
+  is matched once when a session opens, so a message costs the same.
+
 ## What a room does not protect
 
-Everyone in a room has the same key, so inside the room nobody is told
-apart by the router: one page can write where another page writes, or
-claim another's node ID. That is fine for games among people you invited;
-keep anything that matters (driving a robot, say) on the certificates'
-side. What the router does guarantee: a room's connections touch only
+What the router guarantees: a room's connections touch only
 `room/<slot>/**`, and nothing of the registered side, or of other rooms,
-reaches them.
+reaches them; from 0.3.0, inside the room each page writes only under its
+seat's node ID and calls only as itself, and the tables of a game host
+are the host's alone. What is left:
+
+- Anyone with the room's link gets in (a seat each, up to the seats).
+  Keep anything that matters (driving a robot, say) on the certificates'
+  side.
+- Inside a room, reading is free: every page can subscribe to and get
+  everything in the room (a table keeps its players' hands to itself by
+  answering each player's own calls, not through the router).
+- A page from before 0.3.0, let in with `WS_DOOR_ROOM_LEGACY=1`, is as
+  before among the other old pages.

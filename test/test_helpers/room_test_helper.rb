@@ -37,9 +37,11 @@ module RoomTestHelper
     end
   end
 
-  def setup_rooms(slots: 2)
+  def setup_rooms(slots: 2, seats: 2)
     @rooms_tmp = Dir.mktmpdir
-    @room_env = { "ASTERISM_ROOMS_DIR" => File.join(@rooms_tmp, "rooms"), "ASTERISM_ROOM_SLOTS" => slots.to_s }
+    @room_env = { "ASTERISM_ROOMS_DIR" => File.join(@rooms_tmp, "rooms"), "ASTERISM_ROOM_SLOTS" => slots.to_s,
+                  "ASTERISM_ROOM_SEATS" => seats.to_s,
+                  "ASTERISM_RELAY_GENERATED_DIR" => File.join(@rooms_tmp, "generated") }
     @room_env_old = @room_env.keys.to_h { [ _1, ENV[_1] ] }
     @room_env.each { ENV[_1] = _2 }
     @signer = FakeSigner.new(File.join(@rooms_tmp, "ca"))

@@ -9,7 +9,7 @@ class RoomTest < ActiveSupport::TestCase
 
   test "the slots made by setup: rows marked room_slot, in the ACL, their files and a .tar with the namespace" do
     peers = RelayPeer.where(room_slot: true).order(:name)
-    assert_equal %w[room-01 room-02], peers.map(&:name)
+    assert_equal %w[room-01 room-01-s01 room-01-s02 room-02 room-02-s01 room-02-s02], peers.map(&:name)
     assert peers.all?(&:in_acl?)
     assert_equal({ "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" }, peers.first.to_config)
     dir = Relay::RoomSlots.certs_dir
@@ -23,7 +23,8 @@ class RoomTest < ActiveSupport::TestCase
     assert_equal %w[01 02], Room.ready_slots
     seen = []
     Relay::RoomSlots.ensure!(@signer.ca_pem) { |slot, what| seen << [ slot, what ] }
-    assert_equal [ [ "01", "in place" ], [ "02", "in place" ] ], seen, "a second run changes nothing"
+    assert_equal [ [ "room-01", "in place" ], [ "room-01 seats", "2 seats: 2 in place" ],
+                   [ "room-02", "in place" ], [ "room-02 seats", "2 seats: 2 in place" ] ], seen, "a second run changes nothing"
   end
 
   test "rooms take free slots; full when both are open; a closed room frees its slot" do
@@ -51,11 +52,37 @@ class RoomTest < ActiveSupport::TestCase
     other.close!(nil)
     Relay::RoomFiles.write!
     data = JSON.parse(File.read(Relay::RoomFiles.path))
-    assert_equal({ room.slot => { "room" => room.uid, "until" => room.expires_at.to_i, "max" => 8, "app" => "" } },
-                 data["slots"])
+    assert_equal({ room.slot => { "room" => room.uid, "until" => room.expires_at.to_i, "max" => 8, "app" => "",
+                                  "seats" => 0 } },
+                 data["slots"], "no seats in the router's configuration yet")
+    assert_equal [ "wasm-", [ "games" ] ], data.values_at("seat_node_prefix", "hosts")
     assert_equal [ other.uid ], data["revoked"].map { _1["room"] }
     assert_equal [ @signer.kid ], data["keys"].map { _1["kid"] }
     refute_includes File.read(Relay::RoomFiles.path), token
     assert_raises(ArgumentError) { other.mint_key! }
+  end
+
+  test "the seats (0.3.0): rows per slot, their certificates, and the door's file says which the router lets in" do
+    seat = RelayPeer.find_by!(name: "room-01-s02")
+    assert_equal({ "name" => "room-01-s02", "kind" => "client", "in_acl" => true, "room_slot" => "01",
+                   "room_seat" => "02" }, seat.to_config)
+    dir = Relay::RoomSlots.certs_dir
+    assert File.exist?(File.join(dir, "room-01-s02.pem"))
+    assert_equal "600", format("%o", File.stat(File.join(dir, "room-01-s02.key")).mode & 0o777)
+    refute File.exist?(File.join(dir, "room-01-s02.tar")), "only the door uses a seat's certificate"
+    assert_equal({}, Relay::RoomFiles.seats_in_config, "no configuration written yet")
+    config = Relay::Applier.config_for
+    Relay::Applier.new(config: config).write(config.text)
+    assert_equal({ "01" => 2, "02" => 2 }, Relay::RoomFiles.seats_in_config)
+    room = Room.open!(name: "A", app: nil, hours: 2, max_connections: 8, by: nil)
+    Relay::RoomFiles.write!
+    assert_equal 2, JSON.parse(File.read(Relay::RoomFiles.path)).dig("slots", room.slot, "seats")
+    acl = config.access_control
+    sub = acl["subjects"].select { _1["cert_common_names"] == [ "room-01-s02" ] }
+    assert_equal 2, sub.size, "two subjects for the one certificate"
+    seat.update!(enabled: false)
+    config = Relay::Applier.config_for
+    Relay::Applier.new(config: config).write(config.text)
+    assert_equal({ "01" => 1, "02" => 2 }, Relay::RoomFiles.seats_in_config, "seats up to the first one left out")
   end
 end

@@ -8,6 +8,39 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.0
+
+What an update needs: the game host first (asterism-games 0.5.0, when
+there is one), then four lines in `.env` (`ASTERISM_ROOM_SEATS`,
+`ASTERISM_ROOM_HOSTS`, `WS_DOOR_SEAT_IDLE`, `WS_DOOR_ROOM_LEGACY`; set the
+last to 1 while the published browser build is older than the seats), the
+new `location = /room/seat` in nginx, and `./update.sh 0.3.0` (it makes the
+seats' certificates and restarts the router on them). No migration.
+docs/install.md, "From 0.2.3 to 0.3.0".
+
+- Seats in the rooms (docs/rooms.md "Seats"): 16 certificates per slot
+  (`room-NN-sMM`, made by setup); the door gives each page a seat from its
+  secret (`POST /room/seat`, the secret in the body and in the WebSocket's
+  first message, never in a URL, a header or a log; the door keeps only its
+  SHA-256) and connects with the seat's certificate. The router's ACL lets
+  a seat write only under its node ID (`wasm-<slot><seat>`, `@profile`
+  included) and call only as itself (two subjects per certificate). The
+  same secret gets the same seat until the room is over; a seat nobody was
+  on for 30 minutes may go to a new page when all are taken; 409 when
+  full; a room that is over loses its seats.
+- Game hosts in the rooms (`ASTERISM_ROOM_HOSTS`, `games`): the host's own
+  row gets the rooms' tables (`room/*/asterism/games$*`), and nobody else in
+  a room may write there or call under the host's names; the slot
+  certificates get denies on the hosts' and the seats' names.
+- `rooms.json` says, per open room, how many seats the router's
+  configuration lets in, and the seats' node prefix and the hosts (a game
+  host reads them). It is written again on every apply.
+- The registry's list shows the seats as one line; the apply pages count
+  them per slot; the graph leaves them out of the registry.
+- `WS_DOOR_ROOM_LEGACY=1` lets a page from before the seats into a room
+  with seats, with the slot's certificate (the slot's certificate is kept
+  for that and for an admin's tests).
+
 ## 0.2.3
 
 What an update needs: nothing beyond `./update.sh 0.2.3`. No migration,

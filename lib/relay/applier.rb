@@ -99,6 +99,7 @@ module Relay
       text = @config.text(by: by)
       apply.update!(config_text: text, config_digest: @config.digest, plan_json: JSON.generate(plan))
       write(text)
+      refresh_rooms_file(apply)
       state = @graph.call
       before_id = cloud_view(state.graph)[:id]
       out, ok = restart
@@ -118,6 +119,14 @@ module Relay
       File.write(tmp, text)
       File.chmod(0o644, tmp)
       File.rename(tmp, @path)
+    end
+
+    # The door's file says which slots have seats in the configuration
+    # (Relay::RoomFiles): written again with it (when there is one).
+    def refresh_rooms_file(apply)
+      RoomFiles.write! if File.exist?(RoomFiles.path)
+    rescue StandardError => e
+      apply.update!(output: [ apply.output, "rooms' file: #{e.class}: #{e.message}" ].compact.join("\n"))
     end
 
     def restart

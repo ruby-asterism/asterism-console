@@ -1,8 +1,8 @@
 <dl class="facts">
   <dt>File</dt><dd><code><%= plan["config_path"] %></code><%= " (not written by the console yet)" unless plan["written_before"] %></dd>
-  <dt>In the ACL</dt><dd><%= plan["subjects"].presence&.join(", ") || "nobody (everything denied)" %></dd>
-  <dt>Joining</dt><dd><%= plan["joining"].presence&.join(", ") || "-" %></dd>
-  <dt>Leaving</dt><dd><%= plan["leaving"].presence&.join(", ") || "-" %></dd>
+  <dt>In the ACL</dt><dd><%= plan["subjects"].presence&.then { subject_names_text(_1) } || "nobody (everything denied)" %></dd>
+  <dt>Joining</dt><dd><%= plan["joining"].presence&.then { subject_names_text(_1) } || "-" %></dd>
+  <dt>Leaving</dt><dd><%= plan["leaving"].presence&.then { subject_names_text(_1) } || "-" %></dd>
   <dt>Restart</dt><dd><code><%= plan["command"] %></code></dd>
 </dl>
 <h3>Cut by the restart (on the cloud router now)</h3>

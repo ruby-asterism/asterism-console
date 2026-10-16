@@ -217,7 +217,9 @@ The web server ends TLS for two things and forwards to the loopback ports:
 3. `wss://router.example.org:7443/room` -> `127.0.0.1:ROOM_DOOR_PORT` (rooms,
    section 12): no question to the console (the door checks the room's key
    itself), the query kept for the door but kept out of the logs, and a
-   limit on tries per address.
+   limit on tries per address. From 0.3.0 also `POST /room/seat` (and its
+   CORS preflight, OPTIONS) to the same door: a page takes its seat there,
+   with the key and its secret in the body (nginx does not log bodies).
 
 ### nginx (example)
 
@@ -428,6 +430,17 @@ app. How it works: [rooms.md](rooms.md).
   full rooms behind one address), the `asterism_room` and
   `asterism_room_conn` zones of `nginx/asterism-http.conf` and the
   `asterism_room_door` upstream of `nginx/asterism-upstreams.conf`.
+- **Seats** (0.3.0): `bin/asterism setup` also makes `ASTERISM_ROOM_SEATS`
+  (16) seat certificates per slot (`room-01-s01` ...; 128 for 8 slots, a
+  few seconds). The door gives each page in a room a seat and connects
+  with its certificate, so the router binds the page's writes and calls to
+  the seat's node ID (`wasm-0103`). The door keeps its table of seats on a
+  volume of its own (`seats`). Settings: `WS_DOOR_SEAT_IDLE` (1800 s: a
+  seat nobody was on for that long may go to another page when all are
+  taken), `WS_DOOR_ROOM_LEGACY` (1 lets the pages of a browser build from
+  before 0.3.0 in, with the slot's certificate) and `ASTERISM_ROOM_HOSTS`
+  (`games`: the game host whose tables are its alone). How it works:
+  [rooms.md](rooms.md), "Seats".
 - **What a link opens** (0.2.2): `ASTERISM_ROOM_APPS` lists the apps the
   rooms' page offers ("Label=/path", comma separated; env.example has
   Othello and Mahjong), before the roles' browser apps; "Or another app"
@@ -439,7 +452,9 @@ A game host (asterism-games, its `docs/install.md`) runs next to the
 console as a compose project of its own and serves a mahjong table in each
 room whose link opens the table's screen (Opens: Mahjong): it reads
 `rooms.json` and the slots' certificates from the `rooms` volume
-(read-only) and joins zenohd with the room's slot certificate. On the
+(read-only) and joins zenohd with its own certificate (0.3.0 with
+asterism-games 0.5.0: the row `games`, `ASTERISM_ROOM_HOSTS`; before, the
+room's slot certificate). On the
 console's side add `docker-compose.games.yml` (`COMPOSE_FILE=docker-compose.yml:docker-compose.games.yml`
 in `.env`, or `-f` on every command, update.sh included) once the host's
 volume exists: the rooms' page then shows the host (whether it answers,
@@ -806,6 +821,32 @@ From 0.2.2 to 0.2.3 (a game host's permanent tables on the rooms' page):
 - The permanent tables themselves are roles, a row and an Apply (section
   12, "A game host"), when the game host is 0.4.0 or later.
 
+From 0.2.3 to 0.3.0 (seats in the rooms, the game host's own certificate in
+the rooms):
+
+- **Order**: update the game host first, to asterism-games 0.5.0 (its
+  docs/install.md), when there is one. 0.5.0 still works with this console
+  0.2.x; a game host 0.4.x stops serving the rooms' tables under 0.3.0 (its
+  slot certificate may no longer write the host's keys). The host needs the
+  `games.tar` of its permanent tables (or `ASTERISM_GAMES_ROOM_CREDENTIALS`).
+- **`.env`**: add `ASTERISM_ROOM_SEATS=16`, `ASTERISM_ROOM_HOSTS=games`,
+  `WS_DOOR_SEAT_IDLE=1800` and `WS_DOOR_ROOM_LEGACY` (env.example). Set
+  `WS_DOOR_ROOM_LEGACY=1` while the published browser build is one from
+  before the seats (its pages send no secret: with 0 they are closed with
+  4426 and cannot use a room); back to 0 once the new page is out.
+- **nginx**: the new `location = /room/seat` of
+  `nginx/asterism-router.conf` (copy it over yours, or add the block), then
+  `sudo nginx -t && sudo systemctl reload nginx`. Caddy: the `@seat` block
+  of `caddy/Caddyfile`.
+- `./update.sh 0.3.0`: setup makes the 128 seat certificates (8 slots of 16)
+  and the router's configuration with them and restarts the router on it
+  (everyone connected comes back within seconds); the door gets its
+  `seats` volume. No migration.
+- **Check**: `docker compose logs door | grep seats` says where the seats'
+  table is; Admin > Relay lists "And 128 room seats ..."; the rooms' page
+  works as before. With a page that takes seats: the door's log says
+  "room ... slot 01 seat 01 (new): for a page from ...".
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
@@ -823,6 +864,11 @@ From 0.2.2 to 0.2.3 (a game host's permanent tables on the rooms' page):
   The locator's name must be one the router's certificate names
   (`router.example.org`); setup adds the name of
   `ASTERISM_RELAY_PUBLIC_ENDPOINT`, and `ASTERISM_RELAY_EXTRA_DNS` adds more.
+- **A page in a room is closed with 4426** (the door's log: "a page without
+  a seat (before 0.3.0)"): the published browser build is older than the
+  seats; set `WS_DOOR_ROOM_LEGACY=1` until the new one is out. **409** from
+  `/room/seat`: every seat of the room is taken (and in use within
+  `WS_DOOR_SEAT_IDLE`).
 - **A browser page gets 401 at the door**: the pass is used up, expired, or
   taken by another page; make a new one. 403: the door's address allow
   list. 502/503 for a second while the router restarts is normal.

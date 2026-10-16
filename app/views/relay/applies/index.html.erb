@@ -16,8 +16,8 @@
             <td><%= a.user&.email_address %></td>
             <td><%= a.when_text %></td>
             <td><span class="badge <%= { 'ok' => 'ok', 'failed' => 'bad', 'cancelled' => 'bad' }[a.status] || 'warn' %>"><%= a.status %></span></td>
-            <td><%= a.plan["joining"].to_a.join(", ") %></td>
-            <td><%= a.plan["leaving"].to_a.join(", ") %></td>
+            <td><%= subject_names_text(a.plan["joining"]) %></td>
+            <td><%= subject_names_text(a.plan["leaving"]) %></td>
             <td><code><%= a.config_digest %></code></td>
           </tr>
         <% end %>

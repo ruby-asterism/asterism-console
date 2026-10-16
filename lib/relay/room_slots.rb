@@ -13,6 +13,14 @@
 #                       (CRuby: Asterism.connect(credentials: "room-01.tar",
 #                       config: { "namespace" => "room/01" }, ...))
 #
+# Seats (0.3.0, docs/rooms.md "Seats"): each slot has ASTERISM_ROOM_SEATS
+# (16) seats, room-01-s01 .. room-01-s16, each a registry row (room_slot,
+# its ACL fixed: its own node ID wasm-0101 .. in the slot's key space) with
+# a certificate made here like the slot's. The door gives a browser a seat
+# and connects with the seat's certificate:
+#
+#   certs/room-01-s03.key (0600), certs/room-01-s03.pem   (no .tar: only the door uses them)
+#
 # bin/asterism setup makes the missing ones (and those ending within 30
 # days); the cloud router lets them in after the next apply.
 require "fileutils"
@@ -35,33 +43,53 @@ module Relay
       env["ASTERISM_ROOM_HOST_ROUTER"].presence || "tls/zenohd:7448"
     end
 
-    # Makes or renews every slot's certificate. Yields [slot, what happened]
-    # for each. Returns the slots in place.
+    # Makes or renews every slot's certificate and its seats'. Yields
+    # [name, what happened] for each slot and once for each slot's seats
+    # ("room-01 seats"). Returns the slots.
     def ensure!(ca_pem, env: ENV)
       out = certs_dir(env)
       FileUtils.mkdir_p(out)
       Settings.slot_names(env).each do |slot|
         name = Settings.slot_peer_name(slot)
-        peer = RelayPeer.find_by(name: name)
-        if peer && !peer.room_slot?
-          yield slot, "skipped: #{name} is a registry row of its own (not a room slot); rename it" if block_given?
-          next
+        what = ensure_one(name, out, ca_pem, tar: true, description: "room slot #{slot} (G2): its key space " \
+                                                                     "room/#{slot}, for an admin's tests") do |record|
+          write_tar(out, name, slot, record)
         end
-        why = LocalIdentity.stale?(name: name, out: out, ca_pem: ca_pem)
-        if why.nil? && File.exist?(File.join(out, "#{name}.tar"))
-          yield slot, "in place" if block_given?
-          next
+        yield name, what if block_given?
+        seats = Settings.seat_names(env).map do |seat|
+          node = Settings.seat_node(slot, seat, Settings.browser_node_prefix(env))
+          ensure_one(Settings.seat_peer_name(slot, seat), out, ca_pem,
+                     description: "room slot #{slot}, seat #{seat} (0.3.0): the door's certificate for #{node}")
         end
-        RelayPeer.find_or_create_by!(name: name) do |p|
-          p.kind = "client"
-          p.room_slot = true
-          p.cert_days = DAYS
-          p.description = "room slot #{slot} (G2): the door's certificate for the rooms on room/#{slot}"
-        end
-        record = LocalIdentity.issue(name: name, out: out, days: DAYS, description: "room slot #{slot}")
-        write_tar(out, name, slot, record)
-        yield slot, "issued serial #{record.serial} until #{record.not_after.utc.to_date} (#{why || 'no .tar'})" if block_given?
+        yield "#{name} seats", seat_summary(seats) if block_given? && seats.any?
       end
+    end
+
+    # One certificate in place: "in place", "issued ...", or "skipped: ...".
+    def ensure_one(name, out, ca_pem, description:, tar: false)
+      peer = RelayPeer.find_by(name: name)
+      return "skipped: #{name} is a registry row of its own (not a room slot); rename it" if peer && !peer.room_slot?
+      why = LocalIdentity.stale?(name: name, out: out, ca_pem: ca_pem)
+      why ||= "no .tar" if tar && !File.exist?(File.join(out, "#{name}.tar"))
+      return "in place" if why.nil?
+      RelayPeer.find_or_create_by!(name: name) do |p|
+        p.kind = "client"
+        p.room_slot = true
+        p.cert_days = DAYS
+        p.description = description
+      end
+      record = LocalIdentity.issue(name: name, out: out, days: DAYS, description: description)
+      yield record if block_given?
+      "issued serial #{record.serial} until #{record.not_after.utc.to_date} (#{why})"
+    end
+
+    def seat_summary(results)
+      issued = results.count { _1.start_with?("issued") }
+      skipped = results.select { _1.start_with?("skipped") }
+      parts = [ "#{results.size - issued - skipped.size} in place" ]
+      parts << "#{issued} issued" if issued.positive?
+      parts.concat(skipped)
+      "#{results.size} seats: #{parts.join(', ')}"
     end
 
     # certs/<name>.tar from the files issue wrote (the format of the

@@ -6,6 +6,15 @@ module RelayHelper
     @relay_unapplied = !Relay::Applier.new.same_config?
   end
 
+  # Names of the ACL's subjects for the pages, the rooms' seats (0.3.0,
+  # room-NN-sMM, 16 a slot) counted per slot instead of listed.
+  def subject_names_text(names)
+    names = names.to_a
+    seats, others = names.partition { _1.match?(/\Aroom-[0-9]{2}-s[0-9]{2}\z/) }
+    by_slot = seats.group_by { _1[/\Aroom-([0-9]{2})/, 1] }.sort.map { |slot, list| "room-#{slot}: #{list.size} seats" }
+    (others + by_slot).join(", ")
+  end
+
   def presence_badge(peer, seen)
     if seen.include?(peer.name)
       peer.enabled? ? tag.span("connected", class: "badge ok") : tag.span("connected, disabled", class: "badge warn")
