@@ -1,9 +1,10 @@
 module Admin
   # Rooms (G2, docs/rooms.md): an admin makes one, gets its link (once),
   # makes another link, watches its connections and closes it. Making or
-  # closing a room restarts nothing: it takes a slot whose certificate and
-  # ACL are made already, and the door learns of it from the rooms' file
-  # (Relay::RoomFiles), which every change here writes again.
+  # closing a room restarts nothing: it takes a slot whose seats'
+  # certificates and ACL are made already, and the door learns of it from
+  # the rooms' file (Relay::RoomFiles), which every change here writes
+  # again.
   class RoomsController < ApplicationController
     require_admin
     layout "plain"
@@ -15,9 +16,13 @@ module Admin
       write_files
       @rooms = Room.includes(:created_by, :closed_by).order(id: :desc).limit(100)
       @door = Relay::DoorStatus.fetch
-      @ready = Room.ready_slots
+      @seats_in_config = Relay::RoomFiles.seats_in_config
+      @ready = Room.ready_slots(@seats_in_config)
       @slots = Relay::Settings.slot_names
       @busy = Room.open_now.index_by(&:slot)
+      # The seats (0.3.0) are the rooms' own (0.3.1): their certificates in
+      # the rooms' store, not the registry; shown here.
+      @seat_certs = Relay::RoomCerts.summary
       @room = Room.new(max_connections: Relay::Settings.room_max_connections)
       @hours, @max_hours = Relay::Settings.room_hours
       @apps = RoomPage.apps

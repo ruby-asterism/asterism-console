@@ -37,7 +37,7 @@ Contents: [1 What runs](#1-what-runs) / [2 What you need](#2-what-you-need)
  boards --tcp--> home router --mutual TLS--+
  CRuby  ----------- mutual TLS ------------+--> zenohd (tls/7448)     the router, its ACL written by the console
  browser page --wss:// + a pass--> web server :7443 --> door --> zenohd (ws, inside)
- room page ---wss:///room + a room's key--> web server :7443 --> door --mutual TLS, room slot--> zenohd (tls)
+ room page ---wss:///room + a room's key--> web server :7443 --> door --mutual TLS, a seat--> zenohd (tls)
  admin / users --https--> web server :443 --> console (Rails) --> signer (the CA's key, inside)
                                                bridge (the console's own node on the router)
 ```
@@ -410,11 +410,11 @@ registered routers and nodes, and nothing of theirs reaches the room.
 Inside, everyone with the link is alike: what one may do there is up to the
 app. How it works: [rooms.md](rooms.md).
 
-- **Room slots**: `bin/asterism setup` makes `ASTERISM_ROOM_SLOTS` (8) slot
-  certificates (`room-01` ..., rows of the registry marked "room slot"),
-  whose ACL is their slot's key space only, and the signer's key that signs
-  the rooms' keys (in the signer's volume, like the CA's). Apply once after
-  that so that the router lets the slots in. Making and closing rooms then
+- **Room slots**: `ASTERISM_ROOM_SLOTS` (8) slots, each the key space
+  `room/<slot>/**` (rooms open at once). `bin/asterism setup` makes their
+  seats' certificates (next point) and the signer's key that signs the
+  rooms' keys (in the signer's volume, like the CA's). Apply once after
+  that so that the router lets the seats in. Making and closing rooms then
   restarts nothing: a room takes a free slot.
 - **The link**: set `ASTERISM_ROOM_PAGE` (a URL template with `{room}`
   after the `#`, `env.example`); the room's key goes in the fragment, which
@@ -430,17 +430,18 @@ app. How it works: [rooms.md](rooms.md).
   full rooms behind one address), the `asterism_room` and
   `asterism_room_conn` zones of `nginx/asterism-http.conf` and the
   `asterism_room_door` upstream of `nginx/asterism-upstreams.conf`.
-- **Seats** (0.3.0): `bin/asterism setup` also makes `ASTERISM_ROOM_SEATS`
-  (16) seat certificates per slot (`room-01-s01` ...; 128 for 8 slots, a
-  few seconds). The door gives each page in a room a seat and connects
-  with its certificate, so the router binds the page's writes and calls to
-  the seat's node ID (`wasm-0103`). The door keeps its table of seats on a
-  volume of its own (`seats`). Settings: `WS_DOOR_SEAT_IDLE` (1800 s: a
-  seat nobody was on for that long may go to another page when all are
-  taken), `WS_DOOR_ROOM_LEGACY` (1 lets the pages of a browser build from
-  before 0.3.0 in, with the slot's certificate) and `ASTERISM_ROOM_HOSTS`
-  (`games`: the game host whose tables are its alone). How it works:
-  [rooms.md](rooms.md), "Seats".
+- **Seats** (0.3.0): `bin/asterism setup` makes `ASTERISM_ROOM_SEATS` (16)
+  seat certificates per slot (`room-01-s01` ...; 128 for 8 slots, a few
+  seconds). They are the rooms' own (0.3.1), kept in the `rooms` volume,
+  not rows of the registry: Admin > Rooms, "Slots and seats", shows them
+  and which are in use. The door gives each page in a room a seat and
+  connects with its certificate, so the router binds the page's writes and
+  calls to the seat's node ID (`wasm-0103`). The door keeps its table of
+  seats on a volume of its own (`seats`). Settings: `WS_DOOR_SEAT_IDLE`
+  (1800 s: a seat nobody was on for that long may go to another page when
+  all are taken) and `ASTERISM_ROOM_HOSTS` (`games`: the game host whose
+  tables are its alone). How it works: [rooms.md](rooms.md), "Seats"; an
+  admin's own test in a room from CRuby: rooms.md, "An admin in a room".
 - **What a link opens** (0.2.2): `ASTERISM_ROOM_APPS` lists the apps the
   rooms' page offers ("Label=/path", comma separated; env.example has
   Othello and Mahjong), before the roles' browser apps; "Or another app"
@@ -829,11 +830,11 @@ the rooms):
   0.2.x; a game host 0.4.x stops serving the rooms' tables under 0.3.0 (its
   slot certificate may no longer write the host's keys). The host needs the
   `games.tar` of its permanent tables (or `ASTERISM_GAMES_ROOM_CREDENTIALS`).
-- **`.env`**: add `ASTERISM_ROOM_SEATS=16`, `ASTERISM_ROOM_HOSTS=games`,
-  `WS_DOOR_SEAT_IDLE=1800` and `WS_DOOR_ROOM_LEGACY` (env.example). Set
-  `WS_DOOR_ROOM_LEGACY=1` while the published browser build is one from
-  before the seats (its pages send no secret: with 0 they are closed with
-  4426 and cannot use a room); back to 0 once the new page is out.
+- **`.env`**: add `ASTERISM_ROOM_SEATS=16`, `ASTERISM_ROOM_HOSTS=games`
+  and `WS_DOOR_SEAT_IDLE=1800` (env.example). The published browser build
+  must be one that takes seats: an older page sends no secret and is
+  closed with 4426. (0.3.0 had `WS_DOOR_ROOM_LEGACY=1` to let such pages
+  in meanwhile; 0.3.1 has not.)
 - **nginx**: the new `location = /room/seat` of
   `nginx/asterism-router.conf` (copy it over yours, or add the block), then
   `sudo nginx -t && sudo systemctl reload nginx`. Caddy: the `@seat` block
@@ -846,6 +847,31 @@ the rooms):
   table is; Admin > Relay lists "And 128 room seats ..."; the rooms' page
   works as before. With a page that takes seats: the door's log says
   "room ... slot 01 seat 01 (new): for a page from ...".
+
+From 0.3.0 to 0.3.1 (the rooms' certificates out of the registry):
+
+- `./update.sh 0.3.1`. If `.env` has a `WS_DOOR_ROOM_LEGACY` line, remove
+  it (it is no longer read; the pages from before the seats are not let
+  in). No change to nginx or Caddy.
+- **What the update does**: the migration removes the registry's room rows
+  (`room-01` ... and `room-01-s01` ..., and their entries in the
+  certificates' ledger); the seats' certificates stay in the `rooms` volume
+  as they are (not issued again) and the router's ACL takes them from
+  there; setup removes the slots' own certificates (`room-01.key`, `.pem`,
+  `.tar`: nothing uses them any more), writes the router's configuration
+  without the slots' subjects and restarts the router on it. Open rooms
+  keep their slots, links and seats: their pages come back on the same
+  seat within seconds, as after any apply.
+- **Check**: setup's output says "removed 136 room row(s)" (8 slots and
+  their 128 seats) and "removed the room slots' own certificates of before
+  0.3.1 (24 files ...)", then "room-01 seats: 16 seats: 16 in place" for
+  each slot and "asked the cloud router to restart on it". Admin > Relay
+  lists only the rows you registered (no "room seats" line); Admin >
+  Rooms, "Slots and seats", says 128 of 128 good and 128 let in by the
+  cloud router.
+- Going back to 0.3.0 needs the backup the update took (`./update.sh 0.3.0
+  --restore <backup>`, section 16): the rows are gone and 0.3.0 reads the
+  slots from them.
 
 ## 21. When something is wrong
 
@@ -866,7 +892,7 @@ the rooms):
   `ASTERISM_RELAY_PUBLIC_ENDPOINT`, and `ASTERISM_RELAY_EXTRA_DNS` adds more.
 - **A page in a room is closed with 4426** (the door's log: "a page without
   a seat (before 0.3.0)"): the published browser build is older than the
-  seats; set `WS_DOOR_ROOM_LEGACY=1` until the new one is out. **409** from
+  seats; publish the new one. **409** from
   `/room/seat`: every seat of the room is taken (and in use within
   `WS_DOOR_SEAT_IDLE`).
 - **A browser page gets 401 at the door**: the pass is used up, expired, or

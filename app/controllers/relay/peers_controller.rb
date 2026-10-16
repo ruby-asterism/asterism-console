@@ -7,11 +7,7 @@ module Relay
     layout "plain"
 
     def index
-      peers = RelayPeer.includes(:certificates, :roles).order(:kind, :name).to_a
-      # The rooms' seats (0.3.0): 16 rows a slot, made by setup; one line for them.
-      seats, @peers = peers.partition(&:room_seat?)
-      @seats = { "count" => seats.size, "in_acl" => seats.count(&:in_acl?),
-                 "until" => seats.filter_map(&:cert_expires_at).min }
+      @peers = RelayPeer.includes(:certificates, :roles).order(:kind, :name).to_a
       @seen = Relay::Presence.seen(GraphState.current.graph)
       @cloud = Relay::Settings.cloud_name
     end

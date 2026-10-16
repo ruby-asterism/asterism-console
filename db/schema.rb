@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_14_170000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_17_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -230,7 +230,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_170000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.text "nodes"
-    t.boolean "room_slot", default: false, null: false
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 

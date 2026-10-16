@@ -1,8 +1,9 @@
 # A room (G2, docs/rooms.md): a time-limited key space on the cloud router
 # that anyone with the room's link joins through the door, without an
 # account. An admin makes one (name, the app the link opens, how long, how
-# many connections); it takes a free room slot, whose certificate and ACL
-# were made once (Relay::RoomSlots), so making a room restarts nothing.
+# many connections); it takes a free room slot, whose seats' certificates
+# and ACL were made once (Relay::RoomCerts), so making a room restarts
+# nothing.
 #
 # The link carries the room's key (Relay::RoomToken) in its fragment: the
 # signer signs it, the console keeps nothing of it (only how many links it
@@ -49,16 +50,11 @@ class Room < ApplicationRecord
   # Open: not closed early and not ended.
   scope :open_now, ->(at = Time.current) { where(closed_at: nil).where("expires_at > ?", at) }
 
-  # The slots a room can take: those whose certificate is in place and in
-  # the ACL (bin/asterism setup, then an apply).
-  def self.ready_slots
-    names = Relay::Settings.slot_names
-    peers = RelayPeer.includes(:certificates).where(room_slot: true, name: names.map { Relay::Settings.slot_peer_name(_1) })
-    certs = Relay::RoomSlots.certs_dir
-    names.select do |slot|
-      peer = peers.find { _1.name == Relay::Settings.slot_peer_name(slot) }
-      peer&.in_acl? && File.exist?(File.join(certs, "#{peer.name}.key"))
-    end
+  # The slots a room can take: those with seats in the configuration the
+  # cloud router runs with (bin/asterism setup makes the seats'
+  # certificates, an apply lets them in; Relay::RoomFiles.seats_in_config).
+  def self.ready_slots(seats = Relay::RoomFiles.seats_in_config)
+    Relay::Settings.slot_names & seats.keys
   end
 
   # A free slot: ready, with no open room; of those, the one whose last room

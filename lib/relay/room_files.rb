@@ -10,10 +10,10 @@
 #
 # "seats" (0.3.0, docs/rooms.md "Seats"): how many seats of the slot the
 # router's configuration (the generated cloud.json5) lets in, 0 when none
-# (a console before 0.3.0, ASTERISM_ROOM_SEATS=0, or not applied yet). The
-# door gives the browsers of a room with seats a seat each and connects
-# with the seat's certificate; without seats it connects with the slot's,
-# as before. A seat's node ID is seat_node_prefix, the slot and the seat
+# (not applied yet: the console offers such a slot to no room). The door
+# gives the browsers of a room a seat each and connects with the seat's
+# certificate; a slot without seats lets nobody in. A seat's node ID is
+# seat_node_prefix, the slot and the seat
 # (wasm-0103). "hosts": the game hosts that join the rooms with their own
 # certificates (ASTERISM_ROOM_HOSTS), whose node IDs (<host>$*) nobody in a
 # room can write under or call as. A game host reads both to know which

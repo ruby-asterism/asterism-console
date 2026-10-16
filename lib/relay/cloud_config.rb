@@ -29,42 +29,35 @@
 # pattern (settings "browser_nodes", wasm-$*). One browser can write at
 # another browser's node; see docs/g0_w4.md and docs/g1_5.md.
 #
-# Room slots (G2, docs/rooms.md; peers with "room_slot" => "01"): the
-# certificate the door connects with for the rooms on that slot (and a
-# room's host process, if it has one). It gets its slot's key space and
-# nothing else: room/<slot>/** and, since a ** never matches a chunk that
-# starts with @, room/<slot>/**/@adv/** for zenoh-ext's advanced
-# publishers and subscribers (their history and recovery). Its other keys,
-# roles and the admin space are not used.
+# Rooms (G2, docs/rooms.md): a room slot (01 .. 08) is the key space
+# room/<slot>/**, and, since a ** never matches a chunk that starts with
+# @, room/<slot>/**/@adv/** for zenoh-ext's advanced publishers and
+# subscribers (their history and recovery). Nothing else reaches it, and
+# it reaches nothing else.
 #
-# Seats (0.3.0, docs/rooms.md "Seats"; peers with "room_slot" => "01",
-# "room_seat" => "03", certificate room-01-s03): the door gives each browser
-# in a room a seat and connects with that seat's certificate. A seat reads
-# the whole room (subscriptions, liveliness, gets, room/<slot>/**, its @adv
-# part and the nodes' @profile) and writes (put, delete, queryable, token,
-# reply) only under its own node ID, <prefix><slot><seat> (wasm-0103). It
-# calls under its own node ID only: zenohd 1.10.1 lets a deny win over an
-# allow inside one subject but an allow of any subject win over the
-# others, so the seat has two subjects for its one certificate, one (the
-# common name alone) with "no calls" (a deny on .../call/**) and one (the
-# common name and link_protocols tls) with "calls as itself" (an allow on
-# .../call/<its node>).
-#
-# The slot's certificate (room-01) keeps its key space (for an admin's
-# tests, CRuby with room-01.tar; the door uses it only for a slot without
-# seats), with denies on what belongs to others: the seats' nodes, and the
-# game hosts' (settings "room_hosts", node IDs starting with the host's
-# name: a host and its bots) for writes and as the caller of a call.
+# Seats (0.3.0, docs/rooms.md "Seats"; settings "room_seats" => {"01" =>
+# ["01", "02", ...]}, the seats whose certificates the rooms' store holds,
+# Relay::RoomCerts; not registry rows since 0.3.1): the door gives each
+# browser in a room a seat and connects with that seat's certificate
+# (room-01-s03). A seat reads the whole room (subscriptions, liveliness,
+# gets, room/<slot>/**, its @adv part and the nodes' @profile) and writes
+# (put, delete, queryable, token, reply) only under its own node ID,
+# <prefix><slot><seat> (wasm-0103). It calls under its own node ID only:
+# zenohd 1.10.1 lets a deny win over an allow inside one subject but an
+# allow of any subject win over the others, so the seat has two subjects
+# for its one certificate, one (the common name alone) with "no calls" (a
+# deny on .../call/**) and one (the common name and link_protocols tls)
+# with "calls as itself" (an allow on .../call/<its node>). A registry row
+# with a seat's name is left out: the name is the seat's.
 #
 # Game hosts in the rooms (0.3.0): a registry row named in "room_hosts"
 # (games) gets, next to its roles, the rooms' tables: writes under
 # room/*/asterism/<host>$* (the host in each room's namespace, and bots
 # named <host>-...), the whole rooms to read and receive, and calls under
 # its own names only (<host>$*) plus meta and profiles. Nobody else writes
-# there: a seat writes only at its node, the slot's certificate has the
-# deny above.
+# there: a seat writes only at its node.
 #
-# The console in the rooms (0.2.1): when there are room slots, the console's
+# The console in the rooms (0.2.1): when there are seats, the console's
 # own certificate (settings "console", the bridge's "console") may follow
 # who is in the rooms and nothing more: from it only the liveliness watch
 # and liveliness queries on room/*/asterism/**, to it only the tokens and
@@ -79,6 +72,7 @@
 # DEFAULT_CONFIG.json5.
 require "json"
 require "digest"
+require "set"
 
 module Relay
   class CloudConfig
@@ -127,10 +121,9 @@ module Relay
       "accept_pending" => 16,
       "accept_timeout_ms" => 5000,
       "max_message_size" => 4 * 1024 * 1024,
-      # Seats per room slot (0.3.0): their node IDs are
-      # <seat_node_prefix><slot><seat>; the slot's certificate gets denies on
-      # them.
-      "room_seats" => 0,
+      # The rooms' seats (0.3.0): {slot => [seat, ...]} (Relay::RoomCerts.seats),
+      # their node IDs <seat_node_prefix><slot><seat>.
+      "room_seats" => {},
       "seat_node_prefix" => "wasm-",
       # Game hosts in the rooms (0.3.0): node IDs whose rows get the rooms'
       # tables (room/*/asterism/<host>$*).
@@ -147,8 +140,9 @@ module Relay
     def initialize(peers, settings = {}, roles: [])
       @settings = DEFAULTS.merge(settings.transform_keys(&:to_s))
       @roles = roles.map { _1.transform_keys(&:to_s) }.to_h { [ _1["name"], _1 ] }
+      seats = seat_certificates.to_set { _1[2] }
       @peers = peers.map { _1.transform_keys(&:to_s) }
-                    .select { _1["in_acl"] && _1["name"] != @settings["name"] }
+                    .select { _1["in_acl"] && _1["name"] != @settings["name"] && !seats.include?(_1["name"]) }
                     .sort_by { _1["name"] }
     end
 
@@ -184,8 +178,11 @@ module Relay
 
     def seat_node(slot, seat) = "#{@settings['seat_node_prefix']}#{slot}#{seat}"
 
-    def seat_names
-      (1..@settings["room_seats"].to_i).map { format("%02d", _1) }
+    # [[slot, seat, certificate name], ...] in order.
+    def seat_certificates
+      @settings["room_seats"].to_h.sort.flat_map do |slot, seats|
+        Array(seats).sort.map { [ slot.to_s, _1.to_s, "room-#{slot}-s#{_1}" ] }
+      end
     end
 
     def room_hosts = Array(@settings["room_hosts"])
@@ -230,14 +227,6 @@ module Relay
       shared = {}
       @peers.each do |p|
         id = self.class.ident(p["name"])
-        if p["room_slot"]
-          if p["room_seat"]
-            seat_rules(p, id, rules, subjects, policies, shared)
-          else
-            slot_rules(p, id, rules, subjects, policies)
-          end
-          next
-        end
         mine = []
         rw = Array(p["rw"]).uniq
         ro = Array(p["ro"]).uniq - rw
@@ -265,6 +254,7 @@ module Relay
         subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
         policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
       end
+      seat_certificates.each { seat_rules(*_1, rules, subjects, policies, shared) }
       if @settings["browsers"]
         names = @roles.values.select { _1["for_browsers"] }.map { _1["name"] }
         mine = role_rules(rules, shared, "browsers", names, [ @settings["browser_nodes"] ])
@@ -286,7 +276,7 @@ module Relay
         "policies" => policies }
     end
 
-    # The console's watch of the rooms (when there are room slots): the
+    # The console's watch of the rooms (when there are seats): the
     # rules (pushed onto rules) and their ids.
     def rooms_watch_rules(rules, id)
       return [] unless rooms?
@@ -298,35 +288,15 @@ module Relay
     end
 
     def rooms?
-      @peers.any? { _1["room_slot"] }
-    end
-
-    # The slot's certificate (room-01): its key space, but not the seats'
-    # nodes and not the game hosts' (neither writes nor calls under their
-    # names).
-    def slot_rules(peer, id, rules, subjects, policies)
-      slot = peer["room_slot"]
-      rules << { "id" => "#{id}_room", "messages" => ALL, "flows" => %w[egress ingress],
-                 "permission" => "allow", "key_exprs" => self.class.room_keys(slot) }
-      mine = [ "#{id}_room" ]
-      others = room_hosts.map { "#{_1}$*" } + seat_names.map { seat_node(slot, _1) }
-      unless others.empty?
-        rules << { "id" => "#{id}_room_not_theirs", "messages" => OWN, "flows" => %w[ingress], "permission" => "deny",
-                   "key_exprs" => others.flat_map { self.class.room_node_keys(slot, _1) } }
-        rules << { "id" => "#{id}_room_not_their_calls", "messages" => %w[query], "flows" => %w[ingress],
-                   "permission" => "deny", "key_exprs" => others.map { self.class.room_call_key(slot, _1) } }
-        mine.push("#{id}_room_not_theirs", "#{id}_room_not_their_calls")
-      end
-      subjects << { "id" => id, "cert_common_names" => [ peer["name"] ] }
-      policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
+      seat_certificates.any?
     end
 
     # A seat (room-01-s03): the room to read, its own node to write, calls
     # under its own node ID only (two subjects, see the top of this file).
     # The slot's shared rules are added once (kept in shared).
-    def seat_rules(peer, id, rules, subjects, policies, shared)
-      slot = peer["room_slot"]
-      node = seat_node(slot, peer["room_seat"])
+    def seat_rules(slot, seat, name, rules, subjects, policies, shared)
+      id = self.class.ident(name)
+      node = seat_node(slot, seat)
       base = "room_#{slot}_seats"
       view = self.class.room_view(slot)
       shared["#{base}_in"] ||= { "id" => "#{base}_in", "messages" => ROOM_READ_IN, "flows" => %w[ingress],
@@ -341,14 +311,14 @@ module Relay
                  "key_exprs" => self.class.room_node_keys(slot, node) }
       rules << { "id" => "#{id}_call", "messages" => %w[query], "flows" => %w[ingress], "permission" => "allow",
                  "key_exprs" => [ self.class.room_call_key(slot, node) ] }
-      subjects << { "id" => id, "cert_common_names" => [ peer["name"] ] }
-      subjects << { "id" => "#{id}_calls", "cert_common_names" => [ peer["name"] ], "link_protocols" => [ "tls" ] }
+      subjects << { "id" => id, "cert_common_names" => [ name ] }
+      subjects << { "id" => "#{id}_calls", "cert_common_names" => [ name ], "link_protocols" => [ "tls" ] }
       policies << { "id" => id, "rules" => [ "#{base}_in", "#{base}_get", "#{base}_out", "#{base}_no_calls", "#{id}_own" ],
                     "subjects" => [ id ] }
       policies << { "id" => "#{id}_calls", "rules" => [ "#{id}_call" ], "subjects" => [ "#{id}_calls" ] }
     end
 
-    # A game host in the rooms (when there are room slots): the rules
+    # A game host in the rooms (when there are seats): the rules
     # (pushed onto rules) and their ids.
     def room_host_rules(rules, id, name)
       return [] unless rooms?

@@ -20,7 +20,9 @@ class Admin::RoomsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(users(:admin))
     get admin_rooms_path
     assert_response :success
-    assert_match "01 free", response.body
+    assert_select "td", text: "free"
+    assert_select "td", text: "2 of 2"
+    assert_match "2 of 2 good", response.body
     post admin_rooms_path, params: { room: { name: "Friday", app: "/app/test/othello.app.rb", hours: "2", max_connections: "16" } }
     assert_response :created
     assert_equal "no-store", response.headers["Cache-Control"]

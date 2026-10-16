@@ -142,23 +142,24 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     prefixed = Relay::CloudConfig.new([], { "browsers" => "ws/[::]:7449", "browser_nodes" => "web-$*" }, roles: [ MATCH ]).to_h
     assert_includes rule(prefixed, "browsers__match_rw")["key_exprs"], "asterism/web-$*/game/**"
   end
-  test "room slots (G2): their slot's key space and its @adv part, nothing else; max_sessions 96" do
-    peers = PEERS + [ { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
-                      { "name" => "room-02", "kind" => "client", "in_acl" => false, "room_slot" => "02" } ]
-    h = Relay::CloudConfig.new(peers).to_h
-    r = rule(h, "room_01_room")
-    assert_equal [ %w[room/01/** room/01/**/@adv/**], %w[egress ingress] ], r.values_at("key_exprs", "flows")
-    assert_equal Relay::CloudConfig::ALL, r["messages"]
+  # The rooms' seats (0.3.0; from the rooms' store since 0.3.1, settings
+  # "room_seats"), one seat in each of two slots.
+  ROOMS = { "room_seats" => { "01" => %w[01], "02" => %w[01] } }.freeze
+
+  test "room seats (G2): their slot's key space and its @adv part, nothing else; max_sessions 96" do
+    h = Relay::CloudConfig.new(PEERS, ROOMS).to_h
+    r = rule(h, "room_01_seats_in")
+    assert_equal %w[room/01/** room/01/**/@adv/** room/01/asterism/*/@profile], r["key_exprs"]
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal [ "room_01_room" ], pol["room_01"]
-    refute pol.key?("room_02"), "a slot without a valid certificate is not in it"
-    sub = h["access_control"]["subjects"].find { _1["id"] == "room_01" }
-    assert_equal [ "room-01" ], sub["cert_common_names"]
+    assert_equal %w[room_01_seats_in room_01_seats_get room_01_seats_out room_01_seats_no_calls room_01_s01_own],
+                 pol["room_01_s01"]
+    assert_equal [ "room_01_s01_call" ], pol["room_01_s01_calls"]
+    refute pol.key?("room_01"), "no certificate of a slot's own (0.3.1)"
+    sub = h["access_control"]["subjects"].find { _1["id"] == "room_01_s01" }
+    assert_equal [ "room-01-s01" ], sub["cert_common_names"]
     assert_equal 96, h["transport"]["unicast"]["max_sessions"]
   end
 
-  ROOM_PEERS = PEERS + [ { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
-                         { "name" => "room-02", "kind" => "client", "in_acl" => true, "room_slot" => "02" } ]
   ROOM_KEYS = %w[
     room/01/asterism/wasm-abc123 room/01/asterism/wasm-abc123/game room/01/asterism/wasm-abc123/game/table
     room/01/asterism/wasm-abc123/game/table/call/console room/01/asterism/wasm-abc123/game/table/meta
@@ -167,7 +168,7 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
   OUTSIDE_KEYS = %w[asterism/console/console asterism/alice/game/table asterism/** demo/x @/x/router room/**].freeze
 
   test "the console watches the rooms (0.2.1): liveliness only, nothing written, nothing called" do
-    acl = Relay::CloudConfig.new(ROOM_PEERS).access_control
+    acl = Relay::CloudConfig.new(PEERS, ROOMS).access_control
     pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[console_rw admin_read console__rooms_in console__rooms_out], pol["console"]
     allowed = []
@@ -190,26 +191,26 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
   end
 
   test "the rooms reach nothing outside their slot, also with the console watching them" do
-    acl = Relay::CloudConfig.new(ROOM_PEERS).access_control
+    acl = Relay::CloudConfig.new(PEERS, ROOMS).access_control
     Relay::CloudConfig::ALL.each do |message|
       %w[ingress egress].each do |flow|
         (OUTSIDE_KEYS + ROOM_KEYS).each do |key|
-          %w[room-01 room-02].each do |slot|
-            next unless AclEvaluator.allowed?(acl, slot, message, flow, key)
-            assert key.start_with?("room/#{slot.delete_prefix('room-')}/"), "#{slot} #{message} #{flow} #{key}"
+          %w[room-01-s01 room-02-s01].each do |seat|
+            next unless AclEvaluator.allowed?(acl, seat, message, flow, key)
+            assert key.start_with?("room/#{seat[5, 2]}/"), "#{seat} #{message} #{flow} #{key}"
           end
         end
       end
     end
-    refute AclEvaluator.allowed?(acl, "room-01", "declare_liveliness_subscriber", "ingress", "room/*/asterism/**")
+    refute AclEvaluator.allowed?(acl, "room-01-s01", "declare_liveliness_subscriber", "ingress", "room/*/asterism/**")
     refute AclEvaluator.allowed?(acl, :ws, "liveliness_token", "egress", "room/01/asterism/wasm-abc123/game")
     refute AclEvaluator.allowed?(acl, "viewer", "liveliness_token", "egress", "room/01/asterism/wasm-abc123/game")
   end
 
-  test "no room slots: the console has no rule for the rooms" do
+  test "no seats: the console has no rule for the rooms" do
     acl = Relay::CloudConfig.new(PEERS).access_control
     refute acl["rules"].any? { _1["id"].include?("rooms") }
-    other = Relay::CloudConfig.new(ROOM_PEERS, { "console" => "ops" }).access_control
+    other = Relay::CloudConfig.new(PEERS, ROOMS.merge("console" => "ops")).access_control
     refute other["rules"].any? { _1["id"].include?("rooms") }, "only the console's own certificate"
   end
 end

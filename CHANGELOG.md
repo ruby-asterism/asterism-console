@@ -8,6 +8,34 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.1
+
+What an update needs: `./update.sh 0.3.1`, and removing a
+`WS_DOOR_ROOM_LEGACY` line from `.env` if there is one. A migration (going
+back needs the update's backup). docs/install.md, "From 0.3.0 to 0.3.1".
+
+- The rooms' certificates are out of the relay registry: the registry
+  lists only the rows an admin registered. The seats' certificates
+  (`room-NN-sMM`) are the rooms' own, kept where they were (the `rooms`
+  volume's `certs/`, `Relay::RoomCerts`), and the router's ACL takes the
+  seats from the settings (`ASTERISM_ROOM_SLOTS`, `ASTERISM_ROOM_SEATS`)
+  and the certificates there. The migration removes the room rows and
+  their ledger entries; the seats' certificates are kept, not issued again.
+  A registry row cannot take a room certificate's name.
+- No certificate of a slot's own any more (`room-NN`, its `.tar`): setup
+  removes their files, and the ACL has no rules for them. `WS_DOOR_ROOM_LEGACY`
+  and the door's way in for the pages from before the seats are gone: such
+  a page is closed with 4426. A slot without seats in the router's
+  configuration lets nobody in (503) and takes no room.
+- The rooms' page has "Slots and seats": the slots, the seats per slot,
+  the seats' certificates (good, the first to end), how many the router
+  lets in, the rooms and seats in use; each room shows its seats taken.
+- `bin/asterism room-seat <slot> <seat>` writes a seat's certificate as a
+  credentials `.tar`, for an admin's test in a room from CRuby
+  (docs/rooms.md, "An admin in a room").
+- `ASTERISM_ROOM_SEATS` is 1..99 (0 no longer means "the slot's
+  certificate"; `ASTERISM_ROOM_SLOTS=0` turns the rooms off).
+
 ## 0.3.0
 
 What an update needs: the game host first (asterism-games 0.5.0, when

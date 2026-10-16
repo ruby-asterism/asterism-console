@@ -8,10 +8,40 @@
   <%= render "door", door: @door %>
   <%= render "games", games: @games %>
   <% if @ready.empty? %>
-    <p class="error">No room slot is ready: run <code>bin/asterism setup</code> (it makes the slots' certificates), then
+    <p class="error">No room slot is ready: run <code>bin/asterism setup</code> (it makes the seats' certificates), then
       apply in Relay so that the cloud router lets them in.</p>
-  <% else %>
-    <p class="hint">Slots: <%= @slots.map { |s| @busy[s] ? "#{s} (#{@busy[s].name})" : (@ready.include?(s) ? "#{s} free" : "#{s} not ready") }.join(", ") %>.</p>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Slots and seats</h2>
+  <% per_slot = Relay::Settings.room_seats %>
+  <% taken = @door ? @busy.values.sum { @door.dig("seats", _1.uid).to_i } : nil %>
+  <p><%= @slots.size %> slots of <%= per_slot %> seats (<code>ASTERISM_ROOM_SLOTS</code>, <code>ASTERISM_ROOM_SEATS</code>).
+    In use: <%= @busy.size %> of <%= @slots.size %> slots hold an open room,
+    <%= taken.nil? ? "? (the door does not answer)" : taken %> of <%= @busy.size * per_slot %> seats of those rooms are
+    taken.</p>
+  <p class="hint">Each page in a room has a seat: a certificate of the rooms' own (<code>room-01-s03</code>, its node
+    <code><%= Relay::Settings.seat_node("01", "03") %></code>), made by <code>bin/asterism setup</code> and kept in the
+    rooms' store, not in the registry. In the store: <%= @seat_certs["good"] %> of <%= @slots.size * per_slot %> good
+    <% if @seat_certs["until"] %>(the first ends <%= when_text(@seat_certs["until"]) %>)<% end %>.
+    The cloud router lets in <%= @seats_in_config.values.sum %> (its configuration; an apply after setup brings in new ones).</p>
+  <% if @slots.any? %>
+    <table class="list">
+      <thead><tr><th>Slot</th><th>Room</th><th>Seats in the router</th><th>Seats taken</th><th>Connections</th></tr></thead>
+      <tbody>
+        <% @slots.each do |s| %>
+          <% room = @busy[s] %>
+          <tr>
+            <td><code><%= s %></code></td>
+            <td><%= room ? link_to(room.name, admin_room_path(room)) : tag.span(@ready.include?(s) ? "free" : "not ready", class: "hint") %></td>
+            <td><%= @seats_in_config.fetch(s, 0) %> of <%= per_slot %></td>
+            <td><%= room ? (@door ? (@door.dig("seats", room.uid) || 0) : "?") : "-" %></td>
+            <td><%= @door ? (@door.dig("slots", s) || 0) : "?" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
   <% end %>
 </section>
 
@@ -41,7 +71,7 @@
     <p class="hint">None yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><% if @games_on %><th>Tables</th><% end %><th>Links</th></tr></thead>
+      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th>Connections</th><th>Seats taken</th><% if @games_on %><th>Tables</th><% end %><th>Links</th></tr></thead>
       <tbody>
         <% @rooms.each do |r| %>
           <tr>
@@ -52,6 +82,7 @@
             <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
             <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span></td>
             <td><%= r.open? ? (@door ? "#{@door.dig('rooms', r.uid) || 0} / #{r.max_connections}" : "? / #{r.max_connections}") : "-" %></td>
+            <td><%= r.open? ? (@door ? (@door.dig("seats", r.uid) || 0) : "?") : "-" %></td>
             <% if @games_on %><td><%= room_tables_text(r, @games, @games_apps) %></td><% end %>
             <td><%= r.links_made %></td>
           </tr>

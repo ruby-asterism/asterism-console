@@ -29,29 +29,27 @@
 # The rooms' door (G2, lib/relay/room_door.rb, docs/rooms.md) runs in the
 # same process when WS_DOOR_ROOM_LISTEN is set: a browser in a room comes
 # with the room's key (wss://<router>/room?t=...), which it checks before
-# it connects to zenohd's mutual-TLS port with the room slot's certificate.
+# it connects to zenohd's mutual-TLS port with the certificate of the
+# page's seat.
 #
 #   WS_DOOR_ROOM_LISTEN       0.0.0.0:7452 (unset: no rooms)
 #   WS_DOOR_ROOM_UPSTREAM     zenohd:7448 (zenohd's mutual-TLS listener)
 #   WS_DOOR_ROOM_TLS_NAME     the name in zenohd's certificate (default: the upstream's host)
 #   WS_DOOR_ROOMS_FILE        /rooms/rooms.json (the console writes it: Relay::RoomFiles)
-#   WS_DOOR_ROOM_CERTS        /rooms/certs (room-<slot>.pem / .key, ca.pem)
+#   WS_DOOR_ROOM_CERTS        /rooms/certs (room-<slot>-s<seat>.pem / .key, ca.pem)
 #   WS_DOOR_ROOM_TOTAL        48  room connections at once, all rooms together
 #   WS_DOOR_ROOM_PER_ROOM     16  per room (a room's own limit may be lower)
 #   WS_DOOR_ROOM_MAX_MESSAGE  65535 bytes (one WebSocket message, one Zenoh batch)
 #   WS_DOOR_STATUS_LISTEN     0.0.0.0:7453 (GET /status: the counts, for the console; unset: none)
 #
 # Seats (0.3.0, docs/rooms.md "Seats"): POST /room/seat on the same listener
-# gives a page a seat, and the WebSocket of a room with seats connects with
-# the seat's certificate (room-<slot>-s<seat>).
+# gives a page a seat, and the room's WebSocket connects with the seat's
+# certificate (room-<slot>-s<seat>).
 #
 #   WS_DOOR_SEATS_FILE        /seats/seats.json (the seats' table, SHA-256 of the pages' secrets
 #                             only; a volume the door may write; unset: kept in memory)
 #   WS_DOOR_SEAT_IDLE         1800 (seconds without a connection after which a seat may be
 #                             given to another page when every seat is taken)
-#   WS_DOOR_ROOM_LEGACY       0 (1: a page from before 0.3.0, which sends no secret, still gets
-#                             into a room with seats, with the slot's certificate: for the time
-#                             until the browser build that takes seats is published)
 require "socket"
 
 LISTEN = ENV.fetch("WS_DOOR_LISTEN", "0.0.0.0:7451")
@@ -150,7 +148,6 @@ if ENV["WS_DOOR_ROOM_LISTEN"].to_s != ""
     max_message: Integer(ENV.fetch("WS_DOOR_ROOM_MAX_MESSAGE", "65535")),
     seats_file: ENV["WS_DOOR_SEATS_FILE"].to_s.empty? ? nil : ENV["WS_DOOR_SEATS_FILE"],
     seat_idle: Float(ENV.fetch("WS_DOOR_SEAT_IDLE", "1800")),
-    legacy_slot: ENV["WS_DOOR_ROOM_LEGACY"].to_s == "1",
     log: ->(m) { log(m) }
   ).start
 end

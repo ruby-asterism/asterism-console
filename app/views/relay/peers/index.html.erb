@@ -29,11 +29,6 @@
       </tbody>
     </table>
   <% end %>
-  <% if @seats["count"].positive? %>
-    <p class="hint">And <%= @seats["count"] %> room seats (<code>room-NN-sMM</code>, made by <code>bin/asterism setup</code>;
-      the door's certificates for the browsers in the rooms, docs/rooms.md): <%= @seats["in_acl"] %> in the next ACL,
-      the first certificate ends <%= when_text(@seats["until"]) %>.</p>
-  <% end %>
   <% if current_user.admin? %>
     <p><%= link_to "Register a client", new_relay_peer_path(kind: "client") %> &middot;
        <%= link_to "Register a router", new_relay_peer_path(kind: "router") %></p>

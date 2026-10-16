@@ -11,34 +11,34 @@
 #    to zenohd: not a connection, not a byte.
 # 2. cuts whatever is left on the key's slot of an earlier room (a slot is
 #    used again for a later room only after its connections are gone);
-# 3. connects to zenohd's mutual-TLS port with the slot's certificate
-#    (room-<slot>), whose ACL is the slot's key space only
-#    (Relay::CloudConfig), answers 101 itself, and moves the Zenoh batches
-#    between the two framings: one WebSocket Binary message is one batch,
-#    on TLS a batch is a 2-byte little-endian length and the batch. The first
-#    batch from zenohd (InitAck) has its batch size lowered by 2, since on
-#    TLS the length takes 2 bytes of the receiver's buffer too;
+# 3. answers 101 itself and waits for the page's first message, a Text
+#    with {"s": <the page's secret for the room>}: the page has taken a
+#    seat with it before (below). Only when the secret has a seat does it
+#    connect to zenohd's mutual-TLS port, with the seat's certificate
+#    (room-<slot>-s<seat>), whose ACL is the slot's key space with the
+#    page's writes and calls bound to the seat's node ID
+#    (Relay::CloudConfig). Then it moves the Zenoh batches between the two
+#    framings: one WebSocket Binary message is one batch, on TLS a batch is
+#    a 2-byte little-endian length and the batch. The first batch from
+#    zenohd (InitAck) has its batch size lowered by 2, since on TLS the
+#    length takes 2 bytes of the receiver's buffer too;
 # 4. closes the connection when the key ends (24 hours at most), when its
 #    room is closed early, or when the room's slot is given to another room.
 #
-# Seats (0.3.0, docs/rooms.md "Seats"): for a slot whose seats the router's
-# configuration lets in (rooms.json "seats"), step 3 is different. The page
-# first takes a seat: POST /room/seat with {"t": <the room's key>, "s": <its
-# secret for the room>} in the body (never in the URL or a header); the
-# door checks the key as above, looks the SHA-256 of "<room>:<secret>" up in
-# its seats' table (a file of its own, seats_file: it never holds a
-# secret) and answers {"node": "wasm-0103", "seat": "03"}: the same seat for
-# the same secret until the room is over, a free seat for a new one, a seat
-# nobody has been connected on for seat_idle seconds (30 minutes) when no
-# seat is free, else 409. The WebSocket then comes as before, and the door
-# answers 101 itself and waits for the first message: a Text with
-# {"s": <the secret>}. Only when its seat is in the table does it connect
-# to zenohd, with the seat's certificate (room-<slot>-s<seat>), whose ACL
-# binds the page's writes and calls to the seat's node ID. Otherwise it
-# closes the WebSocket: 4403 (no seat for this secret), 4408 (no secret in
-# time), 4426 (a Binary first: a page from before 0.3.0; legacy_slot lets
-# such a page in with the slot's certificate, as before), 1013 (zenohd is
-# not there). A room that is over loses its seats.
+# Seats (0.3.0, docs/rooms.md "Seats"): the page first takes a seat: POST
+# /room/seat with {"t": <the room's key>, "s": <its secret for the room>}
+# in the body (never in the URL or a header); the door checks the key as
+# above, looks the SHA-256 of "<room>:<secret>" up in its seats' table (a
+# file of its own, seats_file: it never holds a secret) and answers
+# {"node": "wasm-0103", "seat": "03"}: the same seat for the same secret
+# until the room is over, a free seat for a new one, a seat nobody has
+# been connected on for seat_idle seconds (30 minutes) when no seat is
+# free, else 409. A slot has the seats the router's configuration lets in
+# (rooms.json "seats"); one with none (not applied yet) lets nobody in:
+# 404 to the seat request, 503 to the WebSocket. The WebSocket is closed
+# with 4403 (no seat for this secret), 4408 (no secret in time), 4426 (a
+# Binary first: a page from before 0.3.0, which sends no secret), 1013
+# (zenohd is not there). A room that is over loses its seats.
 #
 # Keys whose signature does not check are counted per address; past
 # BAD_LIMIT in BAD_WINDOW seconds such an address is answered 429 for
@@ -49,7 +49,7 @@
 #
 # Answers: 400 not a WebSocket request to /room, 403 a key that does not
 # check, 410 a room that has ended or is closed, 429 see above, 503 the
-# room or the door is full or zenohd is not there. POST /room/seat: 200,
+# room or the door is full or the room's slot has no seats. POST /room/seat: 200,
 # 400 (no key and secret in the body), 403, 404 (the room's slot has no
 # seats), 409 (every seat is taken), 410, 429. Neither the key nor a secret
 # (nor its hash) is ever logged.
@@ -119,15 +119,13 @@ module Relay
     # listen / status_listen: "host:port" (port 0: any free one, for tests).
     # upstream: zenohd's mutual-TLS listener; tls_name: the name its
     # certificate carries. rooms_file: Relay::RoomFiles' file. certs_dir:
-    # room-<slot>.pem / .key, room-<slot>-s<seat>.pem / .key and ca.pem.
-    # seats_file: the seats' table (nil: kept in memory only). seat_idle:
-    # seconds without a connection after which a seat may go to another
-    # secret. legacy_slot: a page from before 0.3.0 (no secret) gets in to a
-    # room with seats with the slot's certificate.
+    # room-<slot>-s<seat>.pem / .key and ca.pem. seats_file: the seats'
+    # table (nil: kept in memory only). seat_idle: seconds without a
+    # connection after which a seat may go to another secret.
     def initialize(listen:, upstream:, rooms_file:, certs_dir:, status_listen: nil, tls_name: nil,
                    total: 48, per_room: RoomToken::MAX_CONNECTIONS, max_message: 65_535,
                    max_hours: RoomToken::MAX_HOURS, head_seconds: HEAD_SECONDS, seats_file: nil,
-                   seat_idle: SEAT_IDLE, seat_wait: SEAT_WAIT, legacy_slot: false, log: ->(m) { $stdout.puts(m) })
+                   seat_idle: SEAT_IDLE, seat_wait: SEAT_WAIT, log: ->(m) { $stdout.puts(m) })
       @listen = listen
       @upstream = upstream
       @tls_name = tls_name || split_hostport(upstream)[0]
@@ -142,7 +140,6 @@ module Relay
       @seats_file = seats_file
       @seat_idle = seat_idle
       @seat_wait = seat_wait
-      @legacy_slot = legacy_slot
       @seats = {}
       @seats_ok = true
       @touched_at = 0.0
@@ -174,8 +171,7 @@ module Relay
       end
       log("rooms: listening on #{@listen}, to #{@upstream} (TLS name #{@tls_name}), at most #{@total} " \
           "connections, #{@per_room} per room, messages up to #{@max_message} bytes; seats in " \
-          "#{@seats_file || 'memory'}, given again after #{@seat_idle.round} s without a connection" \
-          "#{', pages without a seat let in with the slot certificate' if @legacy_slot}")
+          "#{@seats_file || 'memory'}, given again after #{@seat_idle.round} s without a connection")
       self
     end
 
@@ -394,30 +390,19 @@ module Relay
       conn.client = client
       @lock.synchronize { @pending -= 1 }
       pending = false
-      seats = @lock.synchronize { seat_count(claims["slot"]) }
-      first_up = nil
-      if seats.positive?
-        tls, first_up = open_with_seat(conn, key, claims, ip)
-        return unless tls
-      else
-        tls = connect_upstream("room-#{claims['slot']}")
-        unless tls
-          answer(client, 503)
-          return log("rooms: room #{claims['room']} slot #{claims['slot']}: zenohd is not there; answered 503 to #{ip}")
-        end
-        conn.tls = tls
-        if conn.closing # cut while connecting
-          tls.close rescue nil
-          return
-        end
-        switch(conn, key)
+      if @lock.synchronize { seat_count(claims["slot"]) }.zero?
+        @lock.synchronize { @counts["503"] += 1 }
+        answer(client, 503)
+        return log("rooms: room #{claims['room']} slot #{claims['slot']}: no seats in the router's configuration; " \
+                   "answered 503 to #{ip}")
       end
+      tls = open_with_seat(conn, key, claims, ip) or return
       [ client, tls.to_io ].each { _1.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) rescue nil }
       n = @lock.synchronize { @conns.count { _1.room == claims["room"] && !_1.closing } }
       log("rooms: #{conn.label}: open from #{ip} (#{n} in the room), until " \
           "#{Time.at(conn.ends_at).utc.strftime('%Y-%m-%dT%H:%M:%SZ')}")
       t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      pump(conn, first_up)
+      pump(conn)
       log("rooms: #{conn.label}: closed from #{ip} after " \
           "#{(Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)} s")
     rescue StandardError => e
@@ -440,9 +425,8 @@ module Relay
                    "Sec-WebSocket-Accept: #{accept}\r\n\r\n")
     end
 
-    # A room with seats: 101, then the first message decides. Returns
-    # [tls, a batch to send first or nil], or nil (the WebSocket is closed
-    # with a code that says why).
+    # 101, then the first message decides. Returns the TLS socket to zenohd,
+    # or nil (the WebSocket is closed with a code that says why).
     def open_with_seat(conn, key, claims, ip)
       client = conn.client
       slot = claims["slot"]
@@ -451,31 +435,25 @@ module Relay
         return refuse_ws(conn, CLOSE_NO_SECRET, "no secret", "no first message within #{@seat_wait} s", ip)
       end
       fin, op, data = ws_read_frame(client)
-      first_up = nil
       case op
       when 0x1
         secret = fin ? self.class.secret_of(data) : nil
         seat = secret && @lock.synchronize { seat_for(claims["room"], secret, Time.now.to_f) }
         return refuse_ws(conn, CLOSE_NO_SEAT, "no seat", "no seat for its secret (POST /room/seat first)", ip) unless seat
         conn.seat = seat
-        name = "room-#{slot}-s#{seat}"
       when 0x2
-        unless @legacy_slot && fin
-          return refuse_ws(conn, CLOSE_OLD_PAGE, "this room needs a newer page", "a page without a seat (before 0.3.0)", ip)
-        end
-        first_up = data
-        name = "room-#{slot}"
+        return refuse_ws(conn, CLOSE_OLD_PAGE, "this room needs a newer page", "a page without a seat (before 0.3.0)", ip)
       else
         return refuse_ws(conn, 1002, "", "WebSocket opcode #{op} first", ip)
       end
-      tls = connect_upstream(name)
+      tls = connect_upstream("room-#{slot}-s#{conn.seat}")
       return refuse_ws(conn, CLOSE_TRY_AGAIN, "zenohd is not there", "zenohd is not there", ip) unless tls
       conn.tls = tls
       if conn.closing
         tls.close rescue nil
         return nil
       end
-      [ tls, first_up ]
+      tls
     end
 
     def refuse_ws(conn, code, reason, why, ip)
@@ -673,8 +651,8 @@ module Relay
       true
     end
 
-    # The TLS context for a certificate of the rooms' directory: room-<slot>
-    # or room-<slot>-s<seat>.
+    # The TLS context for a seat's certificate in the rooms' directory
+    # (room-<slot>-s<seat>).
     def context(name)
       cert_file = File.join(@certs_dir, "#{name}.pem")
       mtime = File.mtime(cert_file)
@@ -774,11 +752,10 @@ module Relay
       end
     end
 
-    def pump(conn, first_up = nil)
+    def pump(conn)
       client = conn.client
       tls = conn.tls
       wlock = Mutex.new
-      tls.write([ first_up.bytesize ].pack("v") + first_up) if first_up
       up = Thread.new do # browser -> zenohd
         msg = +""
         loop do

@@ -30,7 +30,7 @@
 name: asterism
 
 x-console: &console
-  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.0}
+  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.1}
   init: true
   restart: unless-stopped
   env_file: ${ASTERISM_ENV_FILE:-.env}
@@ -57,7 +57,7 @@ services:
   # each WebSocket a lifetime (nginx's timeouts only close idle ones) and
   # logs the path nginx forwarded (it must carry no pass).
   # The rooms' door (G2, docs/rooms.md) is the same process: it reads the
-  # rooms' file and the slots' certificates the console writes (the "rooms"
+  # rooms' file and the seats' certificates the console writes (the "rooms"
   # volume, read-only here). Two threads per connection: a small thread
   # stack keeps a connection near 0.5 MB.
   door:
@@ -75,11 +75,9 @@ services:
       WS_DOOR_ROOM_TOTAL: ${WS_DOOR_ROOM_TOTAL:-48}
       WS_DOOR_ROOM_PER_ROOM: ${WS_DOOR_ROOM_PER_ROOM:-16}
       WS_DOOR_STATUS_LISTEN: 0.0.0.0:7453
-      # Seats (0.3.0): the door's own table (its own volume), and pages from
-      # before 0.3.0 (WS_DOOR_ROOM_LEGACY=1 in .env lets them in meanwhile).
+      # Seats (0.3.0): the door's own table (its own volume).
       WS_DOOR_SEATS_FILE: /seats/seats.json
       WS_DOOR_SEAT_IDLE: ${WS_DOOR_SEAT_IDLE:-1800}
-      WS_DOOR_ROOM_LEGACY: ${WS_DOOR_ROOM_LEGACY:-0}
       RUBY_THREAD_VM_STACK_SIZE: "131072"
       MALLOC_ARENA_MAX: "2"
     volumes:
@@ -165,7 +163,7 @@ volumes:
   certs: {}        # the CA certificate and this server's own router / bridge keys
   signer_ca: {}    # the CA's private key: the signer's only (back it up off the server, docs/install.md)
   backups: {}      # the console's database backups (bin/asterism backup; copy them off the server too)
-  rooms: {}        # the rooms (G2): the door's file and the room slots' (and seats') certificates and keys
+  rooms: {}        # the rooms (G2): the door's file and the seats' certificates and keys (the rooms' store)
   seats: {}        # the door's seats' table (0.3.0): which seat each page has (hashes of their secrets only)
 
 networks:

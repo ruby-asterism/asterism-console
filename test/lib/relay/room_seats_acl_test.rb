@@ -6,22 +6,15 @@ require_relative "../../test_helpers/acl_evaluator"
 # acceptance list with zenohd's own way of deciding (deny wins inside a
 # subject, any subject's allow wins; test_helpers/acl_evaluator.rb).
 class Relay::RoomSeatsAclTest < ActiveSupport::TestCase
-  SETTINGS = { "room_seats" => 3, "room_hosts" => [ "games" ], "seat_node_prefix" => "wasm-" }.freeze
+  # The seats come from the settings and the rooms' store (0.3.1:
+  # Relay::RoomCerts.seats, through Relay::Applier), not from registry rows.
+  def self.seats(slots, n) = slots.to_h { [ _1, (1..n).map { |i| format("%02d", i) } ] }
 
-  def peers(seats: 3)
-    list = [
-      { "name" => "console", "kind" => "client", "rw" => %w[asterism/**], "admin_space" => true, "in_acl" => true },
-      { "name" => "games", "kind" => "client", "roles" => [], "rw" => %w[asterism/games/**], "in_acl" => true },
-      { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
-      { "name" => "room-02", "kind" => "client", "in_acl" => true, "room_slot" => "02" }
-    ]
-    %w[01 02].each do |slot|
-      (1..seats).each do |i|
-        list << { "name" => format("room-%s-s%02d", slot, i), "kind" => "client", "in_acl" => true,
-                  "room_slot" => slot, "room_seat" => format("%02d", i) }
-      end
-    end
-    list
+  SETTINGS = { "room_seats" => seats(%w[01 02], 3), "room_hosts" => [ "games" ], "seat_node_prefix" => "wasm-" }.freeze
+
+  def peers
+    [ { "name" => "console", "kind" => "client", "rw" => %w[asterism/**], "admin_space" => true, "in_acl" => true },
+      { "name" => "games", "kind" => "client", "roles" => [], "rw" => %w[asterism/games/**], "in_acl" => true } ]
   end
 
   def acl(settings = SETTINGS, list = peers)
@@ -93,20 +86,27 @@ class Relay::RoomSeatsAclTest < ActiveSupport::TestCase
     refute ok?(S1, "put", "room/02/asterism/x/y", flow: "egress")
   end
 
-  test "the slot's certificate keeps its room but not the seats' or the host's names" do
-    assert ok?("room-01", "put", "room/01/asterism/wasm-abc123/game/x"), "an old page's own keys"
-    assert ok?("room-01", "query", "#{TABLE}/call/wasm-abc123")
-    refute ok?("room-01", "put", "#{OWN}/game/x"), "a seat's keys"
-    refute ok?("room-01", "liveliness_token", "#{OWN}/game")
-    refute ok?("room-01", "query", "#{TABLE}/call/wasm-0101"), "a seat's name"
-    %w[put delete declare_queryable liveliness_token reply].each do |m|
-      refute ok?("room-01", m, "#{TABLE}/state"), "#{m} at the table"
-      refute ok?("room-01", m, "room/01/asterism/games-bot-1/game"), "#{m} at a host's bot"
+  test "no certificate of a slot's own (0.3.1): only the seats are in a room" do
+    names = Relay::CloudConfig.new(peers, SETTINGS).subject_names
+    assert_equal %w[console games room-01-s01 room-01-s02 room-01-s03 room-02-s01 room-02-s02 room-02-s03], names
+    Relay::CloudConfig::ALL.each do |m|
+      refute ok?("room-01", m, "room/01/asterism/wasm-abc123/game/x"), "room-01 #{m}"
     end
-    refute ok?("room-01", "declare_queryable", "room/01/asterism/games/games/**")
-    refute ok?("room-01", "query", "#{TABLE}/call/games")
-    refute ok?("room-01", "query", "#{TABLE}/call/games-bot-1"), "as the host's bot"
-    refute ok?("room-01", "put", "room/02/x")
+  end
+
+  test "a registry row with a seat's name is left out: the name is the seat's" do
+    list = peers + [ { "name" => "room-01-s01", "kind" => "client", "rw" => %w[asterism/**], "in_acl" => true } ]
+    a = acl(SETTINGS, list)
+    refute ok?(S1, "put", "asterism/x/y", a: a)
+    assert ok?(S1, "put", "#{OWN}/game/x", a: a)
+    assert_equal 2, a["subjects"].count { _1["cert_common_names"] == [ S1 ] }
+  end
+
+  test "a seat whose certificate is not in the store is not in the ACL" do
+    a = acl(SETTINGS.merge("room_seats" => { "01" => %w[01 03] }))
+    assert ok?("room-01-s03", "put", "room/01/asterism/wasm-0103/game/x", a: a)
+    refute ok?("room-01-s02", "put", "room/01/asterism/wasm-0102/game/x", a: a)
+    refute ok?("room-02-s01", "put", "room/02/asterism/wasm-0201/game/x", a: a)
   end
 
   test "the host serves the tables in every room, as itself and its bots only" do
@@ -129,12 +129,12 @@ class Relay::RoomSeatsAclTest < ActiveSupport::TestCase
     assert ok?("games", "put", "asterism/games/games/mahjong1/state"), "its registered side as before"
   end
 
-  test "without seats or hosts the slot's rules are as before 0.3.0" do
-    plain = acl({}, peers(seats: 0))
+  test "without seats there are no rooms: no host's or console's rules for them" do
+    plain = acl({ "room_hosts" => [ "games" ] })
     pol = plain["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal [ "room_01_room" ], pol["room_01"]
-    refute plain["rules"].any? { _1["permission"] == "deny" }
     refute pol["games"].any? { _1.include?("room_host") }
+    refute pol["console"].any? { _1.include?("rooms") }
+    refute plain["rules"].any? { _1["permission"] == "deny" }
   end
 
   test "a seat's two subjects, one certificate; the names read back once" do
@@ -146,15 +146,9 @@ class Relay::RoomSeatsAclTest < ActiveSupport::TestCase
   end
 
   test "8 slots of 16 seats: the size zenohd reads" do
-    list = (1..8).flat_map do |n|
-      slot = format("%02d", n)
-      [ { "name" => "room-#{slot}", "kind" => "client", "in_acl" => true, "room_slot" => slot } ] +
-        (1..16).map { |i| { "name" => format("room-%s-s%02d", slot, i), "kind" => "client", "in_acl" => true,
-                            "room_slot" => slot, "room_seat" => format("%02d", i) } }
-    end
-    c = Relay::CloudConfig.new(list + peers(seats: 0).first(2), SETTINGS.merge("room_seats" => 16))
+    c = Relay::CloudConfig.new(peers, SETTINGS.merge("room_seats" => self.class.seats((1..8).map { format("%02d", _1) }, 16)))
     a = c.access_control
-    assert_equal 8 * 16 * 2 + 8 + 2, a["subjects"].size
+    assert_equal 8 * 16 * 2 + 2, a["subjects"].size
     assert_operator c.body.bytesize, :<, 400_000
     assert AclEvaluator.allowed?(a, "room-08-s16", "put", "ingress", "room/08/asterism/wasm-0816/game/x")
     refute AclEvaluator.allowed?(a, "room-08-s16", "put", "ingress", "room/08/asterism/wasm-0815/game/x")

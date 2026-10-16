@@ -16,6 +16,10 @@ class RelayPeer < ApplicationRecord
 
   validates :name, format: { with: NAME }, uniqueness: true
   validates :name, exclusion: { in: %w[ca], message: "is kept for the CA" }
+  # The rooms' seats' certificates (room-01-s03, Relay::RoomCerts) and,
+  # before 0.3.1, the slots' (room-01): not registry rows.
+  ROOM_NAME = /\Aroom-[0-9]{2}(-s[0-9]{2})?\z/
+  validates :name, format: { without: ROOM_NAME, message: "is kept for the rooms' certificates" }
   validates :kind, inclusion: { in: KINDS }
   validates :cert_days, numericality: { only_integer: true, in: 1..Relay::CertAuthority::LEAF_DAYS }
   validate :keys_are_key_expressions
@@ -54,27 +58,8 @@ class RelayPeer < ApplicationRecord
     node_list.presence || [ name ]
   end
 
-  # A room slot's certificate (G2): room-01 .. room-NN, and its seats'
-  # (0.3.0): room-01-s01 .. room-01-s16, made by bin/asterism setup
-  # (Relay::RoomSlots). Their ACL is fixed (Relay::CloudConfig).
-  ROOM_NAME = /\Aroom-([0-9]{2})(?:-s([0-9]{2}))?\z/
-
-  def room_slot_name
-    name[ROOM_NAME, 1] if room_slot?
-  end
-
-  def room_seat_name
-    name[ROOM_NAME, 2] if room_slot?
-  end
-
-  def room_seat? = room_seat_name.present?
-
   # What Relay::CloudConfig takes.
   def to_config
-    if room_slot?
-      return { "name" => name, "kind" => kind, "in_acl" => in_acl?, "room_slot" => room_slot_name,
-               "room_seat" => room_seat_name }.compact
-    end
     { "name" => name, "kind" => kind, "rw" => rw_list, "ro" => ro_list,
       "admin_space" => admin_space?, "in_acl" => in_acl?,
       "roles" => roles.map(&:name), "nodes" => node_list }
@@ -86,10 +71,8 @@ class RelayPeer < ApplicationRecord
       "expires" => cert_expires_at&.utc&.iso8601, "description" => description }
   end
 
-  # The rooms' seats (0.3.0) are left out: 16 a slot, never a node of
-  # their own (the graph shows a seat's page under its node ID in its room).
   def self.registry
-    includes(:certificates).order(:name).reject(&:room_seat?).map(&:to_registry)
+    includes(:certificates).order(:name).map(&:to_registry)
   end
 
   private

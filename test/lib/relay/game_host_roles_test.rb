@@ -29,11 +29,10 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
     { "name" => "games", "kind" => "client", "roles" => %w[games-host], "in_acl" => true },
     { "name" => "fmruby-aaaaaa", "kind" => "client", "roles" => %w[match games], "in_acl" => true },
     { "name" => "fmruby-bbbbbb", "kind" => "client", "roles" => %w[match games], "in_acl" => true },
-    { "name" => "fmruby-cccccc", "kind" => "client", "roles" => %w[match], "in_acl" => true },
-    { "name" => "room-01", "kind" => "client", "in_acl" => true, "room_slot" => "01" },
-    { "name" => "room-02", "kind" => "client", "in_acl" => true, "room_slot" => "02" }
+    { "name" => "fmruby-cccccc", "kind" => "client", "roles" => %w[match], "in_acl" => true }
   ].freeze
-  SETTINGS = { "browsers" => "ws/[::]:7449" }.freeze
+  # A seat in each of two room slots (the rooms' store, not the registry).
+  SETTINGS = { "browsers" => "ws/[::]:7449", "room_seats" => { "01" => %w[01], "02" => %w[01] } }.freeze
 
   def acl(peers = PEERS, roles = [ MATCH, GAMES_HOST, GAMES ])
     Relay::CloudConfig.new(peers, SETTINGS, roles: roles).to_h["access_control"]
@@ -112,16 +111,18 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
       assert_equal [ "asterism/*/games/*/call/#{id == 'browsers' ? 'wasm-$*' : 'fmruby-aaaaaa'}", "asterism/*/games/*/meta",
                      "asterism/*/games/**" ].sort, keys, id
     end
-    %w[console fmruby_cccccc room_01 room_02].each { assert_equal rules.(without, _1), rules.(with, _1), _1 }
+    %w[console fmruby_cccccc room_01_s01 room_02_s01].each { assert_equal rules.(without, _1), rules.(with, _1), _1 }
     assert_equal %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile].map { _1.sub("${node}", "games") },
                  rules.(with, "games").flat_map { _1["key_exprs"] } - [ "asterism/**" ]
   end
 
   test "the rooms stay closed both ways" do
     a = acl
-    %w[room-01 room-02].each do |slot|
-      n = slot.delete_prefix("room-")
-      a["rules"].select { |r| a["policies"].find { _1["id"] == slot.tr("-", "_") }["rules"].include?(r["id"]) }.each do |r|
+    %w[room-01-s01 room-02-s01].each do |slot|
+      n = slot[5, 2]
+      ids = a["policies"].select { _1["id"].start_with?(slot.tr("-", "_")) }.flat_map { _1["rules"] }
+      assert_operator ids.size, :>, 2
+      a["rules"].select { ids.include?(_1["id"]) }.each do |r|
         r["key_exprs"].each { assert _1.start_with?("room/#{n}/"), "#{slot}: #{_1}" }
       end
       refute allowed?(slot, "declare_subscriber", "ingress", "asterism/*/games/*/state", a)

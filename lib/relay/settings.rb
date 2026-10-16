@@ -28,22 +28,22 @@
 #
 # Rooms (G2, docs/rooms.md):
 #
-#   ASTERISM_ROOM_SLOTS           8     room slots: room-01 .. room-08, each with its certificate and
-#                                       its ACL (room/<slot>/**) made once; a room takes a free one
+#   ASTERISM_ROOM_SLOTS           8     room slots 01 .. 08, each a key space room/<slot>/** whose seats'
+#                                       certificates and ACL are made once; a room takes a free one (0: no rooms)
 #   ASTERISM_ROOM_DEFAULT_HOURS   3     how long a new room is open unless the admin says otherwise
 #   ASTERISM_ROOM_MAX_HOURS       24    the longest (at most 24: the signer refuses a later end)
 #   ASTERISM_ROOM_MAX_CONNECTIONS 16    connections a room may have at once (at most 16)
-#   ASTERISM_ROOM_SEATS           16    seats per slot (0.3.0): room-NN-s01 .. room-NN-s16, a certificate
-#                                       each, node ID <prefix><slot><seat> (wasm-0103); the door gives a
+#   ASTERISM_ROOM_SEATS           16    seats per slot (0.3.0, 1..99): room-NN-s01 .. room-NN-s16, a
+#                                       certificate each (the rooms' store, Relay::RoomCerts, not the
+#                                       registry), node ID <prefix><slot><seat> (wasm-0103); the door gives a
 #                                       browser a seat and connects with its certificate, so the router
-#                                       binds the page's writes and calls to its own node ID (0: no seats,
-#                                       the door uses the slot's certificate as before 0.3.0)
+#                                       binds the page's writes and calls to its own node ID
 #   ASTERISM_ROOM_HOSTS           games the node IDs of game hosts that join the rooms with their own
 #                                       certificate (a registry row of that name): the rooms' tables
 #                                       under room/*/asterism/<host>$* are theirs only (comma separated;
 #                                       "-": none)
 #   ASTERISM_ROOMS_DIR            storage/relay/rooms (what the door reads: rooms.json, the
-#                                       slots' certificates in certs/)
+#                                       seats' certificates in certs/)
 #   ASTERISM_DOOR_STATUS_URL      http://127.0.0.1:7453/status (the door's connection counts)
 #   ASTERISM_GAMES_STATUS_URL     none (a game host's GET /status, e.g. http://asterism-games:7460/status:
 #                                       the rooms' page shows its tables)
@@ -71,7 +71,6 @@ module Relay
         "accept_pending" => int.("ASTERISM_RELAY_ACCEPT_PENDING"),
         "accept_timeout_ms" => int.("ASTERISM_RELAY_ACCEPT_TIMEOUT"),
         "max_message_size" => int.("ASTERISM_RELAY_MAX_MESSAGE"),
-        "room_seats" => room_seats(env),
         "room_hosts" => room_hosts(env)
       }.compact
     end
@@ -87,12 +86,11 @@ module Relay
       (1..room_slots(env)).map { format("%02d", _1) }
     end
 
-    def slot_peer_name(slot) = "room-#{slot}"
-
-    # Seats per slot (0.3.0, docs/rooms.md "Seats").
+    # Seats per slot (0.3.0, docs/rooms.md "Seats"). A page is in a room on
+    # a seat only (0.3.1), so a slot has at least one.
     def room_seats(env = ENV)
       n = Integer(env["ASTERISM_ROOM_SEATS"].presence || 16)
-      raise ArgumentError, "ASTERISM_ROOM_SEATS must be 0..99" unless n.between?(0, 99)
+      raise ArgumentError, "ASTERISM_ROOM_SEATS must be 1..99" unless n.between?(1, 99)
       n
     end
 

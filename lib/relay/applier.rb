@@ -26,8 +26,12 @@ module Relay
       "(the ROS 2 nodes in the graph) may not come back until they restart."
     ].freeze
 
-    def self.config_for(peers = RelayPeer.includes(:certificates, :roles).to_a, roles = RelayRole.all.to_a)
-      CloudConfig.new(peers.map(&:to_config), Settings.cloud_settings, roles: roles.map(&:to_config))
+    # The registry's rows and roles, and the rooms' seats (Relay::RoomCerts:
+    # the rooms' store, not the registry).
+    def self.config_for(peers = RelayPeer.includes(:certificates, :roles).to_a, roles = RelayRole.all.to_a,
+                        seats: RoomCerts.seats)
+      CloudConfig.new(peers.map(&:to_config), Settings.cloud_settings.merge("room_seats" => seats),
+                      roles: roles.map(&:to_config))
     end
 
     def initialize(config: self.class.config_for, path: Settings.config_path, command: Settings.restart_command,

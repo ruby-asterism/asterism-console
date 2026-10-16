@@ -49,6 +49,17 @@ module Relay
       [ record, key, cert.to_pem, ca.to_pem ]
     end
 
+    # A key made here for a name that is not a registry row (the rooms'
+    # seats, Relay::RoomCerts): no ledger entry, no DNS names. Returns
+    # [OpenSSL::PKey, OpenSSL::X509::Certificate, CA PEM].
+    def issue_unlisted(name, days:)
+      key, csr = CertAuthority.request(name)
+      cert, ca = sign_and_check(Unlisted.new(name, [], [], days), csr) { |c| c.check_private_key(key) }
+      [ key, cert, ca.to_pem ]
+    end
+
+    Unlisted = Struct.new(:name, :dns_list, :ip_list, :cert_days)
+
     # A bare ECDSA P-256 public key from SubjectPublicKeyInfo (DER, or
     # base64 of it). Anything else (another curve, RSA, a private key) is
     # refused.

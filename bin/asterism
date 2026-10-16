@@ -12,6 +12,11 @@
 #   bin/asterism restore <name> [--force]           # console and bridge stopped
 #   bin/asterism backup-daily                       # the "backup" service's loop
 #
+# and gives an admin a room seat's certificate for a test in a room
+# (docs/rooms.md, "An admin in a room"), as a .tar on its output:
+#
+#   bin/asterism room-seat <slot> <seat> [--router tls/zenohd:7448]
+#
 # setup does, in order, and only what is not done yet (run it again any
 # time; it changes nothing that is in place):
 #
@@ -26,10 +31,10 @@
 #      valid for the router's public name and for "zenohd") and the bridge's
 #      ("console"); issued again when missing, from another CA, ending
 #      within 30 days or not naming the router's public name
-#   7. the rooms (G2, docs/rooms.md): the room slots' certificates
-#      (room-01 .. room-NN, ASTERISM_ROOM_SLOTS) and their seats' (0.3.0,
-#      room-NN-s01 .. room-NN-s16, ASTERISM_ROOM_SEATS) for the door, and
-#      the signer's key that signs the rooms' keys
+#   7. the rooms (G2, docs/rooms.md): the seats' certificates for the door
+#      (room-NN-s01 .. room-NN-s16 for each of the ASTERISM_ROOM_SLOTS
+#      slots, ASTERISM_ROOM_SEATS; in the rooms' store, not the registry),
+#      and the signer's key that signs the rooms' keys
 #   8. the cloud router's configuration from the registry (cloud.json5); a
 #      router starting later starts on it
 #   9. the door's file (rooms.json), which says which slots have seats in
@@ -45,7 +50,7 @@ require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
-USAGE_LINES = 1..41
+USAGE_LINES = 1..46
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -174,13 +179,15 @@ def ensure_identities(ca_pem)
 end
 
 def ensure_rooms(ca_pem)
-  step "Rooms (room slots and the rooms' signing key)"
+  step "Rooms (the seats' certificates and the rooms' signing key)"
+  gone = Relay::RoomCerts.prune_slot_files!
+  done "removed the room slots' own certificates of before 0.3.1 (#{gone.size} files: room-NN.key, .pem, .tar)" if gone.any?
   n = Relay::Settings.room_slots
   if n.zero?
     done "no room slots (ASTERISM_ROOM_SLOTS=0)"
   else
-    Relay::RoomSlots.ensure!(ca_pem) { |name, what| done "#{name}: #{what}" }
-    done "in #{Relay::RoomSlots.certs_dir} (the door reads them; apply so that the cloud router lets them in)"
+    Relay::RoomCerts.ensure!(ca_pem) { |name, what| done "#{name}: #{what}" }
+    done "in #{Relay::RoomCerts.certs_dir} (the door reads them; apply so that the cloud router lets them in)"
   end
   client = Relay::SignerClient.from_env(root: ROOT)
   keys = client.room_keys
@@ -317,9 +324,30 @@ rescue ConsoleBackup::Error => e
   abort "asterism backup-daily: #{e.message}"
 end
 
+# A seat's certificate as a credentials .tar on the output (Relay::RoomCerts.tar).
+def cmd_room_seat(args)
+  router = nil
+  OptionParser.new do |o|
+    o.banner = "bin/asterism room-seat <slot> <seat> [--router LOCATOR] > wasm-<slot><seat>.tar"
+    o.on("--router LOCATOR", "the router in the .tar (default tls/zenohd:7448: from inside the server)") { router = _1 }
+  end.parse!(args)
+  slot, seat = args.map { format("%02d", Integer(_1, 10)) }
+  abort("bin/asterism room-seat <slot> <seat> (e.g. 01 16)") unless slot && seat && args.size == 2
+  abort("room-seat: the output is a terminal; send it to a file (> wasm-#{slot}#{seat}.tar)") if $stdout.tty?
+  require File.join(ROOT, "config/environment")
+  tar = Relay::RoomCerts.tar(slot, seat, **{ router: router }.compact)
+  $stdout.binmode
+  $stdout.write(tar)
+  warn "room-seat: seat #{seat} of slot #{slot} (#{Relay::Settings.seat_node(slot, seat)}), #{tar.bytesize} bytes"
+rescue ArgumentError => e
+  abort("room-seat: #{e.message}")
+end
+
 case ARGV.first
 when "version", "--version", "-v"
   puts "asterism-console #{version}"
+when "room-seat"
+  cmd_room_seat(ARGV.drop(1))
 when "backup"
   cmd_backup(ARGV.drop(1))
 when "backups"

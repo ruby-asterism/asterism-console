@@ -2,9 +2,10 @@ require "tmpdir"
 require "securerandom"
 
 # Rooms in tests (G2): a stand-in signer (a CA of its own and a rooms'
-# signing key, what bin/signer does without the process), room slots made
-# the way bin/asterism setup makes them (Relay::RoomSlots), and the rooms'
-# directory in a temporary one.
+# signing key, what bin/signer does without the process), the seats'
+# certificates made the way bin/asterism setup makes them
+# (Relay::RoomCerts), the router's configuration written with them (an
+# apply, unless apply: false), and the rooms' directory in a temporary one.
 module RoomTestHelper
   class FakeSigner
     attr_reader :room_key, :tokens
@@ -37,7 +38,7 @@ module RoomTestHelper
     end
   end
 
-  def setup_rooms(slots: 2, seats: 2)
+  def setup_rooms(slots: 2, seats: 2, apply: true)
     @rooms_tmp = Dir.mktmpdir
     @room_env = { "ASTERISM_ROOMS_DIR" => File.join(@rooms_tmp, "rooms"), "ASTERISM_ROOM_SLOTS" => slots.to_s,
                   "ASTERISM_ROOM_SEATS" => seats.to_s,
@@ -47,7 +48,14 @@ module RoomTestHelper
     @signer = FakeSigner.new(File.join(@rooms_tmp, "ca"))
     Relay::Issuer.signer = @signer
     Room.signer = @signer
-    Relay::RoomSlots.ensure!(@signer.ca_pem)
+    Relay::RoomCerts.ensure!(@signer.ca_pem)
+    write_router_config if apply
+  end
+
+  def write_router_config
+    config = Relay::Applier.config_for
+    Relay::Applier.new(config: config).write(config.text)
+    config
   end
 
   def teardown_rooms

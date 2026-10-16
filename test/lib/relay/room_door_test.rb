@@ -5,9 +5,9 @@ require "securerandom"
 
 # The rooms' door (Relay::RoomDoor) between a WebSocket client and a stand-in
 # for zenohd's mutual-TLS listener that counts every connection and byte it
-# gets: nothing reaches it before a key checks, the framing both ways, the
-# InitAck rewrite, the limits, and the cuts (a key's end, a closed room, a
-# slot given to another room).
+# gets: nothing reaches it before a key checks and a seat is taken, the
+# framing both ways, the InitAck rewrite, the limits, the cuts (a key's
+# end, a closed room, a slot given to another room) and the seats.
 class Relay::RoomDoorTest < ActiveSupport::TestCase
   parallelize(workers: 1)
 
@@ -154,7 +154,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     @dir = Dir.mktmpdir
     ca = Relay::CertAuthority.create(@dir)
     ca.issue("zenohd-test", dns: %w[localhost])
-    %w[room-01 room-02 room-01-s01 room-01-s02 room-02-s01].each { ca.issue(_1) }
+    %w[01 02].product(%w[01 02 03 04]).each { |slot, seat| ca.issue("room-#{slot}-s#{seat}") }
     @key = OpenSSL::PKey.generate_key("ED25519")
     @kid = Relay::RoomToken.kid(@key)
     @rooms_file = File.join(@dir, "rooms.json")
@@ -180,7 +180,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
   def write_rooms(slots, revoked: [], keys: [ @key ])
     data = { "format" => 1, "keys" => keys.map { { "kid" => Relay::RoomToken.kid(_1), "public_key" => _1.public_to_pem } },
              "slots" => slots.transform_values { |room, max, seats| { "room" => room, "until" => Time.now.to_i + 3600, "max" => max,
-                                                                       "seats" => seats.to_i } },
+                                                                       "seats" => seats || 4 } },
              "seat_node_prefix" => "wasm-", "hosts" => [ "games" ],
              "revoked" => revoked.map { { "room" => _1, "until" => Time.now.to_i + 3600 } } }
     tmp = "#{@rooms_file}.tmp"
@@ -196,8 +196,14 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
                                  "exp" => exp, "max" => max, "jti" => SecureRandom.uuid })
   end
 
-  def client(tok, **opts)
-    Client.new(@door.listen_port, tok, **opts).tap { @clients << _1 }
+  # A page: a seat for a secret of its own (unless seat: false), then the
+  # WebSocket with the secret first.
+  def client(tok, seat: true, **opts)
+    secret = SecureRandom.hex(16)
+    seat(tok, secret, door: @door, ip: opts[:ip]) if seat
+    c = Client.new(@door.listen_port, tok, **opts).tap { @clients << _1 }
+    c.frame(JSON.generate({ "s" => secret }), opcode: 0x1) if seat && c.status == 101
+    c
   end
 
   def wait_until(seconds = 3)
@@ -206,7 +212,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     yield
   end
 
-  test "nothing reaches zenohd before a key checks" do
+  test "nothing reaches zenohd before a key checks and a seat is taken" do
     good = token
     tampered = good.dup
     tampered[12] = tampered[12] == "A" ? "B" : "A"
@@ -227,14 +233,14 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     assert(@logs.none? { _1.include?(good) || _1.include?(tampered) }, "the key is never logged")
   end
 
-  test "a good key: 101, the slot's certificate, InitAck lowered by 2, batches both ways" do
+  test "a good key: 101, the seat's certificate, InitAck lowered by 2, batches both ways" do
     c = client(token)
     assert_equal 101, c.status
     op, ack = c.read_message
     assert_equal 0x2, op
     at = 3 + 16
     assert_equal 65_533, ack.byteslice(at + 1, 2).unpack1("v"), "batch size 65535 -> 65533"
-    assert_equal [ "room-01" ], @upstream.names
+    assert_equal [ "room-01-s01" ], @upstream.names
     c.frame("hello zenoh".b)
     assert_equal [ 0x2, "hello zenoh".b ], c.read_message
     big = SecureRandom.bytes(60_000)
@@ -301,9 +307,9 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
   end
 
   test "keys that do not check are limited per address; a good key still gets in" do
-    (Relay::RoomDoor::BAD_LIMIT + 2).times { client("x.y", ip: "198.51.100.7").close }
-    assert_equal 429, client("x.y", ip: "198.51.100.7").status
-    assert_equal 403, client("x.y", ip: "198.51.100.8").status, "another address"
+    (Relay::RoomDoor::BAD_LIMIT + 2).times { client("x.y", seat: false, ip: "198.51.100.7").close }
+    assert_equal 429, client("x.y", seat: false, ip: "198.51.100.7").status
+    assert_equal 403, client("x.y", seat: false, ip: "198.51.100.8").status, "another address"
     assert_equal 101, client(token, ip: "198.51.100.7").status, "a key that checks is not limited"
   end
 
@@ -330,7 +336,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
 
   # A door whose slot 01 has 2 seats (slot 02 none), its own seats' file.
   def seat_door(**opts)
-    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16 ] })
+    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16, 0 ] })
     @seats_file ||= File.join(@dir, "seats.json")
     @seat_door = Relay::RoomDoor.new(listen: "127.0.0.1:0", upstream: "127.0.0.1:#{@upstream.port}", tls_name: "localhost",
                                      rooms_file: @rooms_file, certs_dir: @dir, total: 10, head_seconds: 1,
@@ -440,7 +446,7 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     # comes in meanwhile and is still unread when the door gives up.
     slow = TCPServer.new("127.0.0.1", 0)
     Thread.new { loop { c = slow.accept; Thread.new { sleep 0.3; c.close } } rescue nil }
-    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16 ] })
+    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16, 0 ] })
     @seat_door = Relay::RoomDoor.new(listen: "127.0.0.1:0", upstream: "127.0.0.1:#{slow.addr[1]}", tls_name: "localhost",
                                      rooms_file: @rooms_file, certs_dir: @dir, total: 10, head_seconds: 1,
                                      seats_file: File.join(@dir, "seats.json"), seat_wait: 1, log: ->(m) { @logs << m }).start
@@ -456,22 +462,12 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     slow&.close
   end
 
-  test "legacy_slot: an old page gets in with the slot's certificate, its first batch goes on" do
-    seat_door(legacy_slot: true)
-    old = seat_client(token, nil)
-    old.frame("InitSyn".b)
-    op, = old.read_message
-    assert_equal 0x2, op
-    assert_equal [ 0x2, "InitSyn".b ], old.read_message, "the stand-in echoes the first batch"
-    assert_equal [ "room-01" ], @upstream.names
-  end
-
-  test "a slot without seats works as before 0.3.0" do
+  test "a slot without seats lets nobody in: 503, and nothing reaches zenohd" do
     seat_door
-    c = client(token(room: @room_b, slot: "02"))
-    assert_equal 101, c.status
-    c.read_message
-    assert_equal [ "room-02" ], @upstream.names
+    c = Client.new(@seat_door.listen_port, token(room: @room_b, slot: "02")).tap { @clients << _1 }
+    assert_equal 503, c.status
+    assert_equal 0, @upstream.accepts
+    assert(@logs.any? { _1.include?("no seats in the router's configuration") })
   end
 
   test "a seat nobody is on for seat_idle goes to a new secret; a seat in use does not" do

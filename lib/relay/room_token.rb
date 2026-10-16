@@ -11,7 +11,7 @@
 #         door keeps several, so a key can be replaced without a gap
 #   room  the room's ID (Room#uid: 16 hex, random)
 #   slot  the room slot it is on ("01".."99"): its key space is
-#         room/<slot>/** and the door connects with that slot's certificate
+#         room/<slot>/** and the door connects with one of its seats' certificates
 #   exp   when it ends (Unix seconds)
 #   max   connections the room may have at once (1..MAX_CONNECTIONS)
 #   jti   a random ID (UUID): no two keys are the same string

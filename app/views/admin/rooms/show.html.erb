@@ -8,6 +8,8 @@
     <dt>Opens</dt><dd><%= @room.app.present? ? tag.code(@room.app) : "the page's own start" %></dd>
     <dt>Until</dt><dd><%= when_text(@room.closed_at || @room.expires_at) %></dd>
     <dt>Connections</dt><dd><%= @door ? (@door.dig("rooms", @room.uid) || 0) : "?" %> of at most <%= @room.max_connections %></dd>
+    <% if @room.open? %><dt>Seats taken</dt><dd><%= @door ? (@door.dig("seats", @room.uid) || 0) : "?" %> of
+      <%= Relay::RoomFiles.seats_in_config.fetch(@room.slot, 0) %> (a page keeps its seat until the room is over)</dd><% end %>
     <dt>Links made</dt><dd><%= @room.links_made %></dd>
     <% if @games_on %><dt>Tables</dt><dd><%= room_tables_text(@room, @games, @games_apps) %></dd><% end %>
   </dl>
