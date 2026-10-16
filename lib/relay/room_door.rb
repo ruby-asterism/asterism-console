@@ -87,6 +87,10 @@ module Relay
     SEAT_IDLE = 1800.0
     SEAT_WAIT = 5.0
     TOUCH_EVERY = 60.0
+    # After a refusal's close frame: how long to read what the page still
+    # sends (in all, and with nothing coming) before the socket is closed.
+    LINGER = 2.0
+    LINGER_IDLE = 0.3
     # WebSocket close codes the page can tell apart.
     CLOSE_NO_SEAT = 4403
     CLOSE_NO_SECRET = 4408
@@ -477,7 +481,23 @@ module Relay
     def refuse_ws(conn, code, reason, why, ip)
       @lock.synchronize { @counts["ws#{code}"] += 1 }
       ws_write(conn.client, 0x8, [ code ].pack("n") + reason.b, Mutex.new) rescue nil
+      linger(conn.client)
       log("rooms: #{conn.label}: refused #{ip}: closed #{code} (#{why})")
+      nil
+    end
+
+    # Read and drop what the page has already sent (its first batch, its own
+    # close frame) before the socket is closed. Closing with unread bytes
+    # resets the connection, and nginx logs a reset with the request line:
+    # the room's key in its error log.
+    def linger(io)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + LINGER
+      loop do
+        left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        break if left <= 0 || !io.wait_readable([ left, LINGER_IDLE ].min)
+        io.read_nonblock(4096)
+      end
+    rescue EOFError, IOError, SystemCallError, IO::WaitReadable
       nil
     end
 

@@ -126,6 +126,25 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
       true
     end
 
+    # How the door ends the connection: :eof, :reset or :open (timeout).
+    def ending(timeout = 4)
+      deadline = Time.now + timeout
+      loop do
+        left = deadline - Time.now
+        return :open if left <= 0
+        next unless @sock.wait_readable(left)
+        begin
+          @sock.read_nonblock(65_536)
+        rescue IO::WaitReadable
+          nil
+        end
+      end
+    rescue EOFError
+      :eof
+    rescue Errno::ECONNRESET
+      :reset
+    end
+
     def close
       @sock.close rescue nil
     end
@@ -414,6 +433,27 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     bad.frame("not json", opcode: 0x1)
     assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(bad)
     assert_equal 0, @upstream.accepts
+  end
+
+  test "a refusal reads what the page had sent first, so it ends with no reset (nginx logs resets)" do
+    # zenohd answers slowly and then not at all (1013): the page's first batch
+    # comes in meanwhile and is still unread when the door gives up.
+    slow = TCPServer.new("127.0.0.1", 0)
+    Thread.new { loop { c = slow.accept; Thread.new { sleep 0.3; c.close } } rescue nil }
+    write_rooms({ "01" => [ @room_a, 16, 2 ], "02" => [ @room_b, 16 ] })
+    @seat_door = Relay::RoomDoor.new(listen: "127.0.0.1:0", upstream: "127.0.0.1:#{slow.addr[1]}", tls_name: "localhost",
+                                     rooms_file: @rooms_file, certs_dir: @dir, total: 10, head_seconds: 1,
+                                     seats_file: File.join(@dir, "seats.json"), seat_wait: 1, log: ->(m) { @logs << m }).start
+    tok = token
+    assert_equal 200, seat(tok, SECRET_A).first
+    c = seat_client(tok, SECRET_A)
+    sleep 0.05
+    c.frame("\x01\x02InitSyn".b) # the page's first batch, right behind its secret
+    assert_equal Relay::RoomDoor::CLOSE_TRY_AGAIN, close_code(c)
+    c.frame([ 1000 ].pack("n"), opcode: 0x8) # the page's own close
+    assert_equal :eof, c.ending
+  ensure
+    slow&.close
   end
 
   test "legacy_slot: an old page gets in with the slot's certificate, its first batch goes on" do

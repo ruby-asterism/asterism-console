@@ -37,6 +37,10 @@ docs/install.md, "From 0.2.3 to 0.3.0".
   host reads them). It is written again on every apply.
 - The registry's list shows the seats as one line; the apply pages count
   them per slot; the graph leaves them out of the registry.
+- A WebSocket the door refuses after 101 (4403, 4408, 4426, 1013) is
+  closed only after what the page had already sent is read: closing with
+  unread bytes reset the connection, and nginx logged the reset with the
+  request line, the room's key in it.
 - `WS_DOOR_ROOM_LEGACY=1` lets a page from before the seats into a room
   with seats, with the slot's certificate (the slot's certificate is kept
   for that and for an admin's tests).
