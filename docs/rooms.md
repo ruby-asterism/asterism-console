@@ -144,7 +144,20 @@ held too; there is no such certificate from 0.3.1.
   (the `rooms` volume, read-only) and serves the rooms that open its app.
   asterism-games does so for the mahjong table: the admin chooses "Opens:
   Mahjong" when making the room (`ASTERISM_ROOM_APPS` lists the choices) and
-  the room has a table a second later, with nothing else to do.
+  the room has a table a second later, with nothing else to do. The same
+  goes for its othello table and its drawing board (asterism-games
+  0.11.0): list their screens among the choices, e.g.
+
+  ```
+  ASTERISM_ROOM_APPS=Mahjong=/app/game/mahjong/mahjong.app.rb,Othello (table)=/app/game/othello/othello.app.rb,Board=/app/game/board/board.app.rb
+  ```
+
+  and a room made with "Opens: Board" gets the board `board1`, which the
+  pages in the room draw on together. It goes when the room is over, like
+  a room's tables. A room's board cannot be recorded: the console only
+  watches who is in a room (section "Seats"); record a board on the
+  registered side (the permanent tables, [v4.md](v4.md), "Recording a
+  drawing board").
 - **A slot used again.** A host must drop what it kept for a room when the
   room is over: the room is in `revoked`, its end has passed, or its slot
   holds another room's ID. asterism-games removes the room's saved tables
@@ -207,6 +220,10 @@ console's code is particular to it: two roles and a row.
   Browsers have this role: yes
   Opens in a browser page: /app/game/mahjong/mahjong.app.rb
   ```
+
+  (or `/app/game/board/board.app.rb` for the drawing board: a pass's link
+  then opens the board's screen; the role reads and calls every table of
+  the host either way.)
 
   The tables' states and presence to read, the tables to call in its own
   name only. It writes nothing: a board's own presence comes from the role
