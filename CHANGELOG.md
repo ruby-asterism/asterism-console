@@ -11,7 +11,9 @@ the command that goes back).
 ## 0.3.3
 
 What an update needs: `./update.sh 0.3.3`. No migration, no change to
-`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.2
+`.env` or nginx. The router's configuration changes (the console's
+profiles, below): the update's setup writes it from the registry and
+restarts the router on it, as Apply does. docs/install.md, "From 0.3.2
 to 0.3.3".
 
 - A room's game host has a label of its own in the graph. The host joins
@@ -25,15 +27,20 @@ to 0.3.3".
   name before the ID, the browsers' IDs, "(this console)".
 - The permanent tables' host (asterism-games 0.7.1) gives its profile the
   name `permanent tables`, which the graph shows as `permanent tables
-  (games)` where the console can read the profile (below).
-- Known: through the cloud router the console reads no node's profile. A
-  key expression's `**` does not match a chunk that starts with `@`, and
+  (games)`.
+- The console reads the nodes' profiles through the cloud router again.
+  A key expression's `**` does not match a chunk that starts with `@`, and
   the console's own row (made by `bin/asterism setup`) has `asterism/**`
-  only, so the router lets neither the console's query on
-  `asterism/<node>/@profile` nor the profiles' puts through. The graph
-  shows the IDs without the names, marks and icons of the profiles (the
-  console's own is drawn without the network). Not changed in this
-  version.
+  only, so the router let neither the console's query on
+  `asterism/<node>/@profile` nor the profiles' puts through: the graph
+  showed the IDs without the names, marks and icons of the profiles (the
+  console's own is drawn without the network). The router's configuration
+  now gives the console's certificate a rule of its own for
+  `asterism/*/@profile` (`console__profiles_in`: its query and
+  subscription; `console__profiles_out`: the replies and the puts to it).
+  It reads the profiles and writes none; no other subject gets the rule.
+  The registry's rows are not changed (no migration): the rule comes from
+  the code, so the update's setup writes it and restarts the router.
 
 ## 0.3.2
 

@@ -232,8 +232,8 @@ host's node `games` and its tables on the registered side, outside every
 room's frame. The host's profile names it (asterism-games 0.7.1,
 `permanent tables`), and the graph puts that name before the ID like any
 profile's: `permanent tables (games)`, next to `games (room 01)` in a
-room's frame. The console reads the profile only where the router lets it
-(CHANGELOG 0.3.3, "Known"); without it the node is `games`.
+room's frame. (Before 0.3.3 the cloud router let no profile through to the
+console, and the node was `games`.)
 
 ## Seats (0.3.0)
 

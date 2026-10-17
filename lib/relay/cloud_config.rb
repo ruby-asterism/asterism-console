@@ -65,6 +65,13 @@
 # query (an Asterism call is a query): it cannot write into a room or call
 # an object in one. The rooms' own rules do not reach outside room/<slot>.
 #
+# The console's profiles (0.3.3): a ** never matches a chunk that starts
+# with @, so the console's asterism/** does not reach asterism/<node>/@profile.
+# The console's certificate gets a rule of its own for asterism/*/@profile:
+# from it the query and the subscription, to it the replies and the puts
+# (the graph's names, marks and icons, Bridge::Profiles). Nobody else gets
+# it.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -94,6 +101,12 @@ module Relay
     ROOMS_WATCH = "room/*/asterism/**".freeze
     ROOMS_IN = %w[declare_liveliness_subscriber liveliness_query].freeze
     ROOMS_OUT = %w[liveliness_token reply].freeze
+    # The nodes' profiles the console reads (0.3.3): asterism/** does not
+    # match the chunk @profile, so they need a rule of their own. From the
+    # console its query and subscription, to it the replies and the puts.
+    PROFILES = "asterism/*/@profile".freeze
+    PROFILES_IN = %w[declare_subscriber query].freeze
+    PROFILES_OUT = %w[put reply].freeze
     # A seat's or a host's own writes in a room (0.3.0).
     OWN = %w[put delete declare_queryable liveliness_token reply].freeze
     ROOM_READ_IN = %w[declare_subscriber declare_liveliness_subscriber liveliness_query].freeze
@@ -248,7 +261,10 @@ module Relay
           ids.each { shared[_1] = true }
           mine.concat(ids)
         end
-        mine.concat(rooms_watch_rules(rules, id)) if p["name"] == @settings["console"]
+        if p["name"] == @settings["console"]
+          mine.concat(profile_rules(rules, id))
+          mine.concat(rooms_watch_rules(rules, id))
+        end
         mine.concat(room_host_rules(rules, id, p["name"])) if room_hosts.include?(p["name"])
         next if mine.empty?
         subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
@@ -274,6 +290,16 @@ module Relay
       end
       { "enabled" => true, "default_permission" => "deny", "rules" => rules, "subjects" => subjects,
         "policies" => policies }
+    end
+
+    # The console's reading of the nodes' profiles (asterism/<node>/@profile):
+    # the rules (pushed onto rules) and their ids.
+    def profile_rules(rules, id)
+      rules << { "id" => "#{id}__profiles_in", "messages" => PROFILES_IN, "flows" => %w[ingress],
+                 "permission" => "allow", "key_exprs" => [ PROFILES ] }
+      rules << { "id" => "#{id}__profiles_out", "messages" => PROFILES_OUT, "flows" => %w[egress],
+                 "permission" => "allow", "key_exprs" => [ PROFILES ] }
+      [ "#{id}__profiles_in", "#{id}__profiles_out" ]
     end
 
     # The console's watch of the rooms (when there are seats): the

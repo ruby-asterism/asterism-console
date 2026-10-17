@@ -887,12 +887,16 @@ connection"):
 
 From 0.3.2 to 0.3.3 (a room's game host labelled in the graph):
 
-- `./update.sh 0.3.3`. No migration, no change to `.env`, nginx or the
-  router's configuration.
-- **Check**: with a room open on the game host, the graph's room frame
-  shows `games (room 01)`; the host's node outside the rooms stays `games`
-  (`permanent tables (games)` where the console reads its profile,
-  CHANGELOG 0.3.3).
+- `./update.sh 0.3.3`. No migration, no change to `.env` or nginx. The
+  router's configuration gets a rule for the console's reading of the
+  nodes' profiles (`asterism/*/@profile`): the update's setup writes it
+  from the registry and restarts the router on it, as Apply does (the
+  boards and pages come back within seconds).
+- **Check**: the setup's output says it wrote the cloud router's
+  configuration and restarted it. The graph shows the profiles' names
+  before the IDs again (`Alice's board (player-a)`); with a room open on
+  the game host, the room's frame shows `games (room 01)` and the host's
+  node outside the rooms `permanent tables (games)` (asterism-games 0.7.1).
 - Going back to 0.3.2 is `./update.sh 0.3.2` (no backup needed).
 
 ## 21. When something is wrong
