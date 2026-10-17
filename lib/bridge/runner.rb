@@ -468,6 +468,15 @@ module Bridge
 
     # ------------------------------------------------------------------ graph
 
+    # The game hosts of the rooms (ASTERISM_ROOM_HOSTS), for their label in a
+    # room's frame; none when the setting is not node IDs (the console's
+    # setup says so).
+    def room_hosts
+      @room_hosts ||= Relay::Settings.room_hosts
+    rescue ArgumentError
+      @room_hosts = []
+    end
+
     def publish_graph
       graph = @lock.synchronize do
         @dirty = false
@@ -476,7 +485,8 @@ module Bridge
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
                     cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured,
                     profiles: @profiles.to_graph.merge(@node_id => @own_profile).compact,
-                    icons: @profiles.icon_set, rooms: @room_keys.keys, room_info: @rooms).to_h
+                    icons: @profiles.icon_set, rooms: @room_keys.keys, room_info: @rooms,
+                    room_hosts: room_hosts).to_h
       end
       @topic_types = graph["nodes"].each_with_object({}) do |n, h|
         h[n["id"]] = n["data"]["type"] if n["kind"] == "r_topic"

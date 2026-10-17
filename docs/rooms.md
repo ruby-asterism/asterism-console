@@ -153,7 +153,10 @@ held too; there is no such certificate from 0.3.1.
   `GET /status` (`ASTERISM_GAMES_STATUS_URL`): the rooms' page says whether
   the host answers, and each room's tables (state and counts only). In the
   graph the host's node and its objects show in the room's frame like any
-  node in a room. The same file puts the host's saved tables into the daily
+  node in a room; from 0.3.3 a node there whose ID is one of
+  `ASTERISM_ROOM_HOSTS` is labelled with the room's slot, `games (room 01)`,
+  apart from the host's node of the same ID outside the rooms (its
+  permanent tables, below). The same file puts the host's saved tables into the daily
   backup (`ASTERISM_BACKUP_EXTRA`).
 
 ## A game host's permanent tables (0.2.3)
@@ -225,7 +228,12 @@ What these roles keep closed (`test/lib/relay/game_host_roles_test.rb`):
 
 The rooms' page shows the permanent tables under the game host's line
 (state and counts, the same as a room's tables), and the graph shows the
-host's node `games` and its tables on the registered side.
+host's node `games` and its tables on the registered side, outside every
+room's frame. The host's profile names it (asterism-games 0.7.1,
+`permanent tables`), and the graph puts that name before the ID like any
+profile's: `permanent tables (games)`, next to `games (room 01)` in a
+room's frame. The console reads the profile only where the router lets it
+(CHANGELOG 0.3.3, "Known"); without it the node is `games`.
 
 ## Seats (0.3.0)
 

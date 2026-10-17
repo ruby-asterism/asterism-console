@@ -885,6 +885,16 @@ connection"):
   (grace 60 s)", and nothing more while the router is well.
 - Going back to 0.3.1 is `./update.sh 0.3.1` (no backup needed).
 
+From 0.3.2 to 0.3.3 (a room's game host labelled in the graph):
+
+- `./update.sh 0.3.3`. No migration, no change to `.env`, nginx or the
+  router's configuration.
+- **Check**: with a room open on the game host, the graph's room frame
+  shows `games (room 01)`; the host's node outside the rooms stays `games`
+  (`permanent tables (games)` where the console reads its profile,
+  CHANGELOG 0.3.3).
+- Going back to 0.3.2 is `./update.sh 0.3.2` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

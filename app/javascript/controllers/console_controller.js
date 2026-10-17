@@ -387,6 +387,9 @@ export default class extends Controller {
     // ID stays in the label, since calls, permissions and the registry use it.
     const shown = n.kind === "a_node" && !n.data?.self && n.data?.profile?.name
     if (shown && shown !== n.label) label = `${shown} (${n.label})`
+    // A room's game host (0.3.3, data "room_host"): the room's number after
+    // its ID, apart from the same ID outside the rooms ("games (room 05)").
+    if (n.kind === "a_node" && n.data?.room_host && n.data?.room) label = `${n.label} (room ${n.data.room})`
     const machine = n.kind === "a_node" && machineOf(n.data?.machine)
     // A node's own icon stands for it; the mark is the fallback without one.
     if (machine && !n.data?.icon) label = `${machine.mark} ${label}`

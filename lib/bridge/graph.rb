@@ -16,6 +16,9 @@
 #             room/<slot>/asterism/<node>/<app>[/<object>]
 #   room_info: the open rooms (Room.for_graph: "slot", "name", "uid",
 #             "expires_at", "app"), for the rooms' frames
+#   room_hosts: the node IDs of the game hosts that join the rooms with their
+#             own certificates (Relay::Settings.room_hosts, "games"): such a
+#             node in a room's frame gets data "room_host" (0.3.3)
 #   self_node: the bridge's own Asterism node ID (marked, not hidden)
 #   self_zids: the bridge's own Zenoh session IDs (marked)
 #   own_links: the bridge's own links ({ router zid => { "protocol" =>,
@@ -87,6 +90,12 @@
 #     objects; everything of a room has data "room" (its slot). Their
 #     sessions carry them like any other node's. Graph.without_rooms takes
 #     all of it out again (for the users who are not admins).
+#   - A room's game host (0.3.3): a node in a room's frame whose ID is one of
+#     room_hosts has data "room_host" true; the page labels it "<ID> (room
+#     <slot>)" ("games (room 05)"), apart from the host's node of the same ID
+#     outside the rooms (its permanent tables, labelled by its profile). The
+#     console cannot read the profiles in a room, so the mark is the
+#     console's own.
 module Bridge
   class Graph
     LAYERS = {
@@ -123,7 +132,7 @@ module Bridge
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
                    registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil,
-                   rooms: [], room_info: [])
+                   rooms: [], room_info: [], room_hosts: [])
       g = new
       g.cloud = cloud
       g.icons = icons
@@ -134,7 +143,7 @@ module Bridge
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
       g.add_profiles(profiles)
-      g.add_rooms(rooms, room_info)
+      g.add_rooms(rooms, room_info, room_hosts)
       g.add_ros(ros)
       g.finish_ros
       g.link_tokens(admin)
@@ -354,7 +363,7 @@ module Bridge
 
     # The rooms (0.2.1): a frame per open room (and per slot with tokens but
     # no open room: what is left of one that ended), holding its nodes.
-    def add_rooms(keys, info)
+    def add_rooms(keys, info, hosts = [])
       by_slot = Array(info).to_h { [ _1["slot"].to_s, _1 ] }
       by_slot.each { |slot, room| room_frame(slot, room) }
       Array(keys).each do |key|
@@ -365,7 +374,9 @@ module Bridge
         nid, app, obj = parts
         frame = room_frame(slot, by_slot[slot])
         base = "room/#{slot}/#{nid}"
-        node("a_node:#{base}", "a_node", nid, { "node" => nid, "room" => slot }, frame)
+        data = { "node" => nid, "room" => slot }
+        data["room_host"] = true if hosts.include?(nid)
+        node("a_node:#{base}", "a_node", nid, data, frame)
         aid = "a_app:#{base}/#{app}"
         node(aid, "a_app", app, { "node" => nid, "app" => app, "room" => slot }, "a_node:#{base}")
         next unless obj

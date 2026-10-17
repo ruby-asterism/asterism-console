@@ -8,6 +8,33 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.3
+
+What an update needs: `./update.sh 0.3.3`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.2
+to 0.3.3".
+
+- A room's game host has a label of its own in the graph. The host joins
+  every room and keeps its permanent tables with one certificate (`games`),
+  so the graph had two nodes `games`, one in a room's frame and one outside,
+  and nothing told them apart. A node in a room's frame whose ID is one of
+  `ASTERISM_ROOM_HOSTS` is now labelled `<ID> (room <slot>)`, such as
+  `games (room 05)` (data `room_host` in the graph; the console cannot read
+  the profiles in a room, so the label is the console's own). The same ID
+  outside the rooms and every other node keep their labels: a profile's
+  name before the ID, the browsers' IDs, "(this console)".
+- The permanent tables' host (asterism-games 0.7.1) gives its profile the
+  name `permanent tables`, which the graph shows as `permanent tables
+  (games)` where the console can read the profile (below).
+- Known: through the cloud router the console reads no node's profile. A
+  key expression's `**` does not match a chunk that starts with `@`, and
+  the console's own row (made by `bin/asterism setup`) has `asterism/**`
+  only, so the router lets neither the console's query on
+  `asterism/<node>/@profile` nor the profiles' puts through. The graph
+  shows the IDs without the names, marks and icons of the profiles (the
+  console's own is drawn without the network). Not changed in this
+  version.
+
 ## 0.3.2
 
 What an update needs: `./update.sh 0.3.2`. No migration, no change to

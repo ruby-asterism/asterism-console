@@ -78,6 +78,27 @@ class Bridge::GraphRoomsTest < ActiveSupport::TestCase
     refute g["nodes"].any? { _1["kind"] == "others" }, "every session carries a node"
   end
 
+  test "a room's game host is marked in the room's frame, not outside it nor another node of the room" do
+    rooms = ROOMS + %w[room/01/asterism/games/games room/01/asterism/games/games/othello1
+                       room/01/asterism/games-bot1/game]
+    g = Bridge::Graph.build(admin: admin, asterism: %w[asterism/console/console asterism/games/games
+                                                       asterism/games/games/mahjong1],
+                            self_node: "console", self_zids: [ CONSOLE ], cloud: "zenohd-cloud", rooms: rooms,
+                            room_info: INFO, room_hosts: %w[games],
+                            profiles: { "games" => { "kind" => "cruby", "name" => "permanent tables" } }).to_h
+    host = node(g, "a_node:room/01/games")
+    assert_equal [ "games", "room:01", true, "01" ], [ host["label"], host["parent"], host["data"]["room_host"],
+                                                      host["data"]["room"] ]
+    outside = node(g, "a_node:games")
+    assert_equal "games", outside["label"], "the ID stays the label (the page puts the profile's name before it)"
+    assert_nil outside["data"]["room_host"], "the same ID outside the rooms is not the room's host"
+    assert_equal "permanent tables", outside["data"]["profile"]["name"]
+    assert_nil node(g, "a_node:room/01/games-bot1")["data"]["room_host"], "the ID itself, not a name that starts with it"
+    assert_nil node(g, "a_node:room/01/wasm-a1b2c3")["data"]["room_host"]
+    assert_nil node(g, "a_node:console")["data"]["room_host"]
+    refute graph["nodes"].any? { _1.dig("data", "room_host") }, "no room hosts given: no mark"
+  end
+
   test "without the rooms: no frame, node, edge or session of a room is left" do
     full = graph
     before = JSON.generate(full)
