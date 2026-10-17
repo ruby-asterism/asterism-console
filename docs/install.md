@@ -899,6 +899,19 @@ From 0.3.2 to 0.3.3 (a room's game host labelled in the graph):
   node outside the rooms `permanent tables (games)` (asterism-games 0.7.1).
 - Going back to 0.3.2 is `./update.sh 0.3.2` (no backup needed).
 
+From 0.3.3 to 0.3.4 (the applications' statuses in the details):
+
+- `./update.sh 0.3.4`. No migration, no change to `.env` or nginx. The
+  router's configuration gets a rule for the console's reading of the
+  applications' statuses (`asterism/*/*/@status`): the update's setup
+  writes it from the registry and restarts the router on it, as Apply does.
+- For the permanent tables: add `asterism/${node}/*/@status` to the role
+  `games-host` ("Read and write"; docs/rooms.md) and Apply.
+- **Check**: with asterism-games 0.9.0 on the permanent tables, the details
+  of the host's node (and of its app `games`) show a "Status" row with each
+  table's counts (`st=...`, `members=...`, `humans=...`).
+- Going back to 0.3.3 is `./update.sh 0.3.3` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

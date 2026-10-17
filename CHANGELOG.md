@@ -8,6 +8,39 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.4
+
+What an update needs: `./update.sh 0.3.4`. No migration, no change to
+`.env` or nginx. The router's configuration changes (the console's reading
+of the statuses, below): the update's setup writes it from the registry
+and restarts the router on it, as Apply does. A game host that should tell
+its tables' counts needs a line in its role (below). docs/install.md,
+"From 0.3.3 to 0.3.4".
+
+- The applications' statuses (asterism's `asterism/<node>/<app>/@status`:
+  a small map an application tells about itself and puts again when it
+  changes; a game host's tables' counts) show in the graph's details: an
+  app's details have a "Status" row, its node's details one per app that
+  has a status. The graph itself (its nodes and lines) does not change.
+  The bridge asks each application once when it appears and follows the
+  puts (`Bridge::Statuses`); the graph's data `status` is on the apps.
+- The router's configuration gives the console's certificate a rule for
+  `asterism/*/*/@status` (`console__statuses_in`: its query and
+  subscription; `console__statuses_out`: the replies and the puts), as for
+  the profiles in 0.3.3 (`**` does not match a chunk that starts with
+  `@`). It reads the statuses and writes none; no other subject gets the
+  rule.
+- docs/rooms.md: the role `games-host` gets `asterism/${node}/*/@status`
+  in "Read and write", so that the permanent tables' host (asterism-games
+  0.9.0) may tell its tables' counts. Add it to the role on a running
+  console (Admin > Relay > Roles, then Apply); without it the host's
+  status does not get through and the details show none. A room's host
+  tells none (the rooms' rules are unchanged).
+- docs/g1_5.md, "Looking only": a viewer role for an admin's `.tar`, with
+  which the asterism gem's command line (`asterism nodes / tree / watch`)
+  and its MCP bridge see the whole network outside the rooms and the
+  router refuses every call (`test/lib/relay/viewer_role_test.rb`).
+
 ## 0.3.3
 
 What an update needs: `./update.sh 0.3.3`. No migration, no change to

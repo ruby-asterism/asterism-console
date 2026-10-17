@@ -30,7 +30,11 @@
 #   - asks each Asterism node that appears for its profile (V2.5,
 #     Bridge::Profiles) on a worker thread of its own, follows the notices
 #     put on asterism/*/@profile, keeps the icons (NodeIcon), and tells its
-#     own profile (kind console, app/assets/images/asterism_console.png).
+#     own profile (kind console, app/assets/images/asterism_console.png);
+#   - asks each Asterism application that appears for its status (0.3.4,
+#     Bridge::Statuses: asterism/<node>/<app>/@status) on the same worker
+#     and follows the puts on asterism/*/*/@status (the details of an app
+#     and of its node).
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -138,7 +142,8 @@ module Bridge
       @recorders = {} # recording id => { recorder:, subs: [Subscription] }
       @players = {} # playback id => Player
       @profiles = Profiles.new
-      @profile_queue = Queue.new # [node, notice or nil] for the profile worker
+      @profile_queue = Queue.new # [node, notice or nil] or [:status, app] for the profile worker
+      @statuses = Statuses.new
       @watch = nil # Bridge::RouterWatch (run)
       @stop = false
     end
@@ -211,6 +216,7 @@ module Bridge
       follow(ROOMS_WATCH, @room_keys)
       follow("@ros2_lv/**", @ros_keys)
       @profile_sub = @z.subscribe("asterism/*/@profile") { |sample| profile_notice(sample) }
+      @status_sub = @z.subscribe(STATUSES) { |sample| status_notice(sample) }
       @profile_worker = start_profile_worker
       @z.start
       @self_zids = [ @z.zid ]
@@ -240,6 +246,7 @@ module Bridge
       @logs.clear
       @log_subs = {}
       @profiles.clear
+      @statuses.clear
       @profile_queue.clear
     end
 
@@ -298,6 +305,7 @@ module Bridge
         if now >= next_sync
           check_follows
           sync_profiles
+          sync_statuses
           sync_watches
           sync_rates
           sync_plots
@@ -485,6 +493,7 @@ module Bridge
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
                     cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured,
                     profiles: @profiles.to_graph.merge(@node_id => @own_profile).compact,
+                    statuses: @statuses.to_graph,
                     icons: @profiles.icon_set, rooms: @room_keys.keys, room_info: @rooms,
                     room_hosts: room_hosts).to_h
       end
@@ -826,7 +835,7 @@ module Bridge
         loop do
           item = @profile_queue.pop
           break if item == :stop
-          fetch_profile(*item)
+          item[0] == :status ? fetch_status(item[1]) : fetch_profile(*item)
         rescue Asterism::Error, ActiveRecord::ActiveRecordError => e
           say "bridge: profile #{item&.first}: #{e.class}: #{e.message}"
         ensure
@@ -854,6 +863,44 @@ module Bridge
       @lock.synchronize { @dirty = true } if changed || kept
       return unless changed
       say "bridge: profile #{node}: #{pr ? Profiles.summary(pr).map { |k, v| "#{k}=#{v}" }.join(' ') : 'none (no answer)'}"
+    end
+
+    # --------------------------------------------------------------- statuses
+
+    STATUSES = "asterism/*/*/@status".freeze
+
+    # The Asterism applications here now ("node/app", from the tokens of
+    # the apps and their objects), this console's own left out.
+    def asterism_apps
+      keys = @lock.synchronize { @asterism_keys.keys }
+      keys.filter_map do |k|
+        parts = k.split("/")
+        "#{parts[1]}/#{parts[2]}" if parts.size.between?(3, 4)
+      end.uniq - [ "#{@node_id}/#{@app}" ]
+    end
+
+    # The applications that appeared are asked (once; again after they
+    # leave and come back).
+    def sync_statuses
+      @statuses.due(asterism_apps).each { @profile_queue << [ :status, _1 ] }
+    end
+
+    # A put on asterism/<node>/<app>/@status (the receiving thread).
+    def status_notice(sample)
+      app, st = Statuses.parse(sample.key, sample.payload)
+      return unless app && app != "#{@node_id}/#{@app}"
+      @lock.synchronize { @dirty = true } if @statuses.told(app, st)
+    end
+
+    # Asks an application for its status (the worker).
+    def fetch_status(app)
+      st = nil
+      @z.get("asterism/#{app}/@status", timeout: GET_TIMEOUT) do |r|
+        st ||= Statuses.check(MessagePack.unpack(r.payload.to_s)) unless r.error?
+      rescue StandardError
+        nil
+      end
+      @lock.synchronize { @dirty = true } if @statuses.answered(app, st)
     end
 
     # Called on the receiving thread, so the database (Action Cable's

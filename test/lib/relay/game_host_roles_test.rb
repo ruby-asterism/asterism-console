@@ -18,7 +18,8 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
                              "watch" => %w[asterism/**] } }.freeze
   # The two roles of docs/rooms.md.
   GAMES_HOST = { "name" => "games-host", "for_browsers" => false,
-                 "templates" => { "rw" => %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile],
+                 "templates" => { "rw" => %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile
+                                             asterism/${node}/*/@status],
                                   "watch" => %w[asterism/**] } }.freeze
   GAMES = { "name" => "games", "for_browsers" => true,
             "templates" => { "read" => %w[asterism/*/games/**],
@@ -50,6 +51,16 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
     assert allowed?("games", "put", "ingress", "#{T}/state")
     assert allowed?("games", "put", "ingress", "asterism/games/@profile")
     assert allowed?("games", "declare_queryable", "ingress", "asterism/games/@profile")
+    # Its tables' counts (0.3.4, asterism-games "Status"): its own status
+    # only; the console reads it, and so may a viewer role.
+    assert allowed?("games", "put", "ingress", "asterism/games/games/@status")
+    assert allowed?("games", "declare_queryable", "ingress", "asterism/games/games/@status")
+    assert allowed?("games", "reply", "ingress", "asterism/games/games/@status")
+    assert allowed?("console", "put", "egress", "asterism/games/games/@status"), "the console gets the puts"
+    refute allowed?("games", "put", "ingress", "asterism/fmruby-aaaaaa/game/@status"), "not another node's status"
+    refute allowed?("fmruby-aaaaaa", "put", "ingress", "asterism/games/games/@status"), "a board cannot write the host's"
+    refute allowed?("fmruby-aaaaaa", "put", "egress", "asterism/games/games/@status"), "nor read it (its roles do not say so)"
+    refute allowed?("games", "put", "ingress", "room/01/asterism/games/games/@status"), "nor in a room (Seats)"
     assert allowed?("games", "query", "egress", "#{T}/call/fmruby-aaaaaa"), "a board's call reaches it"
     assert allowed?("games", "reply", "ingress", "#{T}/call/fmruby-aaaaaa")
     assert allowed?("games", "declare_liveliness_subscriber", "ingress", "asterism/**")
@@ -112,7 +123,8 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
                      "asterism/*/games/**" ].sort, keys, id
     end
     %w[console fmruby_cccccc room_01_s01 room_02_s01].each { assert_equal rules.(without, _1), rules.(with, _1), _1 }
-    assert_equal %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile].map { _1.sub("${node}", "games") },
+    assert_equal %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile
+                    asterism/${node}/*/@status].map { _1.sub("${node}", "games") },
                  rules.(with, "games").flat_map { _1["key_exprs"] } - [ "asterism/**" ]
   end
 

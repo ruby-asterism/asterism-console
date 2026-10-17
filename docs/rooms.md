@@ -174,10 +174,20 @@ console's code is particular to it: two roles and a row.
   Read and write   asterism/${node}
                    asterism/${node}/games/**
                    asterism/${node}/@profile
+                   asterism/${node}/*/@status
   Read             asterism/*/game
   Watch            asterism/**
   Browsers have this role: no
   ```
+
+  `asterism/${node}/*/@status` lets the host tell its tables' counts
+  (asterism-games 0.9.0, "Status"; asterism `docs/protocol.md` 8): a
+  `**` does not match the chunk `@status`, so it needs a line of its own.
+  The console reads the statuses with a rule of its own (0.3.4) and shows
+  them in the details of the host's node and app. A room's host tells
+  none: the rooms' rules let it write its own place there, which the
+  chunk `@status` is not part of, and the console only watches who is in a
+  room.
 
   `Read asterism/*/game` lets the router send the host the players' table
   apps' liveliness tokens (the app `game`), so that the host sees a player

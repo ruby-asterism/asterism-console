@@ -72,6 +72,12 @@
 # (the graph's names, marks and icons, Bridge::Profiles). Nobody else gets
 # it.
 #
+# The applications' statuses (0.3.4, asterism's asterism/<node>/<app>/@status,
+# another verbatim chunk): the console's certificate gets the same kind of
+# rule for asterism/*/*/@status (the details of a node or an app,
+# Bridge::Statuses). A node that tells a status needs a role that lets it
+# write asterism/${node}/*/@status (docs/rooms.md: games-host does).
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -107,6 +113,9 @@ module Relay
     PROFILES = "asterism/*/@profile".freeze
     PROFILES_IN = %w[declare_subscriber query].freeze
     PROFILES_OUT = %w[put reply].freeze
+    # The applications' statuses the console reads (0.3.4): the same, for
+    # asterism/*/*/@status (** does not match @status either).
+    STATUSES = "asterism/*/*/@status".freeze
     # A seat's or a host's own writes in a room (0.3.0).
     OWN = %w[put delete declare_queryable liveliness_token reply].freeze
     ROOM_READ_IN = %w[declare_subscriber declare_liveliness_subscriber liveliness_query].freeze
@@ -263,6 +272,7 @@ module Relay
         end
         if p["name"] == @settings["console"]
           mine.concat(profile_rules(rules, id))
+          mine.concat(status_rules(rules, id))
           mine.concat(rooms_watch_rules(rules, id))
         end
         mine.concat(room_host_rules(rules, id, p["name"])) if room_hosts.include?(p["name"])
@@ -300,6 +310,16 @@ module Relay
       rules << { "id" => "#{id}__profiles_out", "messages" => PROFILES_OUT, "flows" => %w[egress],
                  "permission" => "allow", "key_exprs" => [ PROFILES ] }
       [ "#{id}__profiles_in", "#{id}__profiles_out" ]
+    end
+
+    # The console's reading of the applications' statuses
+    # (asterism/<node>/<app>/@status, 0.3.4): the rules and their ids.
+    def status_rules(rules, id)
+      rules << { "id" => "#{id}__statuses_in", "messages" => PROFILES_IN, "flows" => %w[ingress],
+                 "permission" => "allow", "key_exprs" => [ STATUSES ] }
+      rules << { "id" => "#{id}__statuses_out", "messages" => PROFILES_OUT, "flows" => %w[egress],
+                 "permission" => "allow", "key_exprs" => [ STATUSES ] }
+      [ "#{id}__statuses_in", "#{id}__statuses_out" ]
     end
 
     # The console's watch of the rooms (when there are seats): the

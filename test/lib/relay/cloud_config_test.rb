@@ -35,9 +35,29 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     h = config.to_h
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out], pol["zenohd_home"]
-    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out], pol["console"]
+    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__statuses_in
+                    console__statuses_out], pol["console"]
     assert_equal %w[viewer_ro_in viewer_ro_out], pol["viewer"]
     refute pol.key?("idle")
+  end
+
+  test "the console reads the applications' statuses (0.3.4), and nobody else gets that rule" do
+    acl = config.access_control
+    key = "asterism/games/games/@status"
+    %w[declare_subscriber query].each { assert AclEvaluator.allowed?(acl, "console", _1, "ingress", key), _1 }
+    %w[put reply].each { assert AclEvaluator.allowed?(acl, "console", _1, "egress", key), _1 }
+    assert AclEvaluator.allowed?(acl, "console", "query", "ingress", "asterism/*/*/@status"), "one get for all"
+    %w[put delete declare_queryable liveliness_token reply].each do |m|
+      refute AclEvaluator.allowed?(acl, "console", m, "ingress", key), "the console writes no status: #{m}"
+    end
+    refute AclEvaluator.allowed?(acl, "console", "query", "ingress", "asterism/games/games/@other"), "only @status"
+    %w[viewer zenohd-home].each do |who|
+      refute AclEvaluator.allowed?(acl, who, "query", "ingress", key), "#{who}: asterism/** does not reach @status"
+      refute AclEvaluator.allowed?(acl, who, "put", "egress", key), who
+    end
+    with = acl["rules"].select { _1["key_exprs"].include?(Relay::CloudConfig::STATUSES) }.map { _1["id"] }
+    assert_equal %w[console__statuses_in console__statuses_out], with
+    assert_equal %w[console], acl["policies"].select { (_1["rules"] & with).any? }.map { _1["id"] }
   end
 
   test "the console reads the nodes' profiles (0.3.3), and nobody else gets that rule" do
@@ -186,14 +206,15 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     room/01/asterism/wasm-abc123 room/01/asterism/wasm-abc123/game room/01/asterism/wasm-abc123/game/table
     room/01/asterism/wasm-abc123/game/table/call/console room/01/asterism/wasm-abc123/game/table/meta
     room/01/asterism/wasm-abc123/@profile room/01/x room/01/** room/*/asterism/** room/02/asterism/wasm-def456/game
+    room/01/asterism/games/games/@status
   ].freeze
   OUTSIDE_KEYS = %w[asterism/console/console asterism/alice/game/table asterism/** demo/x @/x/router room/**].freeze
 
   test "the console watches the rooms (0.2.1): liveliness only, nothing written, nothing called" do
     acl = Relay::CloudConfig.new(PEERS, ROOMS).access_control
     pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__rooms_in console__rooms_out],
-                 pol["console"]
+    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__statuses_in
+                    console__statuses_out console__rooms_in console__rooms_out], pol["console"]
     allowed = []
     Relay::CloudConfig::ALL.each do |message|
       %w[ingress egress].each do |flow|

@@ -1329,6 +1329,8 @@ export default class extends Controller {
                   ["Apps", el.children().map((a) =>
                     `${this.link(a.id(), a.data("name"))}: ${a.children().map((o) => this.link(o.id(), o.data("name"))).join(", ")}`
                   ).join("<br>") || "none", true],
+                  ["Status", el.children().filter((a) => a.data("info")?.status).map((a) =>
+                    `${this.link(a.id(), a.data("name"))}<br>${statusHtml(a.data("info").status)}`).join("<br>") || null, true],
                   ["Connection", this.connectionsHtml(info.connections, id), true])
         break
       case "others":
@@ -1350,6 +1352,7 @@ export default class extends Controller {
       }
       case "a_app":
         rows.push(["Node", info.node],
+                  ["Status", info.status ? statusHtml(info.status) : null, true],
                   ["Objects", el.children().map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
       case "a_object":
@@ -1817,6 +1820,16 @@ function roomLabel(n) {
   const d = n.data || {}
   if (d.open === false) return `room ${d.slot} (no open room)`
   return `${d.name || "room"} · room ${d.slot}${d.expires_at ? ` · until ${dateTime(d.expires_at)}` : ""}`
+}
+
+// An application's status (0.3.4, asterism/<node>/<app>/@status: a map the
+// application tells about itself) for the details: a line per entry, a
+// map's entries as key=value, anything else as JSON.
+function statusHtml(st) {
+  const value = (v) => (v && typeof v === "object" && !Array.isArray(v))
+    ? Object.entries(v).map(([k, x]) => `${esc(k)}=${esc(JSON.stringify(x))}`).join(" ")
+    : esc(JSON.stringify(v))
+  return Object.entries(st).map(([k, v]) => `<code>${esc(k)}</code> <span class="hint">${value(v)}</span>`).join("<br>")
 }
 
 // A room's name for the details (its frame, or the slot when it is gone).

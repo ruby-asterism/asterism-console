@@ -132,7 +132,7 @@ module Bridge
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
                    registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil,
-                   rooms: [], room_info: [], room_hosts: [])
+                   rooms: [], room_info: [], room_hosts: [], statuses: {})
       g = new
       g.cloud = cloud
       g.icons = icons
@@ -143,6 +143,7 @@ module Bridge
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
       g.add_profiles(profiles)
+      g.add_statuses(statuses)
       g.add_rooms(rooms, room_info, room_hosts)
       g.add_ros(ros)
       g.finish_ros
@@ -412,6 +413,16 @@ module Bridge
       (profiles || {}).each do |nid, summary|
         n = @nodes["a_node:#{nid}"]
         n["data"]["profile"] = summary if n && summary
+      end
+    end
+
+    # The applications' statuses (0.3.4, Bridge::Statuses): data "status"
+    # on the Asterism apps that are here (shown in the details; nothing
+    # drawn changes).
+    def add_statuses(statuses)
+      (statuses || {}).each do |app, st|
+        n = @nodes["a_app:#{app}"]
+        n["data"]["status"] = st if n && st
       end
     end
 
