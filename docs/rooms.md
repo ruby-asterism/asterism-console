@@ -174,9 +174,15 @@ console's code is particular to it: two roles and a row.
   Read and write   asterism/${node}
                    asterism/${node}/games/**
                    asterism/${node}/@profile
+  Read             asterism/*/game
   Watch            asterism/**
   Browsers have this role: no
   ```
+
+  `Read asterism/*/game` lets the router send the host the players' table
+  apps' liveliness tokens (the app `game`), so that the host sees a player
+  leave at once (asterism-games 0.8.0, "Who is there"); without it the host
+  falls back to the time without a call (about 14 s).
 
   The host's place and nothing more: it puts its tables' states
   (`asterism/games/games/<table>/state`) and answers the calls on them, as
