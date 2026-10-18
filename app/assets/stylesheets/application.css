@@ -196,6 +196,12 @@ input[type=submit]:disabled, button:disabled { opacity: 0.45; cursor: not-allowe
 .flash { margin: 0; padding: 8px 14px; border-radius: 6px; font-size: 15px; }
 .flash.alert { background: #fdecea; color: var(--bad); }
 .flash.notice { background: #e8f5e9; color: var(--ok); }
+/* The admin's message on an invite link's page (0.3.6): plain text in any
+   language, kept readable (Japanese too) and never wider than the card. */
+.invite-message { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--line); background: var(--bg);
+  border-radius: 4px; line-height: 1.75; overflow-wrap: anywhere; }
+.invite-message p { margin: 0 0 10px; }
+.invite-message p:last-child { margin-bottom: 0; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; font-size: 15px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; word-break: break-all; }

@@ -24,9 +24,10 @@ class RoomInvitesTest < ActionDispatch::IntegrationTest
   end
 
   # Makes an invite link as the admin; returns [invite, secret], signed out.
-  def make_invite(name: "Friday club", days: "7", max_rooms: "1", apps: [ "/app/test/othello.app.rb" ])
+  def make_invite(name: "Friday club", days: "7", max_rooms: "1", apps: [ "/app/test/othello.app.rb" ], message: nil)
     sign_in_as(users(:admin))
-    post admin_room_invites_path, params: { room_invite: { name: name, days: days, max_rooms: max_rooms, apps: apps } }
+    post admin_room_invites_path, params: { room_invite: { name: name, days: days, max_rooms: max_rooms, apps: apps,
+                                                           message: message }.compact }
     assert_response :created
     link = css_select("#invite-link").text
     secret = link[/#invite=([A-Za-z0-9_-]+)\z/, 1]
@@ -287,5 +288,95 @@ class RoomInvitesTest < ActionDispatch::IntegrationTest
     get admin_room_invite_path(invite)
     assert_select "td a", text: "Club room"
     assert_select "dd", text: "1"
+  end
+
+  test "an invite link's message: kept with its line breaks, shown above the form as plain text" do
+    message = "How to play\r\n\r\n1. Choose the app.\r\n2. Make the room.\r\n<script>alert(1)</script> https://example.org/"
+    invite, secret = make_invite(message: message)
+    assert_equal "How to play\n\n1. Choose the app.\n2. Make the room.\n<script>alert(1)</script> https://example.org/",
+                 invite.message
+    enter(secret)
+    get invite_page_path
+    assert_response :success
+    assert_select ".card h2 + .invite-message p", count: 2
+    assert_select ".invite-message p", text: "How to play"
+    assert_select ".invite-message p:nth-of-type(2) br", count: 2
+    assert_includes response.body, "&lt;script&gt;alert(1)&lt;/script&gt;"
+    assert_select ".invite-message script", count: 0
+    assert_select ".invite-message a", { count: 0 }, "no link made"
+    assert_select ".invite-message + p", text: /Invite link/
+    assert_select ".invite-message ~ form[action='#{invite_rooms_path}']"
+  end
+
+  test "an invite link without a message: its page as before" do
+    _, secret = make_invite(message: " \r\n ")
+    assert_nil RoomInvite.last.message
+    enter(secret)
+    get invite_page_path
+    assert_response :success
+    assert_select ".invite-message", count: 0
+    assert_select ".card h2 + p", text: /Invite link/
+  end
+
+  test "a message has at most #{RoomInvite::MAX_MESSAGE} characters" do
+    sign_in_as(users(:admin))
+    post admin_room_invites_path, params: { room_invite: { name: "x", apps: [ "/app/test/othello.app.rb" ],
+                                                           message: "あ" * (RoomInvite::MAX_MESSAGE + 1) } }
+    assert_redirected_to admin_rooms_path(anchor: "invites")
+    assert_match(/Message is too long/, flash[:alert])
+    assert_equal 0, RoomInvite.count
+    invite, = make_invite(message: "あ" * RoomInvite::MAX_MESSAGE)
+    assert_equal RoomInvite::MAX_MESSAGE, invite.message.size
+    sign_in_as(users(:admin))
+    patch admin_room_invite_path(invite), params: { room_invite: { message: "x" * (RoomInvite::MAX_MESSAGE + 1) } }
+    assert_response :unprocessable_content
+    assert_match "Message is too long", response.body
+    assert_equal "あ" * RoomInvite::MAX_MESSAGE, invite.reload.message
+  end
+
+  test "a new invite link starts with the message of the one made last" do
+    sign_in_as(users(:admin))
+    get admin_rooms_path
+    assert_select "#invites textarea[name='room_invite[message]']", text: ""
+    make_invite(name: "A", message: "First\nmessage")
+    make_invite(name: "B", message: "Second <b>message</b>")
+    sign_in_as(users(:admin))
+    get admin_rooms_path
+    assert_select "#invites textarea[name='room_invite[message]']", text: "Second <b>message</b>"
+    assert_includes response.body, "Second &lt;b&gt;message&lt;/b&gt;"
+    RoomInvite.last.revoke!(users(:admin))
+    get admin_rooms_path
+    assert_select "#invites textarea[name='room_invite[message]']", { text: "Second <b>message</b>" }, "revoked or not"
+  end
+
+  test "an admin changes an invite link's message on its page, the link's page shows the new one" do
+    invite, secret = make_invite(message: "Old words")
+    sign_in_as(users(:admin))
+    get admin_room_invite_path(invite)
+    assert_select "#message textarea[name='room_invite[message]']", text: "Old words"
+    patch admin_room_invite_path(invite), params: { room_invite: { message: "New words\nsecond line" } }
+    assert_redirected_to admin_room_invite_path(invite)
+    assert_equal "New words\nsecond line", invite.reload.message
+    sign_out
+    enter(secret)
+    get invite_page_path
+    assert_select ".invite-message p", text: /New words/
+    assert_select ".invite-message br", count: 1
+    sign_in_as(users(:admin))
+    patch admin_room_invite_path(invite), params: { room_invite: { message: "" } }
+    assert_nil invite.reload.message
+    sign_out
+    get invite_page_path
+    assert_select ".invite-message", count: 0
+  end
+
+  test "only an admin changes a message" do
+    invite, = make_invite(message: "Words")
+    patch admin_room_invite_path(invite), params: { room_invite: { message: "Other" } }
+    assert_redirected_to new_session_path
+    sign_in_as(users(:user))
+    patch admin_room_invite_path(invite), params: { room_invite: { message: "Other" } }
+    assert_response :redirect
+    assert_equal "Words", invite.reload.message
   end
 end

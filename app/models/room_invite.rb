@@ -7,6 +7,11 @@
 # through it and the apps it may open (of ASTERISM_ROOM_APPS), and may
 # revoke it at any time.
 #
+# An admin may also write a message for each invite link (0.3.6): its page
+# shows it above the form, as plain text (no HTML, no links made), e.g. how
+# to make a room, in the visitors' language. A new invite link starts with
+# the message of the one made last.
+#
 # The secret travels in the link's fragment (/invite#invite=<secret>), so
 # neither nginx's nor Rails' log sees it: the page hands it to the console
 # in a form's body. The console keeps only its SHA-256 (as for the users'
@@ -29,6 +34,7 @@ class RoomInvite < ApplicationRecord
   DEFAULT_DAYS = 7
   MAX_DAYS = 90
   DEFAULT_MAX_ROOMS = 1
+  MAX_MESSAGE = 4000
 
   # Why a room was not made through an invite link (the page shows the message).
   class Refused < StandardError; end
@@ -40,10 +46,14 @@ class RoomInvite < ApplicationRecord
   validates :name, format: { with: NAME }
   validates :token_digest, presence: true, uniqueness: true
   validates :max_rooms, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 99 }
+  validates :message, length: { maximum: MAX_MESSAGE }
   validate :apps_listed
   validate :apps_offered, on: :create
 
   normalizes :name, with: ->(v) { v.to_s.gsub(/[[:cntrl:]]/, " ").squeeze(" ").strip }
+  # Line ends as "\n", no other control characters but tabs, no blank lines
+  # around it; an empty message is none (nil).
+  normalizes :message, with: ->(v) { v.to_s.gsub(/\r\n?/, "\n").gsub(/[[:cntrl:]&&[^\n\t]]/, "").strip.presence }
 
   attr_reader :token
 
@@ -57,14 +67,18 @@ class RoomInvite < ApplicationRecord
 
   # Makes an invite link; its secret is #token on the returned record (the
   # only time it exists outside the link).
-  def self.issue!(by:, name:, days: DEFAULT_DAYS, max_rooms: DEFAULT_MAX_ROOMS, apps: [])
+  def self.issue!(by:, name:, days: DEFAULT_DAYS, max_rooms: DEFAULT_MAX_ROOMS, apps: [], message: nil)
     days = Integer(days.presence || DEFAULT_DAYS, exception: false)
     raise ArgumentError, "days must be 1..#{MAX_DAYS}" unless days&.between?(1, MAX_DAYS)
     token = SecureRandom.urlsafe_base64(32)
     create!(created_by: by, name: name, token_digest: digest(token), expires_at: days.days.from_now,
-            max_rooms: max_rooms.presence || DEFAULT_MAX_ROOMS, apps: JSON.generate(Array(apps).compact_blank.uniq))
+            max_rooms: max_rooms.presence || DEFAULT_MAX_ROOMS, apps: JSON.generate(Array(apps).compact_blank.uniq),
+            message: message)
       .tap { _1.instance_variable_set(:@token, token) }
   end
+
+  # The message a new invite link starts with: that of the one made last.
+  def self.last_message = order(:id).last&.message
 
   # The invite link of a secret, open or not (nil for a secret that is no
   # invite link's).

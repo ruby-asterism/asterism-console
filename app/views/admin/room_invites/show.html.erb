@@ -22,6 +22,18 @@
   </section>
 <% end %>
 
+<section class="card" id="message">
+  <h2>Message</h2>
+  <p class="hint">Shown on the invite link's page above its form, as plain text (line breaks kept, no HTML, no links
+    made); at most <%= RoomInvite::MAX_MESSAGE %> characters. Empty: the page shows none.</p>
+  <%= form_with model: @invite, url: admin_room_invite_path(@invite), method: :patch, class: "grid-form",
+                data: { turbo: false } do |f| %>
+    <label class="wide">Message
+      <%= f.text_area :message, rows: 8, maxlength: RoomInvite::MAX_MESSAGE %></label>
+    <div class="wide"><%= f.submit "Save the message" %></div>
+  <% end %>
+</section>
+
 <section class="card">
   <h2>Rooms made through it</h2>
   <% if @rooms.empty? %>

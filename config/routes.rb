@@ -116,7 +116,7 @@ Rails.application.routes.draw do
         post :link, on: :member
       end
       # Invite links to make rooms (0.3.5).
-      resources :room_invites, path: "room-invites", only: %i[index create show] do
+      resources :room_invites, path: "room-invites", only: %i[index create show update] do
         patch :revoke, on: :member
       end
     end

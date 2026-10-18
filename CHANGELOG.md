@@ -10,9 +10,9 @@ the command that goes back).
 
 ## 0.3.6
 
-What an update needs: `./update.sh 0.3.6`. No migration, no change to
-`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.5
-to 0.3.6".
+What an update needs: `./update.sh 0.3.6`. One migration (going back
+needs the update's backup). No change to `.env`, nginx or the router's
+configuration. docs/install.md, "From 0.3.5 to 0.3.6".
 
 - The exposure check, `bin/asterism-exposure` (docs/exposure.md): asks a
   server from outside, as a stranger would, and compares the answers with
@@ -31,6 +31,13 @@ to 0.3.6".
   repository of your own (every 6 hours and by hand, the hosts in its
   secrets, a failure as GitHub's email); asterism-console's own Actions
   do not run it.
+- A message on each invite link (docs/rooms.md, "Invite links"): an admin
+  writes it when making the link (the form starts with the message of the
+  link made last) and changes it on the link's page in Admin > Rooms; the
+  link's page shows it under its heading, above the form. Plain text, at
+  most 4000 characters: HTML is shown as text, line breaks are kept (an
+  empty line starts a paragraph), no link is made. Optional; links without
+  one look as before. Migration: `room_invites.message`.
 
 ## 0.3.5
 

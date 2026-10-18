@@ -955,15 +955,21 @@ invite links to make rooms):
   the command); the display names and the invite links are lost (the
   links stop working).
 
-From 0.3.5 to 0.3.6 (the exposure check):
+From 0.3.5 to 0.3.6 (the exposure check, a message on each invite link):
 
-- `./update.sh 0.3.6`. No migration, no change to `.env`, nginx or the
-  router's configuration.
+- `./update.sh 0.3.6`. One migration (a column for the invite links'
+  message; the existing links keep none and their page looks as before).
+  No change to `.env`, nginx or the router's configuration.
+- New: a message on each invite link, shown on its page above the form;
+  written when the link is made (it starts as the message of the link made
+  last) and changed on the link's page in Admin > Rooms. docs/rooms.md,
+  "Invite links".
 - New: `bin/asterism-exposure` checks from outside what the server
   answers (pages, assets, ports), meant for a scheduled job in a private
   repository of yours; [exposure.md](exposure.md). It runs on a plain
   ruby, not on the server.
-- Going back to 0.3.5 is `./update.sh 0.3.5` (no backup needed).
+- Going back to 0.3.5 is restoring the backup the update made (it prints
+  the command); the invite links' messages are lost.
 
 ## 21. When something is wrong
 

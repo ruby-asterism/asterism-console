@@ -23,6 +23,11 @@
           <label class="check"><%= check_box_tag "room_invite[apps][]", path, true, id: nil %> <%= label %></label>
         <% end %>
       </fieldset>
+      <label class="wide">Message <span class="field-help">Optional. Shown on the invite link's page above its form, as
+          plain text (line breaks kept, no HTML), e.g. how to make a room in your players' language; at most
+          <%= RoomInvite::MAX_MESSAGE %> characters. It starts as the message of the invite link made last; change it
+          later on the invite link's own page (its name in the list below).</span>
+        <%= f.text_area :message, value: RoomInvite.last_message, rows: 8, maxlength: RoomInvite::MAX_MESSAGE %></label>
       <div class="wide"><%= f.submit "Make the invite link" %></div>
     <% end %>
   <% end %>

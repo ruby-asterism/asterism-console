@@ -422,6 +422,25 @@ rooms and does nothing else.
   there is nothing to offer and no invite link). The whole link is shown
   once, on the page that made it:
   `https://<console>/invite#invite=<secret>`.
+- **A message** (0.3.6, optional): a text for the people the link is for,
+  shown on its page under the heading and above the form, e.g. how to make
+  a room and whom to send its link to, in their language. Plain text, at
+  most 4000 characters: HTML is shown as text, not run; line breaks are
+  kept and an empty line starts a paragraph, so numbered steps read as
+  written; addresses are not made into links. The form to make a link
+  starts with the message of the link made last (revoked or not), so the
+  same words carry over unless changed. The link's page in Admin > Rooms
+  changes it at any time (also once the link is revoked or has ended); the
+  invite link's page shows the new one at once. Empty: the page shows
+  none, as before 0.3.6. For example:
+
+  ```
+  How to make a room
+
+  1. Choose the game under "Opens".
+  2. Press "Make the room" and copy the room's link.
+  3. Send the link only to the people you play with.
+  ```
 - **The secret.** 32 random bytes (43 characters, base64url). The console
   keeps only its SHA-256, as for the users' invitations, and cannot show
   the link again. It travels in the fragment, which browsers never send to

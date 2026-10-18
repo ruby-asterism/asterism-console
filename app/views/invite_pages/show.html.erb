@@ -1,6 +1,10 @@
 <% content_for(:title, "Make a room") %>
 <section class="card">
   <h2>Make a room</h2>
+  <% if @invite.message.present? %>
+    <%# The admin's message: plain text, escaped, its line breaks kept; no link made. %>
+    <div class="invite-message"><%= simple_format(h(@invite.message), {}, sanitize: false) %></div>
+  <% end %>
   <p>Invite link <strong><%= @invite.name %></strong>, until <%= when_text(@invite.expires_at) %>.
     Rooms open at once: <%= @open_count %> of <%= @invite.max_rooms %>.</p>
   <p class="hint">A room is open for a few hours. Everyone with its link joins it from a browser; nothing else of the

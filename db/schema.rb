@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_150000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -268,6 +268,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_120000) do
     t.integer "revoked_by_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "message"
     t.index ["created_by_id"], name: "index_room_invites_on_created_by_id"
     t.index ["revoked_by_id"], name: "index_room_invites_on_revoked_by_id"
     t.index ["token_digest"], name: "index_room_invites_on_token_digest", unique: true
