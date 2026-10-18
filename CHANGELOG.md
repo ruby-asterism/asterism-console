@@ -8,6 +8,23 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.8
+
+What an update needs: `./update.sh 0.3.8`. One migration (going back
+needs the update's backup). No change to `.env`, nginx or the router's
+configuration. docs/install.md, "From 0.3.7 to 0.3.8".
+
+- The rooms made through one invite link see each other's game records
+  (docs/rooms.md, "Invite links"; with asterism-games 0.16.0): each invite
+  link has a group, a random string unrelated to its secret, and
+  `rooms.json` gives it to each room made through the link (`"group"`).
+  Rooms made by an admin get none. The secret and its hash are never in
+  `rooms.json`. Migration: `room_invites.records_group` (the existing
+  links get one).
+- A game host before 0.16.0 ignores `"group"`; asterism-games 0.16.0 with
+  a console before 0.3.8 (no `"group"`) keeps each room's records to the
+  room, as before.
+
 ## 0.3.7
 
 What an update needs: `./update.sh 0.3.7`. No migration, no change to

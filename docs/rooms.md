@@ -474,6 +474,22 @@ rooms and does nothing else.
 - **Revoking** (the link's page in Admin > Rooms) stops the link at once.
   Its open rooms go on until they end, unless "Also close its open rooms
   now" is ticked.
+- **Game records across its rooms** (0.3.8, asterism-games 0.16.0): the
+  rooms made through one invite link see each other's mahjong game records
+  (the table app's recent games and their replay), so a game played in a
+  room that has ended can still be looked at from the next room of the
+  same link. Each invite link has a group of its own, a random string made
+  with it (32 hex characters; links made before 0.3.8 get one when the
+  update migrates), which has nothing to do with the link's secret and is
+  not secret itself. `rooms.json` gives it to each room made through the
+  link (`"group"`); a game host keeps it with the room's records and lists
+  those of the rooms of the same group. A room made by an admin has no
+  group and sees its own records only, as before; another invite link's
+  rooms, the permanent tables and the LAN tables see none of them. The
+  group never changes: a revoked link's rooms that are still open see the
+  link's records too. The games played before the update (or with a game
+  host before 0.16.0) have no group and stay their own room's. The stats
+  count as before.
 - **Twelve hours** fit the rest as it is: a room's end is its keys' end
   (the signer signs up to 24 hours ahead), the door keeps a room's
   connections and seats until that end, and a game host keeps a room's

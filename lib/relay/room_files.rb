@@ -4,7 +4,8 @@
 #
 #   {"format": 1, "written_at": "...",
 #    "keys":    [{"kid": "...", "public_key": "<PEM>"}],     the signer's public keys
-#    "slots":   {"01": {"room": "<uid>", "until": <Unix s>, "max": 16, "app": "/app/...", "seats": 16}},
+#    "slots":   {"01": {"room": "<uid>", "until": <Unix s>, "max": 16, "app": "/app/...", "seats": 16,
+#                        "group": "<hex>"}},
 #    "revoked": [{"room": "<uid>", "until": <Unix s>}],
 #    "seat_node_prefix": "wasm-", "hosts": ["games"]}
 #
@@ -26,6 +27,11 @@
 # room's keys would have ended anyway. When the file is missing or
 # unreadable the door lets no room in.
 #
+# "group" (0.3.8): only for a room made through an invite link, the link's
+# group (RoomInvite#records_group: random, not its secret nor anything made
+# from it). A game host keeps it with the room's game records and lists the
+# records of the rooms of the same group too; a room an admin made has none.
+#
 # "app" is what the room's link opens (the door does not use it): a game
 # host that reads this file (asterism-games, mounting the volume read-only)
 # serves tables in the rooms that open its table's screen.
@@ -45,13 +51,19 @@ module Relay
     end
 
     def content(at: Time.current, keys: nil, seats: seats_in_config)
-      open_rooms = Room.open_now(at).order(:id).to_a
-      slots = open_rooms.to_h { [ _1.slot, { "room" => _1.uid, "until" => _1.expires_at.to_i, "max" => _1.max_connections,
-                                            "app" => _1.app.to_s, "seats" => seats.fetch(_1.slot, 0) } ] }
+      open_rooms = Room.open_now(at).includes(:room_invite).order(:id).to_a
+      slots = open_rooms.to_h { [ _1.slot, slot_entry(_1, seats) ] }
       revoked = Room.where.not(closed_at: nil).where("expires_at > ?", at).order(:id)
                     .map { { "room" => _1.uid, "until" => _1.expires_at.to_i } }
       { "format" => 1, "written_at" => at.utc.iso8601, "keys" => keys || public_keys, "slots" => slots,
         "revoked" => revoked, "seat_node_prefix" => Settings.browser_node_prefix, "hosts" => Settings.room_hosts }
+    end
+
+    def slot_entry(room, seats)
+      e = { "room" => room.uid, "until" => room.expires_at.to_i, "max" => room.max_connections,
+            "app" => room.app.to_s, "seats" => seats.fetch(room.slot, 0) }
+      e["group"] = room.room_invite.records_group if room.room_invite
+      e
     end
 
     # {slot => seats}: the seats 01 .. n of each slot that the router's

@@ -12,6 +12,13 @@
 # to make a room, in the visitors' language. A new invite link starts with
 # the message of the one made last.
 #
+# Each invite link has a group (0.3.8): a random hex string made with it,
+# not secret and unrelated to the secret, that the door's file gives each
+# room made through it (rooms.json "group", Relay::RoomFiles). A game host
+# keeps it with the rooms' game records, so the rooms of one invite link
+# see each other's records (asterism-games 0.16.0). It never changes, a
+# revoked link's included.
+#
 # The secret travels in the link's fragment (/invite#invite=<secret>), so
 # neither nginx's nor Rails' log sees it: the page hands it to the console
 # in a form's body. The console keeps only its SHA-256 (as for the users'
@@ -35,6 +42,7 @@ class RoomInvite < ApplicationRecord
   MAX_DAYS = 90
   DEFAULT_MAX_ROOMS = 1
   MAX_MESSAGE = 4000
+  GROUP = /\A\h{32}\z/
 
   # Why a room was not made through an invite link (the page shows the message).
   class Refused < StandardError; end
@@ -47,8 +55,11 @@ class RoomInvite < ApplicationRecord
   validates :token_digest, presence: true, uniqueness: true
   validates :max_rooms, numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 99 }
   validates :message, length: { maximum: MAX_MESSAGE }
+  validates :records_group, format: { with: GROUP }, uniqueness: true
   validate :apps_listed
   validate :apps_offered, on: :create
+
+  before_validation(on: :create) { self.records_group ||= SecureRandom.hex(16) }
 
   normalizes :name, with: ->(v) { v.to_s.gsub(/[[:cntrl:]]/, " ").squeeze(" ").strip }
   # Line ends as "\n", no other control characters but tabs, no blank lines

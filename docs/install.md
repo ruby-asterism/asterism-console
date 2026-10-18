@@ -978,6 +978,23 @@ From 0.3.6 to 0.3.7 (the links shown once stand out):
   warning colours with a "Copy the link" button: copy them before leaving
   the page, as before.
 
+From 0.3.7 to 0.3.8 (the rooms of an invite link see each other's game
+records):
+
+- `./update.sh 0.3.8`. One migration (a group for each invite link; the
+  existing links get one). No change to `.env`, nginx or the router's
+  configuration.
+- New: `rooms.json` gives each room made through an invite link the link's
+  group (`"group"`; never its secret). With asterism-games 0.16.0 the rooms
+  of one invite link list and replay each other's mahjong game records;
+  docs/rooms.md, "Invite links". The game host can be updated before or
+  after the console: either one alone changes nothing. A room already open
+  gets its group from the next start of its game host (the games it played
+  before keep none).
+- Going back to 0.3.7 is restoring the backup the update made (it prints
+  the command); a game host 0.16.0 then sees no group and keeps each room's
+  records to the room.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

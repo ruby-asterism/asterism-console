@@ -293,6 +293,37 @@ class RoomInvitesTest < ActionDispatch::IntegrationTest
     assert_select "dd", text: "1"
   end
 
+  test "rooms.json gives the rooms of an invite link its group, never its secret; an admin's room none (0.3.8)" do
+    teardown_rooms
+    setup_rooms(slots: 4)
+    one, secret1 = make_invite(name: "One", max_rooms: "2")
+    two, secret2 = make_invite(name: "Two")
+    assert_match RoomInvite::GROUP, one.records_group
+    refute_equal one.records_group, two.records_group
+    refute_equal one.token_digest, one.records_group
+    enter(secret1)
+    make_room(name: "A")
+    a = Room.last
+    make_room(name: "B")
+    b = Room.last
+    delete invite_leave_path
+    enter(secret2)
+    make_room(name: "C")
+    c = Room.last
+    d = Room.open!(name: "D", app: "/app/test/othello.app.rb", hours: 1, max_connections: nil, by: users(:admin))
+    Relay::RoomFiles.write!
+    text = File.read(Relay::RoomFiles.path)
+    slots = JSON.parse(text)["slots"]
+    assert_equal [ one.records_group, one.records_group, two.records_group ], [ a, b, c ].map { slots.dig(_1.slot, "group") }
+    refute slots[d.slot].key?("group"), "an admin's room has none"
+    [ secret1, secret2, one.token_digest, two.token_digest ].each { refute_includes text, _1 }
+    # Revoked, its open rooms keep the group.
+    one.revoke!(users(:admin))
+    Relay::RoomFiles.write!
+    assert_equal one.records_group, JSON.parse(File.read(Relay::RoomFiles.path)).dig("slots", a.slot, "group")
+    assert_equal one.records_group, one.reload.records_group
+  end
+
   test "an invite link's message: kept with its line breaks, shown above the form as plain text" do
     message = "How to play\r\n\r\n1. Choose the app.\r\n2. Make the room.\r\n<script>alert(1)</script> https://example.org/"
     invite, secret = make_invite(message: message)
