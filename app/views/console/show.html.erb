@@ -15,7 +15,7 @@
     <label title="Draw each Zenoh session as a point between the router and the nodes (for finding out why something does not connect)"><input type="checkbox" name="session_points" data-action="console#toggleSessionPoints"> Sessions as points</label>
     <label><input type="checkbox" data-layer="asterism" data-action="console#toggleLayer" checked> Asterism</label>
     <label><input type="checkbox" data-layer="ros" data-action="console#toggleLayer" checked> ROS 2</label>
-    <label title="Marks the nodes and routers by the relay registry, and shows its names that are not connected (remembered by this browser)"><input type="checkbox" data-layer="registry" data-action="console#toggleLayer"> Relay registry</label>
+    <label title="Marks the nodes and routers by the members (Admin &gt; Members), and shows the members that are not connected (remembered by this browser)"><input type="checkbox" data-layer="registry" data-action="console#toggleLayer"> Members</label>
     <% if @rooms %>
       <label title="The open rooms, each a frame holding the nodes in it (admins only; watched, not callable)"><input type="checkbox" data-layer="rooms" data-action="console#toggleLayer" checked> Rooms</label>
     <% end %>

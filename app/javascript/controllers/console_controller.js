@@ -58,7 +58,7 @@ cytoscape.use(fcose)
 // nodes are laid out on their own first and kept together (layoutAll,
 // openGroup).
 //
-// The relay registry ("Relay registry", off by default and
+// The relay registry ("Members", off by default and
 // remembered by this browser) adds a mark in the corner of the nodes and
 // routers it knows of, and puts the names it has that are not here in one
 // "Not connected (registry)" box, with a dashed line to the router the
@@ -127,7 +127,7 @@ const ICON_PROPS = ["background-image", "background-width", "background-height",
 // Shown only with "Sessions as points" / only without it.
 const POINT_KINDS = ["session", "carries", "peer_session"]
 const DIRECT_KINDS = ["others", "attach", "peer_link"]
-// Shown only with the "Relay registry" layer.
+// Shown only with the "Members" layer.
 const REGISTRY_KINDS = ["reg_box", "registered", "expect"]
 const STORE_POINTS = "asterism.console.sessionPoints"
 const STORE_REGISTRY = "asterism.console.registry"

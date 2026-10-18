@@ -19,6 +19,8 @@ configuration. docs/install.md, "From 0.3.4 to 0.3.5".
   before). The old URLs under `/admin/relay` redirect to the same page
   under `/admin/members`, the query kept. The code keeps the relay's names
   (`Relay::...`, `RelayPeer`).
+- The graph's layer "Relay registry" is called "Members" too (the graph and
+  a recording's structure page).
 - A display name on each row of the registry (optional, up to 40
   characters), set when registering or editing: "Tab5" for
   `fmruby-aaaaaa`. Members lists it next to the name, the row's page and

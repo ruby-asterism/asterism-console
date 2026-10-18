@@ -88,7 +88,7 @@ with them.
 
 ## Rooms in the graph (0.2.1)
 
-An admin sees the rooms on the graph ("Rooms", next to "Relay registry",
+An admin sees the rooms on the graph ("Rooms", next to "Members",
 on by default); a user who is not an admin never receives them.
 
 - **What the console may do in a room.** When there are seats, the

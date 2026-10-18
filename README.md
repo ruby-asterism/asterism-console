@@ -392,7 +392,7 @@ configuration from the registry and applies it.
   closes it), but the ACL denies it everything. A second valid certificate
   with the same name is not told apart: the ACL matches the name. Keep
   lifetimes short.
-- **The graph**: the "Relay registry" layer (off by default, remembered by
+- **The graph**: the "Members" layer (off by default, remembered by
   the browser) puts a mark in the corner of Asterism nodes and routers: a
   check (registered), a bar (here but disabled), a question mark (not in
   the registry), and puts the registered names that are not here in one
