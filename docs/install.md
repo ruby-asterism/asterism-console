@@ -995,6 +995,22 @@ records):
   the command); a game host 0.16.0 then sees no group and keeps each room's
   records to the room.
 
+From 0.3.8 to 0.3.9 (a closed tab opened again is the same person):
+
+- `./update.sh 0.3.9`. No migration, no change to `.env`, nginx or the
+  router's configuration. Only the door changes (`ws_door`; the update
+  restarts it, and the pages in rooms connect again by themselves).
+- New: a page of a room that asks for its seat with a secret the door
+  already knows (the browser build keeps it per room: a tab closed and
+  opened again, a second tab) gets the same seat as before, and the door
+  cuts the connections still on that seat (docs/rooms.md, "Coming back").
+  The browser build that keeps the secret for every tab is the one of
+  2026-10-19 or later; an older page and this door, or this page and an
+  older door, behave as before (the same seat for the same secret, nothing
+  cut). With asterism-games 0.16.2 a table's owner away for a minute also
+  hands the role on; the two can be updated in any order.
+- Going back to 0.3.8: `./update.sh 0.3.8` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

@@ -8,6 +8,26 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.9
+
+What an update needs: `./update.sh 0.3.9`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.8
+to 0.3.9".
+
+- A page that comes back is the same person (docs/rooms.md, "Coming
+  back"): the browser build keeps its room secret in the browser, so a tab
+  closed and opened again asks for its seat with the same secret and gets
+  the same seat (the same node ID) as before. Such a seat request now cuts
+  the connections still on that seat (what is left of the closed tab, or
+  the other tab of the same browser: the newer page takes the seat), with
+  close code 4403, after which the older page reads its seat as gone. A
+  page's own sessions and reconnections send no seat request and cut
+  nothing. A secret the door does not know gets a free seat as before.
+  Neither the secret nor its hash is ever logged.
+- Compatible both ways: a page that does not keep its secret is a new
+  person as before, and a door before 0.3.9 gives the same seat for the
+  same secret without cutting anything.
+
 ## 0.3.8
 
 What an update needs: `./update.sh 0.3.8`. One migration (going back

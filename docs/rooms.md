@@ -366,6 +366,50 @@ the names a room may use are made beforehand: **seats**.
   seats). A subject is matched once when a session opens, so a message
   costs the same.
 
+## Coming back (0.3.9)
+
+A page that is closed and opened again in the same browser is the same
+person: the same seat, so the same node ID, so the same member at the game
+host (its seat, its name, the owner's role, its hand in a game).
+
+- **The secret is the way back.** The browser build keeps its secret for a
+  room in the browser's storage under the room's ID (never under or next
+  to the room's key), with the room's end, and removes the secrets of the
+  rooms that have ended when a page starts. Every tab of the browser uses
+  the same secret. It still travels only in the seat request's body and
+  the WebSocket's first message.
+- **The door gives the seat again.** A seat request with a secret the door
+  knows gets that secret's seat (as since 0.3.0), and now also cuts every
+  connection still on that seat: they belong to an older page (what is
+  left of a closed tab whose connection has not ended yet, or another tab
+  of the same browser; the page that asked last has the seat). Such a
+  connection is closed with 4403; its zenohd side closes at once, and what
+  the page still sends is read and dropped until it closes too (4 s at
+  most), so nginx logs nothing. A page takes its seat once when it starts;
+  its own sessions (up to 4 on the seat) and its reconnections after a
+  router restart send no seat request and cut nothing.
+- **An older tab gives the seat up.** The browser build marks the tab that
+  took the seat last; a tab cut with 4403 that sees another tab marked
+  stops trying and says the room is open in another tab (a reload takes
+  the seat back). A page cut with 4403 for its own reasons asks for its
+  seat again as before.
+- **What the door keeps** is the seats' table as before: per room the
+  SHA-256 of "<room ID>:<secret>" and the seat, while the room is open (a
+  room that is over loses them; the table survives a restart of the door).
+  At most one entry per seat. A secret the door does not know (another
+  browser, another profile, a private window, storage cleared) gets a free
+  seat: another person.
+- **The game host** (asterism-games) sees the seat's node leave and join
+  again and keeps its member; a seat's node away for longer than
+  `seat_reuse_seconds` (1800, the door's `WS_DOOR_SEAT_IDLE`) is taken for
+  a new page. asterism-games 0.16.2 also hands an away owner's role on
+  after a minute and abandons a game whose humans are all away for three
+  minutes (its README, "Players that drop out").
+- **Compatible both ways.** A page that does not keep its secret (before
+  2026-10-19) is a new person when it is opened again, as before. A door
+  before 0.3.9 gives the same seat to the same secret but cuts nothing:
+  the older connection ends by itself.
+
 ## An admin in a room (0.3.1)
 
 An admin who wants to look into a room from CRuby (who is there, call a

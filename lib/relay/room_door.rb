@@ -40,6 +40,13 @@
 # Binary first: a page from before 0.3.0, which sends no secret), 1013
 # (zenohd is not there). A room that is over loses its seats.
 #
+# Coming back (0.3.9, docs/rooms.md): a page keeps its secret in the
+# browser, so a tab opened again (or a second tab) asks for its seat with
+# the same secret and gets the same seat, the same node. That seat request
+# cuts the connections still on the seat (the older page's: 4403, see
+# #cut_older_page); a page's own sessions and reconnections come without
+# one and cut nothing.
+#
 # Keys whose signature does not check are counted per address; past
 # BAD_LIMIT in BAD_WINDOW seconds such an address is answered 429 for
 # BAD_BLOCK seconds, and its refusals are no longer logged one by one. A
@@ -99,7 +106,7 @@ module Relay
 
     # One connection: the browser's socket, zenohd's, and what it is for.
     Conn = Struct.new(:client, :tls, :room, :slot, :seat, :ends_at, :ip, :opened_at, :closing, :upgraded,
-                      keyword_init: true) do
+                      :wlock, :taken, keyword_init: true) do
       def label = "room #{room} slot #{slot}#{" seat #{seat}" if seat}"
 
       def close(reason, log)
@@ -309,7 +316,7 @@ module Relay
         return [ nil, 503, "the door is full (#{@total})" ] if live.size >= @total
         stale = live.select { _1.slot == claims["slot"] && _1.room != claims["room"] }
         stale.each { _1.close("slot #{claims['slot']} is now room #{claims['room']}'s", @log) }
-        conn = Conn.new(room: claims["room"], slot: claims["slot"], ip: ip, opened_at: now,
+        conn = Conn.new(room: claims["room"], slot: claims["slot"], ip: ip, opened_at: now, wlock: Mutex.new,
                         ends_at: [ claims["exp"].to_f, now + @max_hours * 3600 ].min)
         @conns << conn
         [ claims, conn ]
@@ -456,6 +463,40 @@ module Relay
       tls
     end
 
+    # A page back with its secret (0.3.9, docs/rooms.md "Coming back"): a
+    # page takes its seat once when it starts (a page's own sessions, up to
+    # 4 on its seat, and its reconnections come without a seat request), so
+    # a seat request that finds the secret's seat again comes from a newer
+    # page: a tab opened again, or a second tab of the same browser. The
+    # connections on that seat belong to the older page (a closed tab's
+    # remains, or the other tab) and are cut, so zenohd never has the seat's
+    # node from two pages. Their zenohd side closes at once; the page gets a
+    # close frame (4403: its seat is no longer its own), and what it still
+    # sends is read and dropped until it closes too (LINGER * 2 at most), so
+    # nginx sees no reset. Called without the lock.
+    def cut_older_page(room, seat)
+      older = @lock.synchronize { @conns.select { !_1.closing && _1.room == room && _1.seat == seat } }
+      older.each do |c|
+        c.closing = true
+        c.taken = true
+        log("rooms: #{c.label}: closing a connection from #{c.ip} (a newer page took the seat with its secret)")
+        begin
+          c.tls&.close
+        rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
+          nil
+        end
+        Thread.new(c) do |old|
+          ws_write(old.client, 0x8, [ CLOSE_NO_SEAT ].pack("n") + "taken by a newer page".b, old.wlock)
+        rescue IOError, SystemCallError
+          nil
+        ensure
+          sleep LINGER * 2
+          old.client&.close rescue nil
+        end
+      end
+      older.size
+    end
+
     def refuse_ws(conn, code, reason, why, ip)
       @lock.synchronize { @counts["ws#{code}"] += 1 }
       ws_write(conn.client, 0x8, [ code ].pack("n") + reason.b, Mutex.new) rescue nil
@@ -512,6 +553,7 @@ module Relay
       end
       reload_rooms
       now = Time.now.to_f
+      again = nil
       code, out, why, quiet = @lock.synchronize do
         claims, c, w, q = check_key(token, ip, now)
         next [ c, nil, w, q ] unless claims
@@ -519,9 +561,12 @@ module Relay
         next [ 404, { "error" => "no seats" }, "room #{claims['room']} slot #{claims['slot']} has no seats" ] if n.zero?
         seat, how = assign_seat(claims, secret, n, now)
         next [ 409, { "error" => "full" }, "room #{claims['room']}: all #{n} seats are taken" ] unless seat
+        again = [ claims["room"], seat ] if how == "again"
         [ 200, { "node" => "#{@rooms['prefix']}#{claims['slot']}#{seat}", "seat" => seat },
           "room #{claims['room']} slot #{claims['slot']} seat #{seat} (#{how})" ]
       end
+      # The older page's connections go before the newer page has its answer.
+      cut_older_page(*again) if again
       seat_answer(client, code, out, ip: ip, why: why, quiet: quiet)
     end
 
@@ -755,13 +800,14 @@ module Relay
     def pump(conn)
       client = conn.client
       tls = conn.tls
-      wlock = Mutex.new
+      wlock = conn.wlock
       up = Thread.new do # browser -> zenohd
         msg = +""
         loop do
           fin, op, data = ws_read_frame(client)
           case op
           when 0x2, 0x0
+            next if conn.taken # cut for a newer connection: read and dropped
             msg << data
             raise IOError, "a #{msg.bytesize}-byte message" if msg.bytesize > [ @max_message, 65_535 ].min
             next unless fin
@@ -775,6 +821,7 @@ module Relay
         end
       rescue EOFError, IOError, SystemCallError, OpenSSL::SSL::SSLError => e
         log("rooms: #{conn.label}: from the browser: #{e.message}") unless conn.closing || e.is_a?(EOFError)
+        linger(client) if conn.taken && !e.is_a?(EOFError)
       ensure
         conn.close("the browser side ended", ->(_) { }) unless conn.closing
       end

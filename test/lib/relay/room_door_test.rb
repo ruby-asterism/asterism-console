@@ -422,6 +422,61 @@ class Relay::RoomDoorTest < ActiveSupport::TestCase
     d.read_message
     assert_equal [ "room-01-s01", "room-01-s01" ], @upstream.names, "a page's second session, the same seat"
     assert_equal({ @room_a => 2 }, @seat_door.status["rooms"])
+    c.frame("first".b)
+    assert_equal [ 0x2, "first".b ], c.read_message, "a session without a seat request cuts nobody"
+  end
+
+  test "coming back with the secret: the same seat, the older page's connections cut without a reset (0.3.9)" do
+    seat_door
+    tok = token
+    assert_equal "wasm-0101", seat(tok, SECRET_A)[1]["node"]
+    old = seat_client(tok, SECRET_A)
+    old.read_message
+    old2 = seat_client(tok, SECRET_A) # the older page's second session
+    old2.read_message
+    old.frame("before".b)
+    assert_equal [ 0x2, "before".b ], old.read_message
+    # The tab is opened again (the old page is still connected: a closed
+    # tab's remains, or another tab of the same browser): it takes its seat.
+    assert_equal [ 200, { "node" => "wasm-0101", "seat" => "01" } ], seat(token, SECRET_A).first(2), "same seat again"
+    assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(old), "the old page's sessions: 4403"
+    assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(old2)
+    old.frame("after".b) # still sent by the old page: read and dropped
+    old.frame([ 1000 ].pack("n"), opcode: 0x8)
+    assert_equal :eof, old.ending, "no reset (nginx would log the key)"
+    assert wait_until { @seat_door.status["rooms"].empty? }
+    back = seat_client(tok, SECRET_A)
+    assert_equal 0x2, back.read_message&.first, "the new page reaches zenohd on the same seat"
+    back.frame("hello".b)
+    assert_equal [ 0x2, "hello".b ], back.read_message
+    assert_equal %w[room-01-s01] * 3, @upstream.names
+    assert(@logs.count { _1.include?("seat 01: closing a connection") && _1.include?("a newer page took the seat") } == 2)
+    assert(@logs.none? { _1.include?(SECRET_A) || _1.include?(Relay::RoomDoor.seat_hash(@room_a, SECRET_A)) },
+           "neither the secret nor its hash is logged")
+    # Another secret is another seat, and cuts nobody.
+    assert_equal [ 200, { "node" => "wasm-0102", "seat" => "02" } ], seat(tok, SECRET_B).first(2)
+    back.frame("still".b)
+    assert_equal [ 0x2, "still".b ], back.read_message
+  end
+
+  test "an old page that does not answer the close frame is closed after the linger" do
+    seat_door
+    tok = token
+    seat(tok, SECRET_A)
+    old = seat_client(tok, SECRET_A)
+    old.read_message
+    seat(tok, SECRET_A)
+    assert_equal Relay::RoomDoor::CLOSE_NO_SEAT, close_code(old)
+    assert_includes [ :eof, :reset ], old.ending(Relay::RoomDoor::LINGER * 2 + 2)
+  end
+
+  test "a door started again has lost nothing: the same secret, the same seat" do
+    seat_door
+    tok = token
+    assert_equal "wasm-0101", seat(tok, SECRET_A)[1]["node"]
+    @seat_door.stop
+    seat_door
+    assert_equal [ 200, { "node" => "wasm-0101", "seat" => "01" } ], seat(tok, SECRET_A).first(2)
   end
 
   test "no seat, no secret, an old page: closed, and nothing reaches zenohd" do
