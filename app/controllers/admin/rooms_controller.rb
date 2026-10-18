@@ -90,7 +90,10 @@ module Admin
       @door = Relay::DoorStatus.fetch
       games
       response.headers["Cache-Control"] = "no-store"
-      response.headers["Referrer-Policy"] = "no-referrer"
+      # same-origin, not no-referrer: the page posts its own forms (another
+      # link, closing the room), and with no-referrer a browser sends them
+      # with "Origin: null", which the forgery check refuses (422).
+      response.headers["Referrer-Policy"] = "same-origin"
       render :show, status: status
     end
   end
