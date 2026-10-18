@@ -240,7 +240,8 @@ same as `.env`; three upstreams: the console, the pass door and the rooms'
 door), the wss port (7443), the certificate paths in the two
 `asterism-ssl-*.conf`, the admins' addresses in `asterism-admin-allow.conf`
 and who may open the door in `asterism-door-allow.conf` (`allow all;` to
-rely on passes alone).
+rely on passes alone). After changing an allow list or a location, check
+from outside what everyone else now sees: [exposure.md](exposure.md).
 
 Certificates with Certbot (HTTP-01 through the port-80 block of
 `asterism-console.conf`):
@@ -314,6 +315,10 @@ key), and the console for a sign-in (and, for `/admin`, an admin's address
 and TOTP). The address list of `asterism-door-allow.conf` applies to rooms
 too; to let anyone with a room's link in, put `allow all;` in the `/room`
 location of `asterism-router.conf`.
+
+To keep checking from outside that the ports and pages answer as meant
+(a scheduled job in a private repository of yours), see
+[exposure.md](exposure.md).
 
 ## 10. First sign-in
 
@@ -949,6 +954,16 @@ invite links to make rooms):
 - Going back to 0.3.4 is restoring the backup the update made (it prints
   the command); the display names and the invite links are lost (the
   links stop working).
+
+From 0.3.5 to 0.3.6 (the exposure check):
+
+- `./update.sh 0.3.6`. No migration, no change to `.env`, nginx or the
+  router's configuration.
+- New: `bin/asterism-exposure` checks from outside what the server
+  answers (pages, assets, ports), meant for a scheduled job in a private
+  repository of yours; [exposure.md](exposure.md). It runs on a plain
+  ruby, not on the server.
+- Going back to 0.3.5 is `./update.sh 0.3.5` (no backup needed).
 
 ## 21. When something is wrong
 

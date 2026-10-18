@@ -16,6 +16,7 @@ console's databases, from the published image.
 | `Dockerfile` | the console's image (published by `.github/workflows/image.yml` for each `v*` tag, amd64 and arm64) |
 | `nginx/` | an example of the web server in front: nginx (install.md 8) |
 | `caddy/Caddyfile` | the same with Caddy 2 |
+| `exposure.example.yml` | the checks of `bin/asterism-exposure`: what the outside should see of the server (docs/exposure.md) |
 | `check_node.rb` | a CRuby node for checking a new server (`--credentials <name>.tar`) |
 
 Updating, from this directory (`--dry-run` prints the steps; `--help`

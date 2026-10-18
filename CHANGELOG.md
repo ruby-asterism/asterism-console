@@ -8,6 +8,30 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.6
+
+What an update needs: `./update.sh 0.3.6`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.5
+to 0.3.6".
+
+- The exposure check, `bin/asterism-exposure` (docs/exposure.md): asks a
+  server from outside, as a stranger would, and compares the answers with
+  a YAML list: an HTTP path's status (optionally a text in the body), an
+  asset the page loads (`asset_from`: an `/assets/*.css` or `.js` picked
+  from the page), and whether a TCP port is `open` or `closed` (a timeout
+  or a refusal). Redirects are not followed. One line per check, exit 1
+  when one fails. Plain Ruby (net/http, socket, yaml): no Rails, no
+  bundle.
+- The hosts come from `ASTERISM_EXPOSURE_HOST` (and
+  `ASTERISM_EXPOSURE_HOST_<NAME>` for checks with `host: <name>`) or
+  `--host`, never from the file, and the output never names them
+  (`<host>`; names and addresses are cut out of messages).
+- `deploy/vps/exposure.example.yml`: the checks for the example nginx and
+  firewall. docs/exposure.md has a GitHub Actions workflow for a private
+  repository of your own (every 6 hours and by hand, the hosts in its
+  secrets, a failure as GitHub's email); asterism-console's own Actions
+  do not run it.
+
 ## 0.3.5
 
 What an update needs: `./update.sh 0.3.5`. Two migrations (going back

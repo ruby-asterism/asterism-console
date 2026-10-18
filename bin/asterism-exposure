@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+# What a server answers to the outside, compared with what it should
+# (0.3.6, lib/exposure_check.rb, docs/exposure.md). Plain Ruby: no Rails,
+# no bundle.
+#
+#   ASTERISM_EXPOSURE_HOST=asterism.example.org \
+#     ruby bin/asterism-exposure deploy/vps/exposure.example.yml
+#
+#   --host [name=]value   a host instead of the environment (a check with
+#                         "host: <name>" uses ASTERISM_EXPOSURE_HOST_<NAME>)
+#
+# One line per check (expected, actual, ok or FAIL), never the host's name
+# (<host>). Exit 0 when every check passes, 1 when one does not, 2 for a
+# usage or configuration error.
+require "optparse"
+require_relative "../lib/exposure_check"
+
+host_args = []
+parser = OptionParser.new do |o|
+  o.banner = "usage: asterism-exposure [--host [name=]value] <checks.yml>"
+  o.on("--host VALUE", "a host ([name=]value); else #{ExposureCheck::HOST_ENV}[_NAME]") { host_args << _1 }
+end
+
+begin
+  files = parser.parse(ARGV)
+  abort(parser.banner) unless files.size == 1
+  config = ExposureCheck.load_config(files.first)
+  hosts = ExposureCheck.hosts_from(ENV, host_args)
+  results = ExposureCheck.run(config, hosts)
+rescue OptionParser::ParseError, ExposureCheck::ConfigError, SystemCallError => e
+  warn "asterism-exposure: #{ExposureCheck.scrub(e.message, (hosts || {}).values)}"
+  exit 2
+end
+
+results.each { puts _1.line }
+failed = results.count { !_1.ok }
+puts "#{results.size - failed} passed, #{failed} failed"
+exit(failed.zero? ? 0 : 1)

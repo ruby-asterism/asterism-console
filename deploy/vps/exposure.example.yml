@@ -1,0 +1,38 @@
+# What the outside should see of a server (bin/asterism-exposure,
+# docs/exposure.md). No host names here: the console's name comes from
+# ASTERISM_EXPOSURE_HOST, the router's from ASTERISM_EXPOSURE_HOST_ROUTER
+# (the checks with "host: router"). Change the ports and the answers to
+# match your nginx and your firewall.
+#
+# Defaults for every check (each check may set its own):
+scheme: https
+timeout: 5
+
+checks:
+  # The invite links' page and what it loads: open to the addresses of
+  # asterism-door-allow.conf (403 from elsewhere when the list is not
+  # "allow all;").
+  - http: /invite
+    status: 200
+  - asset_from: /invite
+    status: 200
+  - http: /icon.png
+    status: 200
+
+  # Everything else of the console: only from the admins' addresses here
+  # (use 302 instead if your nginx lets everyone reach the sign-in page).
+  - http: /
+    status: 403
+  - http: /admin/rooms
+    status: 403
+
+  # The browsers' door (wss, nginx): reachable.
+  - tcp: 7443
+    host: router
+    expect: open
+
+  # The router's mTLS port: closed to everyone but the allowed addresses
+  # (a timeout or a refusal both pass).
+  - tcp: 7448
+    host: router
+    expect: closed

@@ -1,6 +1,8 @@
 # Documents
 
 **To install the console on your server, read [install.md](install.md).**
+To check from outside what the server answers (a scheduled job in a
+private repository), [exposure.md](exposure.md).
 
 The other files are the design notes of each stage, in the order the
 console was built. They record what was decided and how it was tested at
