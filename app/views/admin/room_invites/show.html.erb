@@ -1,0 +1,58 @@
+<% content_for(:title, "Invite link #{@invite.name} - Asterism Console") %>
+<section class="card">
+  <h2>Invite link <%= @invite.name %></h2>
+  <dl class="facts">
+    <dt>Status</dt><dd><span class="badge <%= @invite.open? ? 'ok' : 'bad' %>"><%= @invite.status %></span>
+      <% if @invite.revoked_at %> by <%= @invite.revoked_by&.email_address || "?" %>, <%= when_text(@invite.revoked_at) %><% end %></dd>
+    <dt>Made</dt><dd><%= when_text(@invite.created_at) %> by <%= @invite.created_by&.email_address || "?" %></dd>
+    <dt>Until</dt><dd><%= when_text(@invite.expires_at) %></dd>
+    <dt>Rooms at once</dt><dd><%= @invite.open_rooms.count %> open of at most <%= @invite.max_rooms %></dd>
+    <dt>Apps</dt><dd><%= safe_join(@invite.app_paths.map { tag.code(_1) }, ", ") %></dd>
+    <dt>Rooms made</dt><dd><%= @invite.rooms.count %></dd>
+  </dl>
+</section>
+
+<% if @link %>
+  <section class="card">
+    <h2>The invite link (shown once)</h2>
+    <p><code class="wrap" id="invite-link"><%= @link %></code></p>
+    <p class="hint">Whoever has it makes rooms until <%= when_text(@invite.expires_at) %> or until you revoke it. The
+      console keeps only a hash of its secret: it cannot show the link again. The secret is in the part after
+      <code>#</code>, which browsers never send to a server.</p>
+  </section>
+<% end %>
+
+<section class="card">
+  <h2>Rooms made through it</h2>
+  <% if @rooms.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Slot</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th></tr></thead>
+      <tbody>
+        <% @rooms.each do |r| %>
+          <tr>
+            <td><%= link_to r.name, admin_room_path(r) %></td>
+            <td><code><%= r.slot %></code></td>
+            <td><%= r.app.present? ? tag.code(r.app) : "-" %></td>
+            <td class="nowrap"><%= when_text(r.created_at) %></td>
+            <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
+            <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span>
+              <% if r.closed_at %><span class="hint"><%= r.close_reason %></span><% end %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
+
+<% if @invite.open? %>
+  <section class="card">
+    <h2>Revoke</h2>
+    <%= form_with url: revoke_admin_room_invite_path(@invite), method: :patch, class: "stack", data: { turbo: false } do |f| %>
+      <label class="check"><%= check_box_tag :close_rooms, "1", false %> Also close its open rooms now (otherwise they go on until they end)</label>
+      <%= f.submit "Revoke the invite link" %>
+    <% end %>
+  </section>
+<% end %>
+<p><%= link_to "Every room and invite link", admin_rooms_path %></p>

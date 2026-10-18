@@ -31,6 +31,15 @@ asterism.example.org {
 	}
 	respond @admin_outside 403
 
+	# An invite link's page (0.3.5, docs/rooms.md "Invite links") makes rooms
+	# without signing in. nginx's example lets it answer the addresses the
+	# rooms' door answers; to do the same, list them here as for /admin:
+	# @invite_outside {
+	# 	path /invite /invite/*
+	# 	not remote_ip 192.0.2.20
+	# }
+	# respond @invite_outside 403
+
 	reverse_proxy 127.0.0.1:3000 {
 		header_up X-Real-IP {remote_host}
 	}

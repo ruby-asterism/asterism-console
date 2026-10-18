@@ -4,6 +4,9 @@
   <dl class="facts">
     <dt>Status</dt><dd><span class="badge <%= @room.open? ? 'ok' : 'bad' %>"><%= @room.status %></span>
       <% if @room.closed_at %> by <%= @room.closed_by&.email_address || "?" %> (<%= @room.close_reason %>)<% end %></dd>
+    <dt>Made</dt><dd><%= when_text(@room.created_at) %>
+      <% if @room.room_invite %>through the invite link <%= link_to @room.room_invite.name, admin_room_invite_path(@room.room_invite) %>
+      <% elsif @room.created_by %>by <%= @room.created_by.email_address %><% end %></dd>
     <dt>Slot</dt><dd><code><%= @room.slot %></code>: keys <code><%= @room.key_space %>/**</code> on the cloud router</dd>
     <dt>Opens</dt><dd><%= @room.app.present? ? tag.code(@room.app) : "the page's own start" %></dd>
     <dt>Until</dt><dd><%= when_text(@room.closed_at || @room.expires_at) %></dd>

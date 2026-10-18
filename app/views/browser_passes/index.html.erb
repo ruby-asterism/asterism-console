@@ -1,7 +1,7 @@
-<% content_for(:title, "Browser passes - Asterism Console") %>
+<% content_for(:title, "Make a pass - Asterism Console") %>
 <% if BrowserPage.enabled? %>
   <section class="card">
-    <h2>Open the browser build</h2>
+    <h2>Launch Web Studio</h2>
     <% if current_user.handle.blank? %>
       <p>A browser page joins the network as <code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>, a short name
         you choose. Every node on the network sees it. <%= link_to "Choose your handle", account_path(anchor: "handle") %> first.</p>
@@ -10,13 +10,13 @@
         pass, as the node <code><%= @next_node %></code> (yours; a second page open at the same time gets the next name).</p>
       <%= form_with url: open_browser_passes_path, method: :post, data: { turbo: false }, html: { target: "_blank" } do |f| %>
         <label>Start <%= f.select :app, BrowserPage.apps %></label>
-        <%= f.submit "Open the browser build" %>
+        <%= f.submit "Launch Web Studio" %>
       <% end %>
     <% end %>
   </section>
 <% end %>
 <section class="card">
-  <h2>Browser passes</h2>
+  <h2>Make a pass</h2>
   <p>A pass lets a browser build (a page that joins the network from a browser) connect to this console's router over <code>wss://</code>.
     It is yours: the connections it opens are logged with your name. The first page that uses it, within
     <%= (BrowserPass::TTL / 60).to_i %> minutes, takes it: for <%= (BrowserPass::LIFETIME / 3600.0).round(1) %> hours from then

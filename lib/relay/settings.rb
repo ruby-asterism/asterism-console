@@ -48,7 +48,8 @@
 #   ASTERISM_GAMES_STATUS_URL     none (a game host's GET /status, e.g. http://asterism-games:7460/status:
 #                                       the rooms' page shows its tables)
 #   ASTERISM_ROOM_APPS            none (what a room's link may open, "Label=/path,...", offered first
-#                                       on the rooms' page; the roles' browser apps follow)
+#                                       on the rooms' page; the roles' browser apps follow; an invite
+#                                       link (0.3.5) offers these alone)
 require "shellwords"
 
 module Relay

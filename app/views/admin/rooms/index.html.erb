@@ -65,6 +65,8 @@
   <% end %>
 </section>
 
+<%= render "admin/room_invites/list", invites: @invites %>
+
 <section class="card">
   <h2>Every room</h2>
   <% if @rooms.empty? %>
@@ -78,7 +80,7 @@
             <td><%= link_to r.name, admin_room_path(r) %></td>
             <td><code><%= r.slot %></code></td>
             <td><%= r.app.present? ? tag.code(r.app) : "-" %></td>
-            <td class="nowrap"><%= when_text(r.created_at) %><% if r.created_by %><br><span class="hint"><%= r.created_by.email_address %></span><% end %></td>
+            <td class="nowrap"><%= when_text(r.created_at) %><% if r.room_invite %><br><span class="hint">invite link <%= link_to r.room_invite.name, admin_room_invite_path(r.room_invite) %></span><% elsif r.created_by %><br><span class="hint"><%= r.created_by.email_address %></span><% end %></td>
             <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
             <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span></td>
             <td><%= r.open? ? (@door ? "#{@door.dig('rooms', r.uid) || 0} / #{r.max_connections}" : "? / #{r.max_connections}") : "-" %></td>

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_18_120000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -257,6 +257,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_090000) do
     t.index ["handle"], name: "index_released_handles_on_handle"
   end
 
+  create_table "room_invites", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "token_digest", null: false
+    t.datetime "expires_at", null: false
+    t.integer "max_rooms", null: false
+    t.text "apps", null: false
+    t.datetime "revoked_at"
+    t.integer "created_by_id"
+    t.integer "revoked_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_room_invites_on_created_by_id"
+    t.index ["revoked_by_id"], name: "index_room_invites_on_revoked_by_id"
+    t.index ["token_digest"], name: "index_room_invites_on_token_digest", unique: true
+  end
+
   create_table "rooms", force: :cascade do |t|
     t.string "uid", null: false
     t.string "name", null: false
@@ -271,8 +287,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_090000) do
     t.integer "closed_by_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "room_invite_id"
     t.index ["closed_by_id"], name: "index_rooms_on_closed_by_id"
     t.index ["created_by_id"], name: "index_rooms_on_created_by_id"
+    t.index ["room_invite_id"], name: "index_rooms_on_room_invite_id"
     t.index ["slot", "expires_at"], name: "index_rooms_on_slot_and_expires_at"
     t.index ["uid"], name: "index_rooms_on_uid", unique: true
   end
@@ -339,6 +357,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_090000) do
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "relay_peer_roles", "relay_peers"
   add_foreign_key "relay_peer_roles", "relay_roles"
+  add_foreign_key "room_invites", "users", column: "created_by_id"
+  add_foreign_key "room_invites", "users", column: "revoked_by_id"
+  add_foreign_key "rooms", "room_invites"
   add_foreign_key "rooms", "users", column: "closed_by_id"
   add_foreign_key "rooms", "users", column: "created_by_id"
   add_foreign_key "sessions", "users"

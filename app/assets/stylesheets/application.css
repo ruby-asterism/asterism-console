@@ -200,6 +200,7 @@ input[type=submit]:disabled, button:disabled { opacity: 0.45; cursor: not-allowe
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; word-break: break-all; }
 code.wrap { white-space: pre-wrap; word-break: break-all; }
+a.wrap { overflow-wrap: anywhere; word-break: break-all; }
 svg.qr { display: block; width: 256px; height: 256px; margin: 0 0 10px; }
 table.list { width: 100%; border-collapse: collapse; font-size: 15px; }
 table.list th, table.list td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }

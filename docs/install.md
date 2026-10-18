@@ -394,7 +394,7 @@ extract the file and give the three files (README of the asterism gem,
 
 A page that joins the network from a browser (for example a web build of
 an Asterism app) connects to `wss://router.example.org:7443` with a pass. A
-signed-in user makes one under "Browser passes", for the node named after
+signed-in user makes one under "Make a pass", for the node named after
 their handle (`wasm-<handle>`); a user without a handle is asked to choose
 one first. With `ASTERISM_BROWSER_PAGE` set (a URL template with `{pass}`
 after the `#` and `{node}`, `env.example`), every pass comes with a link
@@ -920,19 +920,35 @@ From 0.3.3 to 0.3.4 (the applications' statuses in the details):
   table's counts (`st=...`, `members=...`, `humans=...`).
 - Going back to 0.3.3 is `./update.sh 0.3.3` (no backup needed).
 
-From 0.3.4 to 0.3.5 (Members, and a display name on the registry's rows):
+From 0.3.4 to 0.3.5 (Members, a display name on the registry's rows, and
+invite links to make rooms):
 
-- `./update.sh 0.3.5`. One migration (a column for the display name; the
-  rows keep none and look as before). No change to `.env`, nginx or the
-  router's configuration.
+- `./update.sh 0.3.5`. Two migrations (a column for the display name; the
+  rows keep none and look as before; a table for the invite links). No
+  change to `.env` or the router's configuration.
+- **nginx**: the invite links' page (`/invite`) has two locations of its
+  own in `nginx/asterism-console.conf` (`location = /invite` and
+  `location ^~ /invite/`, before `location /`): copy the file over yours,
+  or add the two blocks, then `sudo nginx -t && sudo systemctl reload
+  nginx`. They let in the addresses of `asterism-door-allow.conf`, the
+  same as `/room`; without them the page answers every address (it still
+  needs the link). Caddy: the commented `@invite_outside` block.
+  docs/rooms.md, "Invite links".
 - The admin pages "Relay" are "Members" now, under `/admin/members`; the
   old URLs (`/admin/relay/...`) lead to the same pages, so bookmarks keep
   working. Nothing else of the pages moved.
+- The page "Browser passes" is "Make a pass" and its button "Open the
+  browser build" is "Launch Web Studio" (same URL, same settings).
 - **Check**: Admin > Members lists the rows as before, with an empty
   "Display name" column. Give a row a display name (Edit): the list, the
   row's page and the graph show `Tab5 (fmruby-aaaaaa)`.
+- **Check** (invite links, needs `ASTERISM_ROOM_APPS`): Admin > Rooms,
+  "Invite links": make one with a short name, open the link it shows in a
+  browser that is not signed in, make a room there, and open the room's
+  link. Revoke the invite link afterwards if it was only a test.
 - Going back to 0.3.4 is restoring the backup the update made (it prints
-  the command); the display names are lost.
+  the command); the display names and the invite links are lost (the
+  links stop working).
 
 ## 21. When something is wrong
 

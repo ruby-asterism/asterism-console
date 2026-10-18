@@ -1,0 +1,47 @@
+<%# Invite links to make rooms (0.3.5), on the rooms' page. %>
+<section class="card" id="invites">
+  <h2>Invite links</h2>
+  <p>An invite link lets someone without an account make rooms, on a page that does nothing else
+    (<code>/invite</code>): they choose one of its apps, how long (<%= RoomInvite.default_hours %> hours unless they say,
+    at most <%= RoomInvite.max_hours %>) and a name, get the room's link, and see and close the rooms made through the
+    same invite link. Its rooms take free slots like any other room. The link is shown once; the console keeps only a
+    hash of its secret. Revoke it to stop it at once.</p>
+  <% choices = RoomInvite.app_choices %>
+  <% if choices.empty? %>
+    <p class="error">No app to offer: an invite link offers the apps of <code>ASTERISM_ROOM_APPS</code>, which is not set.</p>
+  <% else %>
+    <%= form_with url: admin_room_invites_path, scope: :room_invite, class: "grid-form", data: { turbo: false } do |f| %>
+      <label>Name <span class="field-help">Whom it is for, e.g. the club's name.</span>
+        <%= f.text_field :name, required: true, maxlength: 60, placeholder: "Friday club" %></label>
+      <label>Days <span class="field-help">How long the link works, at most <%= RoomInvite::MAX_DAYS %>.</span>
+        <%= f.number_field :days, value: RoomInvite::DEFAULT_DAYS, min: 1, max: RoomInvite::MAX_DAYS %></label>
+      <label>Rooms at once <span class="field-help">How many rooms of this link may be open at the same time (all rooms
+          together never take more than the <%= Relay::Settings.room_slots %> slots).</span>
+        <%= f.number_field :max_rooms, value: RoomInvite::DEFAULT_MAX_ROOMS, min: 1, max: 99 %></label>
+      <fieldset class="pick wide"><legend>Apps it may open</legend>
+        <% choices.each do |label, path| %>
+          <label class="check"><%= check_box_tag "room_invite[apps][]", path, true, id: nil %> <%= label %></label>
+        <% end %>
+      </fieldset>
+      <div class="wide"><%= f.submit "Make the invite link" %></div>
+    <% end %>
+  <% end %>
+  <% if invites.any? %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Made</th><th>Until</th><th>Status</th><th>Rooms open</th><th>Rooms made</th><th>Apps</th></tr></thead>
+      <tbody>
+        <% invites.each do |i| %>
+          <tr>
+            <td><%= link_to i.name, admin_room_invite_path(i) %></td>
+            <td class="nowrap"><%= when_text(i.created_at) %><% if i.created_by %><br><span class="hint"><%= i.created_by.email_address %></span><% end %></td>
+            <td class="nowrap"><%= when_text(i.revoked_at || i.expires_at) %></td>
+            <td><span class="badge <%= i.open? ? 'ok' : 'bad' %>"><%= i.status %></span></td>
+            <td><%= i.open_rooms.count %> of <%= i.max_rooms %></td>
+            <td><%= i.rooms.count %></td>
+            <td><%= safe_join(i.app_paths.map { tag.code(_1) }, ", ") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

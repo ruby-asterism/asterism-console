@@ -33,13 +33,18 @@ module RoomPage
   # ASTERISM_ROOM_APPS ("Othello=/app/test/othello.app.rb,Mahjong=/app/game/mahjong/mahjong.app.rb")
   # first, then the roles' browser apps. [[label, value]] (no blank one).
   def apps(env = ENV)
-    listed = env["ASTERISM_ROOM_APPS"].to_s.split(",").filter_map do |item|
+    (listed_apps(env) + BrowserPage.apps.reject { _1[1].blank? }).uniq { _1[1] }
+  end
+
+  # The apps of ASTERISM_ROOM_APPS alone ([[label, value]]): what an invite
+  # link may offer (RoomInvite).
+  def listed_apps(env = ENV)
+    env["ASTERISM_ROOM_APPS"].to_s.split(",").filter_map do |item|
       label, path = item.split("=", 2).map(&:strip)
       path, label = label, nil if path.nil?
       next if path.blank? || !Room::APP.match?(path)
       [ label.presence ? "#{label} (#{path})" : path, path ]
-    end
-    (listed + BrowserPage.apps.reject { _1[1].blank? }).uniq { _1[1] }
+    end.uniq { _1[1] }
   end
 
   def url(room:, app: "", router: PassLink.router, env: ENV)

@@ -24,6 +24,8 @@ class Room < ApplicationRecord
 
   belongs_to :created_by, class_name: "User", optional: true
   belongs_to :closed_by, class_name: "User", optional: true
+  # Made through an invite link (0.3.5, RoomInvite) rather than by an admin.
+  belongs_to :room_invite, optional: true
 
   validates :uid, format: { with: Relay::RoomToken::ROOM }, uniqueness: true
   validates :name, format: { with: NAME }
@@ -66,16 +68,28 @@ class Room < ApplicationRecord
     free.min_by { [ last_end[_1] || Time.at(0), _1 ] }
   end
 
-  # Makes a room on a free slot. Raises Full when there is none.
-  def self.open!(name:, app:, hours:, max_connections:, by:)
+  # Makes a room on a free slot. Raises Full when there is none. Through an
+  # invite link (invite:), also RoomInvite::Refused when the link has ended
+  # or was revoked, or as many rooms as it allows are open; checked in the
+  # same lock, so two pages of one link cannot both take its last room.
+  def self.open!(name:, app:, hours:, max_connections:, by:, invite: nil)
     default_hours, max_hours = Relay::Settings.room_hours
     hours = (hours.presence || default_hours).to_f
     raise ArgumentError, "hours must be more than 0 and at most #{max_hours}" unless hours.positive? && hours <= max_hours
     OPENING.synchronize do
+      if invite
+        invite.reload
+        raise RoomInvite::Refused, invite.closed_reason unless invite.open?
+        open_ones = invite.open_rooms.count
+        if open_ones >= invite.max_rooms
+          raise RoomInvite::Refused, "this invite link may have #{invite.max_rooms} room#{'s' if invite.max_rooms > 1} open at once, " \
+                                     "and #{open_ones} #{open_ones == 1 ? 'is' : 'are'}: close one or wait until one ends"
+        end
+      end
       slot = free_slot or raise Full, "every room slot is taken (#{Relay::Settings.room_slots} slots)"
       create!(uid: SecureRandom.hex(8), name: name.to_s.strip, app: app.presence, slot: slot,
               max_connections: max_connections.presence || Relay::Settings.room_max_connections,
-              expires_at: Time.current + hours * 3600, created_by: by)
+              expires_at: Time.current + hours * 3600, created_by: by, room_invite: invite)
     end
   end
 
@@ -107,6 +121,12 @@ class Room < ApplicationRecord
     ans = signer.room_token(room: uid, slot: slot, exp: expires_at.to_i, max: max_connections)
     increment!(:links_made)
     ans.fetch("token")
+  end
+
+  # Who made it, for the admin pages.
+  def made_by_text
+    return "invite link #{room_invite.name}" if room_invite
+    created_by&.email_address
   end
 
   def close!(by, reason: "closed by an admin")

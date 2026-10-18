@@ -1,10 +1,13 @@
 require "test_helper"
 
 # Without signing in, every route answers with the sign-in page (HTML) or
-# 401 (anything else); nothing about the network is in the answer.
+# 401 (anything else); nothing about the network is in the answer. The
+# invite link's page (0.3.5) is open: it needs the link's secret instead
+# (room_invites_test.rb).
 class AuthenticationTest < ActionDispatch::IntegrationTest
   OPEN = %w[sessions#new sessions#create sessions#otp sessions#verify_otp rails/health#show
-            invitations#show invitations#update browser_passes#check].freeze
+            invitations#show invitations#update browser_passes#check
+            invite_pages#show invite_pages#enter invite_pages#leave invite_pages#create_room invite_pages#close_room].freeze
 
   def app_routes
     Rails.application.routes.routes.filter_map do |r|

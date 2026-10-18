@@ -10,9 +10,10 @@ the command that goes back).
 
 ## 0.3.5
 
-What an update needs: `./update.sh 0.3.5`. One migration (going back
-needs the update's backup). No change to `.env`, nginx or the router's
-configuration. docs/install.md, "From 0.3.4 to 0.3.5".
+What an update needs: `./update.sh 0.3.5`. Two migrations (going back
+needs the update's backup). No change to `.env` or the router's
+configuration. nginx: two locations for the invite links' page (copy
+`asterism-console.conf`). docs/install.md, "From 0.3.4 to 0.3.5".
 
 - The admin pages "Relay" are called "Members": the menu, the headings,
   and the URLs, `/admin/members/...` (the peers, roles and applies as
@@ -36,6 +37,25 @@ configuration. docs/install.md, "From 0.3.4 to 0.3.5".
   label is made by `app/javascript/lib/node_label.js`.
 - The graph details' "registry" link goes to `/admin/members/peers` (it
   pointed at `/relay/peers`, which did not exist).
+- The page "Browser passes" is called "Make a pass" (the menu, its heading
+  and title; the admins' list of every pass is "Every pass"), and the
+  button "Open the browser build" is "Launch Web Studio" (the menu, the
+  page, docs). The URLs (`/passes`, `/admin/passes`) and the settings'
+  names (`ASTERISM_BROWSER_PAGE`, ...) are unchanged.
+- Invite links to make rooms (docs/rooms.md, "Invite links"). An admin
+  makes one on the rooms' page (a name, days it works, rooms open at once,
+  the apps of `ASTERISM_ROOM_APPS` it may open), sees it shown once
+  (`/invite#invite=<secret>`; only the secret's SHA-256 is kept), lists
+  them (until, rooms open, rooms made) and revokes one, optionally closing
+  its open rooms. Whoever opens the link, without an account, gets a page
+  that only makes rooms (one of its apps, 3 hours unless said, at most 12,
+  an optional name), shows the room's link once, and lists and closes the
+  rooms of the same invite link. Refusals say why (ended, revoked, its
+  limit, every slot taken). Rooms made so take free slots like any other;
+  the rooms' page says which invite link made each. Secrets that are no
+  invite link's are counted per address (10 in 10 minutes, then 429), every
+  try is limited, and nginx's example opens `/invite` to the rooms' door's
+  addresses (`asterism-door-allow.conf`).
 
 ## 0.3.4
 

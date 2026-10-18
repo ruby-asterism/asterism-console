@@ -1,4 +1,4 @@
-# "Open the browser build" (G1.5): a page that can join the network from a
+# "Launch Web Studio" (G1.5; "Open the browser build" before 0.3.5): a page that can join the network from a
 # browser (for example a build of an Asterism app for the web), opened in a
 # new tab with a fresh pass, a node ID tied to the signed-in user and the
 # app to start. The page is an integration, configured by a URL template;

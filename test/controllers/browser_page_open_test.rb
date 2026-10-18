@@ -1,6 +1,6 @@
 require "test_helper"
 
-# "Open the browser build" (G1.5): only with a page configured; a fresh
+# "Launch Web Studio" (G1.5): only with a page configured; a fresh
 # pass, a node ID tied to the user, an app the roles name; the URL reaches
 # the new tab in the body (never a redirect or the log).
 class BrowserPageOpenTest < ActionDispatch::IntegrationTest
@@ -25,7 +25,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
     with_env("ASTERISM_BROWSER_PAGE" => nil) do
       sign_in_as(users(:user))
       get browser_passes_path
-      assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select "input[type=submit][value='Launch Web Studio']", 0
       assert_select ".nav-group.play form", 0
       post open_browser_passes_path, params: { app: "" }
       assert_response :not_found
@@ -48,7 +48,12 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       assert_select "form[target=_blank] select[name=app] option[value='/app/test/othello.app.rb']"
       assert_select "code", "wasm-pat"
       assert_select ".nav-group.play form[target=_blank][action=?] input[type=hidden][name=app][value='']", "/passes/open"
-      assert_select ".nav-group.play input[type=submit][value='Open the browser build']"
+      assert_select ".nav-group.play input[type=submit][value='Launch Web Studio']"
+      assert_select ".nav-group.play a[href='/passes']", "Make a pass"
+      assert_select "title", "Make a pass - Asterism Console"
+      assert_select "h2", "Launch Web Studio"
+      assert_select "h2", "Make a pass"
+      assert_no_match(/Browser passes|Open the browser build/, response.body, "the names before 0.3.5")
       io = StringIO.new
       old = Rails.logger
       Rails.logger = ActionController::Base.logger = ActiveSupport::TaggedLogging.logger(io)
@@ -82,7 +87,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
     with_env("ASTERISM_BROWSER_PAGE" => PAGE, "ASTERISM_PASS_ROUTER" => "ws/router.example.org:7443") do
       sign_in_as(users(:admin))
       get browser_passes_path
-      assert_select "input[type=submit][value='Open the browser build']", 0
+      assert_select "input[type=submit][value='Launch Web Studio']", 0
       assert_select ".nav-group.play form", 0
       assert_select "button, input[type=submit]", { text: "Make a pass", count: 0 }
       assert_select "a[href=?]", account_path(anchor: "handle"), "Choose your handle"

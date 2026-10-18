@@ -31,6 +31,8 @@ class User < ApplicationRecord
   has_many :revoked_passes, class_name: "BrowserPass", foreign_key: :revoked_by_id, dependent: :nullify
   has_one :invitation, dependent: :nullify
   has_many :created_invitations, class_name: "Invitation", foreign_key: :created_by_id, dependent: :nullify
+  has_many :created_room_invites, class_name: "RoomInvite", foreign_key: :created_by_id, dependent: :nullify
+  has_many :revoked_room_invites, class_name: "RoomInvite", foreign_key: :revoked_by_id, dependent: :nullify
 
   normalizes :email_address, with: ->(e) { e.strip.downcase }
   normalizes :handle, with: ->(h) { h.strip.downcase.presence }

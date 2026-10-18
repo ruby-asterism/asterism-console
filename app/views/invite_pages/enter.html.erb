@@ -1,0 +1,10 @@
+<% content_for(:title, "Make a room") %>
+<section class="card narrow" data-controller="invite">
+  <h2>Make a room</h2>
+  <% if @error %><p class="error" role="alert"><%= @error %></p><% end %>
+  <p>This page opens with the invite link you were given. If it did not, paste the whole link here.</p>
+  <%= form_with url: invite_enter_path, method: :post, class: "stack", data: { turbo: false, invite_target: "form" } do |f| %>
+    <label>Invite link <%= f.password_field :token, required: true, autocomplete: "off", data: { invite_target: "secret" } %></label>
+    <%= f.submit "Open" %>
+  <% end %>
+</section>

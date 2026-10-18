@@ -38,6 +38,6 @@ so a directive the server's nginx does not know fails here first.
   or another; every `*.localtest` name resolves to the nginx container
   there, which also hands 7448 on to zenohd (as a server's published port).
 - `.env` sets `ASTERISM_BROWSER_PAGE` and `ASTERISM_ROOM_PAGE` to the page
-  served here, so the Browser passes page has "Open the browser build" and
+  served here, so the "Make a pass" page has "Launch Web Studio" and
   a room's link opens it (rooms, docs/rooms.md).
 - `.env` and `certs/` are ignored by git.

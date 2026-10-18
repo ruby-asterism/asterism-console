@@ -1,0 +1,26 @@
+<%# The invite link's page (0.3.5): no menu, no link into the rest of the console. %>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Make a room" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <meta name="console-time-zone" content="<%= Time.zone.tzinfo.name %>" data-abbr="<%= Time.zone.now.strftime("%Z") %>" data-offset="<%= Time.zone.now.utc_offset %>">
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="plain">
+    <header class="bar">
+      <h1>Asterism rooms</h1>
+    </header>
+    <main class="page">
+      <%= tag.p(flash[:alert], class: "flash alert", role: "alert") if flash[:alert] %>
+      <%= tag.p(flash[:notice], class: "flash notice", role: "status") if flash[:notice] %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

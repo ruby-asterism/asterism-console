@@ -19,11 +19,11 @@
           <%= form_with url: open_browser_passes_path, method: :post, class: "inline", data: { turbo: false },
                         html: { target: "_blank" } do |f| %>
             <%= f.hidden_field :app, value: "", id: nil %>
-            <%= f.submit "Open the browser build", class: "nav-open", name: nil,
+            <%= f.submit "Launch Web Studio", class: "nav-open", name: nil,
                          title: "Opens the browser build in a new tab with a fresh pass" %>
           <% end %>
         <% end %>
-        <%= nav_link "Browser passes", browser_passes_path %>
+        <%= nav_link "Make a pass", browser_passes_path %>
       </div>
       <% if current_user.admin? %>
         <div class="nav-group admin" role="group" aria-label="Admin" title="Admin pages (/admin)">

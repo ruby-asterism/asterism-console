@@ -1,0 +1,61 @@
+<% content_for(:title, "Make a room") %>
+<section class="card">
+  <h2>Make a room</h2>
+  <p>Invite link <strong><%= @invite.name %></strong>, until <%= when_text(@invite.expires_at) %>.
+    Rooms open at once: <%= @open_count %> of <%= @invite.max_rooms %>.</p>
+  <p class="hint">A room is open for a few hours. Everyone with its link joins it from a browser; nothing else of the
+    network is reachable from it.</p>
+  <% if @error %><p class="error" role="alert"><%= @error %></p><% end %>
+  <% if @apps.empty? %>
+    <p class="error">This invite link has no app it can open any more: ask whoever gave it to you.</p>
+  <% else %>
+    <%= form_with url: invite_rooms_path, scope: :room, class: "grid-form", data: { turbo: false } do |f| %>
+      <label>Opens <%= f.select :app, @apps, selected: params.dig(:room, :app) %></label>
+      <label>Hours <span class="field-help">How long it is open: <%= @default_hours %> unless you say, at most <%= @max_hours %>.</span>
+        <%= f.number_field :hours, value: params.dig(:room, :hours).presence || @default_hours, min: 0.25, max: @max_hours, step: 0.25 %></label>
+      <label>Name <span class="field-help">Optional.</span>
+        <%= f.text_field :name, maxlength: 60, placeholder: "Othello on Friday" %></label>
+      <div class="wide"><%= f.submit "Make the room", disabled: @open_count >= @invite.max_rooms %></div>
+    <% end %>
+  <% end %>
+</section>
+
+<% if @token %>
+  <section class="card">
+    <h2>The room's link (shown once)</h2>
+    <% if @link %>
+      <p><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap", id: "room-link" %></p>
+    <% else %>
+      <p class="hint">The console has no page set for rooms: give the page this key in its fragment (<code>#room=&lt;key&gt;</code>).</p>
+      <dl class="facts"><dt>Key</dt><dd><code class="wrap"><%= @token %></code></dd></dl>
+    <% end %>
+    <p class="hint">Give it to the people you play with: whoever has it joins the room <%= @room.name %> until
+      <%= when_text(@room.expires_at) %>. This page cannot show it again.</p>
+  </section>
+<% end %>
+
+<section class="card">
+  <h2>Rooms of this invite link</h2>
+  <% if @rooms.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Name</th><th>Opens</th><th>Made</th><th>Until</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <% @rooms.each do |r| %>
+          <tr>
+            <td><%= r.name %></td>
+            <td><code><%= r.app %></code></td>
+            <td class="nowrap"><%= when_text(r.created_at) %></td>
+            <td class="nowrap"><%= when_text(r.closed_at || r.expires_at) %></td>
+            <td><span class="badge <%= r.open? ? 'ok' : 'bad' %>"><%= r.status %></span></td>
+            <td><% if r.open? %><%= button_to "Close", invite_room_path(r), method: :delete, class: "small",
+                    data: { turbo: false, turbo_confirm: "Close #{r.name}? Everyone in it is disconnected." } %><% end %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+  <p><%= button_to "Forget this invite link on this browser", invite_leave_path, method: :delete, class: "small",
+                   data: { turbo: false } %></p>
+</section>

@@ -14,7 +14,8 @@ module Admin
 
     def index
       write_files
-      @rooms = Room.includes(:created_by, :closed_by).order(id: :desc).limit(100)
+      @rooms = Room.includes(:created_by, :closed_by, :room_invite).order(id: :desc).limit(100)
+      @invites = RoomInvite.includes(:created_by).order(id: :desc).limit(50)
       @door = Relay::DoorStatus.fetch
       @seats_in_config = Relay::RoomFiles.seats_in_config
       @ready = Room.ready_slots(@seats_in_config)

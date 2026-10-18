@@ -446,12 +446,14 @@ even on a LAN. What it does, and what it assumes:
 - **Admin pages** are under `/admin` (the relay, call permissions, users,
   invitations, passes), so a proxy can limit them by address;
   `CONSOLE_ADMIN_NETS` limits them (and recordings) in the console too.
-  Recordings are for admins only.
-- **Browser passes**: a signed-in user makes a short-lived pass for the
+  Recordings are for admins only. The one page outside them that does
+  something without signing in is an invite link's (`/invite`, 0.3.5,
+  docs/rooms.md "Invite links"): it makes rooms and nothing else.
+- **Passes** ("Make a pass"): a signed-in user makes a short-lived pass for the
   browser build's `wss://` to the internet router; the proxy asks the
   console about it once per connection (docs/g0_w4.md). With a page
-  configured (`ASTERISM_BROWSER_PAGE`, a URL template), "Open the browser
-  build" makes the pass and opens the page in a new tab as a node named
+  configured (`ASTERISM_BROWSER_PAGE`, a URL template), "Launch Web
+  Studio" makes the pass and opens the page in a new tab as a node named
   after the user's handle, starting an app a role names (docs/g1_5.md).
   Every link names that node (a pass is for the node `wasm-<handle>`; a user
   without a handle is asked to choose one first).

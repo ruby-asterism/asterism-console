@@ -54,7 +54,7 @@ Rails.application.routes.draw do
   # Passes for the browser build's wss:// (W4): a signed-in user makes one;
   # the proxy in front of the router asks check (no session: the proxy's
   # subrequest) whether a pass may open a connection.
-  # "Open the browser build" (G1.5): a pass, a node ID for the user and the
+  # "Launch Web Studio" (G1.5; "Open the browser build" before 0.3.5): a pass, a node ID for the user and the
   # app to start, handed to a page configured by ASTERISM_BROWSER_PAGE.
   resources :browser_passes, path: "passes", only: %i[index create] do
     patch :revoke, on: :member
@@ -64,6 +64,17 @@ Rails.application.routes.draw do
 
   # Joining by invitation (there is no sign-up page).
   resources :invitations, only: %i[show update], param: :token
+
+  # An invite link's page (0.3.5, docs/rooms.md "Invite links"): makes rooms
+  # without an account, and nothing else. The secret is in the link's
+  # fragment; the page posts it to "enter".
+  scope "invite", controller: "invite_pages" do
+    get "/", action: :show, as: :invite_page
+    post "/", action: :enter, as: :invite_enter
+    delete "/", action: :leave, as: :invite_leave
+    post "rooms", action: :create_room, as: :invite_rooms
+    delete "rooms/:id", action: :close_room, as: :invite_room
+  end
 
   # Everything an admin manages lives under /admin, one prefix that the
   # proxy can limit by address (deploy/vps/nginx) on top of the admin role
@@ -103,6 +114,10 @@ Rails.application.routes.draw do
       # Rooms (G2): time-limited key spaces anyone with the link joins.
       resources :rooms, only: %i[index create show destroy] do
         post :link, on: :member
+      end
+      # Invite links to make rooms (0.3.5).
+      resources :room_invites, path: "room-invites", only: %i[index create show] do
+        patch :revoke, on: :member
       end
     end
     get "/", to: redirect("/admin/members/peers"), as: :admin_root

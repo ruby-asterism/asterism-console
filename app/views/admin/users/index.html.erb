@@ -25,7 +25,7 @@
       <% end %>
     </tbody>
   </table>
-  <p class="hint">Remove signs the user out everywhere. <%= link_to "Every browser pass", admin_browser_passes_path %>.</p>
+  <p class="hint">Remove signs the user out everywhere. <%= link_to "Every pass", admin_browser_passes_path %>.</p>
   <% if (b = backup_status) && b["last_ok_name"] %>
     <p class="hint">Last backup: <code><%= b["last_ok_name"] %></code> (<%= iso_when(b["last_ok_at"]) %>)<%= ", next at #{iso_when(b['next_at'])}" if b["next_at"] %>.</p>
   <% end %>

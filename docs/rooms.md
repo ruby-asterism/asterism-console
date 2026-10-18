@@ -13,7 +13,7 @@ with them.
 | Getting in | a certificate from the console's CA (mutual TLS, port 7448) | the room's link (a signed key), through the door (`wss://.../room`) |
 | How long | the certificate's days | the room's hours (3 unless said, at most 24) |
 | Keys | what the roles allow | the room's key space only: `room/<slot>/**`; inside it each page writes and calls only under its seat's node ID (0.3.0) |
-| Made by | an admin | an admin (Admin > Rooms) |
+| Made by | an admin | an admin (Admin > Rooms), or anyone with an invite link (0.3.5, at most 12 hours) |
 
 ## The parts
 
@@ -408,6 +408,73 @@ outside `room/01/**`.
 - In a room with a game host, a call from the seat is a player's call:
   the table takes it as the seat's node.
 
+## Invite links (0.3.5)
+
+Rooms are made by admins. An invite link lets someone without an account
+make them too, so that people can play when no admin is around: an admin
+makes the link with an end, and whoever opens it gets a page that makes
+rooms and does nothing else.
+
+- **Making one** (Admin > Rooms, "Invite links"): a name (whom it is for),
+  how many days it works (7 unless said, at most 90), how many of its rooms
+  may be open at once (1 unless said), and the apps its rooms may open, of
+  those in `ASTERISM_ROOM_APPS` (at least one; without `ASTERISM_ROOM_APPS`
+  there is nothing to offer and no invite link). The whole link is shown
+  once, on the page that made it:
+  `https://<console>/invite#invite=<secret>`.
+- **The secret.** 32 random bytes (43 characters, base64url). The console
+  keeps only its SHA-256, as for the users' invitations, and cannot show
+  the link again. It travels in the fragment, which browsers never send to
+  a server: the page's script takes it out of the address bar and posts it
+  to the console in a form's body (Rails filters the parameter `token` out
+  of its log; nginx never logs a body). From then on this browser's session
+  remembers the invite link (until it ends or is revoked; "Forget this
+  invite link on this browser" on the page drops it). A browser without
+  scripts can paste the link into the page's form.
+- **The page** (`/invite`): choose one of the link's apps, how long (3 hours
+  unless said, at most 12; less when `ASTERISM_ROOM_MAX_HOURS` is less) and
+  a name (optional; else the invite link's name and the time). It makes the
+  room and shows the room's link once, as the rooms' page does for an admin.
+  Below, the rooms made through the same invite link (by anyone who has it),
+  each with a button that closes it. Nothing else of the console is
+  reachable from it: no menu, no link to other pages, and the page's session
+  is not a sign-in (every other page still asks to sign in). It sees no room
+  made by an admin or through another invite link, and cannot close one.
+- **Refusals**, each with its reason on the page: the link has ended, the
+  link was revoked, as many of its rooms as it allows are open ("close one
+  or wait until one ends"), every room slot is taken, an app the link does
+  not offer, more than 12 hours. A revoked or ended link is refused also in
+  a browser that opened it before.
+- **Rooms made through one are rooms like any other**: they take a free
+  slot (the slots stay the limit of all rooms, whoever made them), the door
+  lets them in the same way, their connection limit is
+  `ASTERISM_ROOM_MAX_CONNECTIONS`, and the admin sees them on the rooms'
+  page ("Made": "invite link <name>"; the room's page says the same) and
+  may close them. The invite link's page (Admin > Rooms > the link's name)
+  lists what was made through it and when.
+- **Revoking** (the link's page in Admin > Rooms) stops the link at once.
+  Its open rooms go on until they end, unless "Also close its open rooms
+  now" is ticked.
+- **Twelve hours** fit the rest as it is: a room's end is its keys' end
+  (the signer signs up to 24 hours ahead), the door keeps a room's
+  connections and seats until that end, and a game host keeps a room's
+  tables while `rooms.json` lists it. Nothing in the ACL or the seats'
+  certificates (365 days) depends on a room's length.
+- **Guessing.** Like the rooms' door, the console counts secrets that are
+  no invite link's per address: after 10 within 10 minutes that address is
+  answered 429 (even with a good secret) until the 10 minutes have passed.
+  Every try to open a link is limited too (30 in 10 minutes per address),
+  and making or closing rooms (20 in 10 minutes per address). nginx limits
+  `/invite` per address in front (`asterism_signin`, the sign-in pages'
+  zone, burst 10).
+- **Who may open it** (nginx, `asterism-console.conf`): by default the
+  same addresses as the rooms' door (`location = /invite` and
+  `location ^~ /invite/` include `asterism-door-allow.conf`, the list `/room`
+  uses on the router's port). Whoever cannot join a room from an address
+  cannot make one from it either. To open the invite page wider or narrower
+  than `/room`, give those two locations an allow list of their own. The
+  Caddy example has the same as a commented block.
+
 ## What a room does not protect
 
 What the router guarantees: a room's connections touch only
@@ -417,6 +484,8 @@ seat's node ID and calls only as itself, and the tables of a game host
 are the host's alone. What is left:
 
 - Anyone with the room's link gets in (a seat each, up to the seats).
+  Anyone with an invite link makes rooms until it ends or is revoked
+  (0.3.5): it is a key to the rooms' slots, within its limit.
   Keep anything that matters (driving a robot, say) on the certificates'
   side.
 - Inside a room, reading is free: every page can subscribe to and get

@@ -14,7 +14,7 @@
     adds <code>_2</code> and so on). Lower case letters, digits and single hyphens, <%= User::HANDLE_MIN %> to
     <%= User::HANDLE_MAX %> characters, starting with a letter; nobody else may have it.</p>
   <% if @user.handle.blank? %>
-    <p><strong>You have no handle yet.</strong> Choose one to open the browser build.</p>
+    <p><strong>You have no handle yet.</strong> Choose one to launch Web Studio.</p>
   <% end %>
   <%= form_with url: handle_account_path, method: :patch, class: "row" do |f| %>
     <%= f.text_field :handle, value: @user.handle_in_database, required: true, minlength: User::HANDLE_MIN,
