@@ -29,6 +29,9 @@ class RoomInvitesTest < ActionDispatch::IntegrationTest
     post admin_room_invites_path, params: { room_invite: { name: name, days: days, max_rooms: max_rooms, apps: apps,
                                                            message: message }.compact }
     assert_response :created
+    # Set apart, with a button that copies it: the page is the only place it is shown.
+    assert_select "section.card.once[data-controller=copy] #invite-link[data-copy-target=source]"
+    assert_select "section.card.once button[data-action='copy#copy']"
     link = css_select("#invite-link").text
     secret = link[/#invite=([A-Za-z0-9_-]+)\z/, 1]
     assert secret, link

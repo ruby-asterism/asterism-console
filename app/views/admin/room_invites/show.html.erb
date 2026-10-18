@@ -13,9 +13,11 @@
 </section>
 
 <% if @link %>
-  <section class="card">
+  <section class="card once" data-controller="copy">
     <h2>The invite link (shown once)</h2>
-    <p><code class="wrap" id="invite-link"><%= @link %></code></p>
+    <p class="once-note">Copy it now: it cannot be shown again.</p>
+    <p><code class="wrap" id="invite-link" data-copy-target="source"><%= @link %></code></p>
+    <p><button type="button" data-copy-target="button" data-action="copy#copy">Copy the link</button></p>
     <p class="hint">Whoever has it makes rooms until <%= when_text(@invite.expires_at) %> or until you revoke it. The
       console keeps only a hash of its secret: it cannot show the link again. The secret is in the part after
       <code>#</code>, which browsers never send to a server.</p>

@@ -8,6 +8,16 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.7
+
+What an update needs: `./update.sh 0.3.7`. No migration, no change to
+`.env`, nginx or the router's configuration.
+
+- A link the console shows only once (an invite link when it is made, a
+  room's link on the admin's room page and on the invite link's page) is
+  set apart in the warning colours, says that it cannot be shown again,
+  and has a "Copy the link" button.
+
 ## 0.3.6
 
 What an update needs: `./update.sh 0.3.6`. One migration (going back

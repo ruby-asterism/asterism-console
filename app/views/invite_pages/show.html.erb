@@ -25,10 +25,13 @@
 </section>
 
 <% if @token %>
-  <section class="card">
+  <section class="card once" data-controller="copy">
     <h2>The room's link (shown once)</h2>
     <% if @link %>
-      <p><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap", id: "room-link" %></p>
+      <p class="once-note">Copy it now: it cannot be shown again.</p>
+      <p><%= link_to @link, @link, rel: "noreferrer", target: "_blank", class: "wrap", id: "room-link",
+                     data: { copy_target: "source" } %></p>
+      <p><button type="button" data-copy-target="button" data-action="copy#copy">Copy the link</button></p>
     <% else %>
       <p class="hint">The console has no page set for rooms: give the page this key in its fragment (<code>#room=&lt;key&gt;</code>).</p>
       <dl class="facts"><dt>Key</dt><dd><code class="wrap"><%= @token %></code></dd></dl>

@@ -971,6 +971,13 @@ From 0.3.5 to 0.3.6 (the exposure check, a message on each invite link):
 - Going back to 0.3.5 is restoring the backup the update made (it prints
   the command); the invite links' messages are lost.
 
+From 0.3.6 to 0.3.7 (the links shown once stand out):
+
+- `./update.sh 0.3.7`. No migration, no change to `.env` or nginx.
+- An invite link when it is made, and a room's link, are shown in the
+  warning colours with a "Copy the link" button: copy them before leaving
+  the page, as before.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

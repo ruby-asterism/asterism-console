@@ -173,6 +173,11 @@ body.plain { min-height: 100vh; }
 .card h2 { font-size: 20px; margin: 0 0 10px; }
 .card h3 { font-size: 17px; margin: 16px 0 8px; }
 .card.narrow { max-width: 480px; margin: 40px auto 0; width: 100%; }
+/* A link shown only once (an invite link, a room's link): set apart in the
+   warning colours, so it is not missed before the page is left. */
+.card.once { background: var(--warn-bg); border: 2px solid var(--warn-line); border-left: 6px solid var(--warn-text); }
+.card.once h2 { color: var(--warn-text); }
+.card.once .once-note { margin: 0 0 8px; color: var(--warn-text); font-weight: 600; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .stack label, .grid-form label { display: flex; flex-direction: column; gap: 4px; font-size: 15px; color: var(--muted); }
 .stack input[type=email], .stack input[type=password], .stack input[type=text], .stack textarea, .stack select,
