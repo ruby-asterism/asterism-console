@@ -330,7 +330,7 @@ Then:
 
 ## 11. The first router and node
 
-Under Admin > Relay:
+Under Admin > Members:
 
 1. **Roles**: the example "match" lets a node write under its own
    `asterism/<node>/game/**`, read every node's `game`, and call others
@@ -342,14 +342,22 @@ Under Admin > Relay:
    `fmruby-aaaaaa`).
 3. **A node that connects directly** (a CRuby program): kind `client`, its
    name is its node ID (e.g. `alice`), its roles.
+
+   Any row may have a **display name** (0.3.5, optional, up to 40
+   characters): "Tab5" for the row `fmruby-aaaaaa`. Members, the rooms'
+   page and the graph show it before the name, `Tab5 (fmruby-aaaaaa)`. It
+   is only for people: the name stays the certificate's and the ACL's, and
+   changing the display name needs no Apply. In the graph a row's display
+   name comes before the name the node's own profile tells.
 4. For each: open it and "Issue a certificate" (the key is made in your
    browser), then **"Save all (.tar)"**. You get `<name>.tar`, which holds
    the key (mode 0600), the certificate, the CA, an example configuration
    (`zenoh.json5`) and `asterism.json` (the name, the router, until when).
    The key is shown once: if it is lost, revoke and issue again. Hand the
    file over like a private key, and keep it `chmod 600`.
-5. **Apply** (Admin > Relay, the banner "Review and apply"): writes the ACL and restarts the router
-   (everyone connected comes back by themselves within seconds). "When
+5. **Apply** (Admin > Members, the banner "Review and apply"): writes the
+   ACL and restarts the router (everyone connected comes back by
+   themselves within seconds). "When
    nobody is connected" and "at a time" wait instead.
 
 **The home router** runs on a machine in your LAN, from the extracted file
@@ -476,7 +484,7 @@ the browsers), then Apply; the rows' templates and what they keep closed:
 
 ```
 curl -s -o /dev/null -w '%{http_code}\n' https://asterism.example.org/up             # 200
-curl -s -o /dev/null -w '%{http_code}\n' https://asterism.example.org/admin/relay     # 403 from a non-admin address
+curl -s -o /dev/null -w '%{http_code}\n' https://asterism.example.org/admin/members   # 403 from a non-admin address
 curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
   https://router.example.org:7443/                                                    # 401 (no pass)
@@ -532,7 +540,7 @@ docker compose logs backup                              # when the next one runs
 ```
 
 When a backup fails, or none was made for two days, the admin pages
-(Admin > Relay and Users) show a warning until the next good one; Users
+(Admin > Members and Users) show a warning until the next good one; Users
 also shows the last backup's name.
 
 The backups stay on the server, in the `backups` volume: copy them off now
@@ -581,7 +589,7 @@ git fetch --tags
    restart the router), and prints the backup it took and the command
    that goes back (section 16).
 
-After an update the router runs the registry: **Apply** (Admin > Relay) is
+After an update the router runs the registry: **Apply** (Admin > Members) is
 needed only after you change the registry later. (The `update.sh` of
 0.2.0 and earlier runs the setup without `--from-update`: the setup then
 writes the file but leaves a running router as it is; Apply once, or take
@@ -635,7 +643,7 @@ console, the bridge and the backup service, restores the backup named with
 the newer version's image (it can read the older one's data), checks out
 the older tag, sets `.env`, runs the older version's setup and restarts.
 A newer version's migrations are not undone by starting an older image;
-the restore is what takes them back. Then Apply once (Admin > Relay), so
+the restore is what takes them back. Then Apply once (Admin > Members), so
 the router's configuration is the older console's again. When the older
 version has no `update.sh` (before 0.1.3), the command printed takes the
 script from the newer tag first.
@@ -756,7 +764,7 @@ server, `CONSOLE_IMAGE_TAG` in `.env`):
   `ASTERISM_BROWSER_PAGE` (a template with `{router}` and `{pass}` at least).
 - **Roles (G1.5)**: the migration turns the rows that were "Player" into
   rows with the role "match" (for the app of `ASTERISM_RELAY_GAME`, else
-  `game`); remove `ASTERISM_RELAY_GAME` afterwards, check Admin > Relay >
+  `game`); remove `ASTERISM_RELAY_GAME` afterwards, check Admin > Members >
   Roles and Apply. The nginx snippet `asterism-players-allow.conf` is now
   `asterism-door-allow.conf` (copy it, change the include in
   `asterism-router.conf`, `nginx -t`, reload, remove the old one).
@@ -782,7 +790,7 @@ From 0.1.x to 0.2.0 (rooms, section 12):
   `ROOM_DOOR_PORT`) and the `location = /room` block in
   `asterism-router.conf`; `nginx -t`, reload.
 - **The update's setup** makes the room slots and the rooms' signing key;
-  then **Apply** (Admin > Relay) so that the router lets the slots in and
+  then **Apply** (Admin > Members) so that the router lets the slots in and
   takes the new `max_sessions`.
 
 From 0.2.0 to 0.2.1 (rooms in the graph, the console's time zone):
@@ -844,7 +852,7 @@ the rooms):
   (everyone connected comes back within seconds); the door gets its
   `seats` volume. No migration.
 - **Check**: `docker compose logs door | grep seats` says where the seats'
-  table is; Admin > Relay lists "And 128 room seats ..."; the rooms' page
+  table is; Admin > Members lists "And 128 room seats ..."; the rooms' page
   works as before. With a page that takes seats: the door's log says
   "room ... slot 01 seat 01 (new): for a page from ...".
 
@@ -865,7 +873,7 @@ From 0.3.0 to 0.3.1 (the rooms' certificates out of the registry):
 - **Check**: setup's output says "removed 136 room row(s)" (8 slots and
   their 128 seats) and "removed the room slots' own certificates of before
   0.3.1 (24 files ...)", then "room-01 seats: 16 seats: 16 in place" for
-  each slot and "asked the cloud router to restart on it". Admin > Relay
+  each slot and "asked the cloud router to restart on it". Admin > Members
   lists only the rows you registered (no "room seats" line); Admin >
   Rooms, "Slots and seats", says 128 of 128 good and 128 let in by the
   cloud router.
@@ -912,6 +920,20 @@ From 0.3.3 to 0.3.4 (the applications' statuses in the details):
   table's counts (`st=...`, `members=...`, `humans=...`).
 - Going back to 0.3.3 is `./update.sh 0.3.3` (no backup needed).
 
+From 0.3.4 to 0.3.5 (Members, and a display name on the registry's rows):
+
+- `./update.sh 0.3.5`. One migration (a column for the display name; the
+  rows keep none and look as before). No change to `.env`, nginx or the
+  router's configuration.
+- The admin pages "Relay" are "Members" now, under `/admin/members`; the
+  old URLs (`/admin/relay/...`) lead to the same pages, so bookmarks keep
+  working. Nothing else of the pages moved.
+- **Check**: Admin > Members lists the rows as before, with an empty
+  "Display name" column. Give a row a display name (Edit): the list, the
+  row's page and the graph show `Tab5 (fmruby-aaaaaa)`.
+- Going back to 0.3.4 is restoring the backup the update made (it prints
+  the command); the display names are lost.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
@@ -920,7 +942,7 @@ From 0.3.3 to 0.3.4 (the applications' statuses in the details):
 - **"Blocked hosts"** in the console's log: `CONSOLE_HOSTS` must be the name
   in the browser's address bar.
 - **The router waits** (`run.sh: waiting for /generated/cloud.json5`): run
-  `bin/asterism setup` (or Admin > Relay, "Review and apply").
+  `bin/asterism setup` (or Admin > Members, "Review and apply").
 - **The router takes no new connection** (0.3.2 restarts it by itself):
   zenohd 1.10.1 can get stuck while it answers the console's questions
   about the network and someone connects or leaves at the same moment.
@@ -931,7 +953,7 @@ From 0.3.3 to 0.3.4 (the applications' statuses in the details):
   router's restart as Apply does, so it comes back within about a minute
   and a half of getting stuck, and everyone reconnects by themselves as
   after an apply. `docker compose logs bridge | grep "router watch"` shows
-  the checks that failed and the restarts with their reason; Admin > Relay
+  the checks that failed and the restarts with their reason; Admin > Members
   shows the last automatic restart. The settings, in `.env` (seconds):
   `ASTERISM_RELAY_WATCH_EVERY=30` (between checks; 0 turns the watch off),
   `ASTERISM_RELAY_WATCH_TIMEOUT=10` (for a session to open),

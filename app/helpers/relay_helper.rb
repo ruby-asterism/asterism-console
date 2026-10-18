@@ -15,6 +15,12 @@ module RelayHelper
     (others + by_slot).join(", ")
   end
 
+  # A member's name with its display name before it, "Tab5 (fmruby-aaaaaa)"
+  # (0.3.5), or the name alone when it has none or is not in the registry.
+  def member_label(name)
+    RelayPeer.find_by(name: name.to_s)&.label || name.to_s
+  end
+
   def presence_badge(peer, seen)
     if seen.include?(peer.name)
       peer.enabled? ? tag.span("connected", class: "badge ok") : tag.span("connected, disabled", class: "badge warn")

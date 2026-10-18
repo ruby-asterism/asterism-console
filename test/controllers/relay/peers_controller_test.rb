@@ -31,6 +31,57 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_difference("RelayPeer.count", -1) { delete relay_peer_path(peer) }
   end
 
+  test "a display name (0.3.5): saved when registering and editing, shown before the name" do
+    sign_in_as(users(:admin))
+    get new_relay_peer_path(kind: "client")
+    assert_select "input[name='relay_peer[display_name]'][maxlength=?]", RelayPeer::DISPLAY_NAME_MAX.to_s
+    post relay_peers_path, params: { relay_peer: PARAMS[:relay_peer].merge(name: "fmruby-aaaaaa", display_name: " Tab5 ") }
+    peer = RelayPeer.find_by!(name: "fmruby-aaaaaa")
+    assert_equal [ "Tab5", "Tab5 (fmruby-aaaaaa)" ], [ peer.display_name, peer.label ]
+    get relay_peers_path
+    assert_select "h2", "Members"
+    assert_select "th", "Display name"
+    assert_select "td.display-name a[href=?]", relay_peer_path(peer), "Tab5"
+    assert_select "td a", "fmruby-aaaaaa"
+    get relay_peer_path(peer)
+    assert_select "h2", /Tab5 \(fmruby-aaaaaa\)/
+    patch relay_peer_path(peer), params: { relay_peer: { display_name: "P4-Nano" } }
+    assert_equal [ "P4-Nano", "fmruby-aaaaaa" ], [ peer.reload.display_name, peer.name ]
+    assert_equal "P4-Nano", RelayPeer.registry.find { _1["name"] == "fmruby-aaaaaa" }["display_name"]
+    patch relay_peer_path(peer), params: { relay_peer: { display_name: "x" * 41 } }
+    assert_response :unprocessable_content
+    patch relay_peer_path(peer), params: { relay_peer: { display_name: "  " } }
+    assert_equal [ nil, "fmruby-aaaaaa" ], [ peer.reload.display_name, peer.label ], "emptied: the name alone"
+    get relay_peers_path
+    assert_select "td.display-name .hint", "-"
+  end
+
+  test "the display name is not in the router's configuration: changing it needs no apply" do
+    peer = RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client", cert_days: 30)
+    before = peer.to_config
+    peer.update!(display_name: "Tab5")
+    assert_equal before, peer.reload.to_config
+  end
+
+  test "the URLs before 0.3.5 (/admin/relay/...) lead to the same pages under /admin/members" do
+    sign_in_as(users(:admin))
+    assert_equal "/admin/members/peers", relay_peers_path
+    get "/admin/relay/peers"
+    assert_redirected_to "/admin/members/peers"
+    get "/admin/relay/peers/new?kind=router"
+    assert_redirected_to "/admin/members/peers/new?kind=router"
+    get "/admin/relay/roles/3/edit"
+    assert_redirected_to "/admin/members/roles/3/edit"
+    get "/admin/relay"
+    assert_redirected_to "/admin/members"
+    get "/admin/members"
+    assert_redirected_to "/admin/members/peers"
+    get "/admin"
+    assert_redirected_to "/admin/members/peers"
+    get relay_peers_path
+    assert_select ".nav-group.admin a.current", "Members"
+  end
+
   test "apply is not a tab: a banner leads to it while the cloud router's file differs" do
     Dir.mktmpdir do |dir|
       old = ENV["ASTERISM_RELAY_GENERATED_DIR"]

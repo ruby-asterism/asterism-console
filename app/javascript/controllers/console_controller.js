@@ -3,6 +3,7 @@ import cytoscape from "cytoscape"
 import fcose from "cytoscape-fcose"
 import { createConsumer } from "@rails/actioncable"
 import { date as zoneDate, dateTime, zoneName } from "lib/time_zone"
+import { nodeLabel } from "lib/node_label"
 
 cytoscape.use(fcose)
 
@@ -382,14 +383,9 @@ export default class extends Controller {
   }
 
   nodeElement(n) {
-    let label = n.data?.self ? `${n.label} (this console)` : n.label
-    // A display name the node's profile told goes before its ID (G1b): the
-    // ID stays in the label, since calls, permissions and the registry use it.
-    const shown = n.kind === "a_node" && !n.data?.self && n.data?.profile?.name
-    if (shown && shown !== n.label) label = `${shown} (${n.label})`
-    // A room's game host (0.3.3, data "room_host"): the room's number after
-    // its ID, apart from the same ID outside the rooms ("games (room 05)").
-    if (n.kind === "a_node" && n.data?.room_host && n.data?.room) label = `${n.label} (room ${n.data.room})`
+    // The registry's display name, else the profile's name, before the ID;
+    // a room's game host with its room (lib/node_label.js).
+    let label = nodeLabel(n)
     const machine = n.kind === "a_node" && machineOf(n.data?.machine)
     // A node's own icon stands for it; the mark is the fallback without one.
     if (machine && !n.data?.icon) label = `${machine.mark} ${label}`
@@ -1413,7 +1409,7 @@ export default class extends Controller {
       if (p.name) parts.push(p.in_acl ? "in the ACL" : "not in the ACL")
       if (p.expires) parts.push(`certificate until ${zoneDate(p.expires)}`)
       rows.push(["Registry", (r?.glyph ? `<img class="mark" src="${registryMark(info.registry)}" alt=""> ` : "") +
-                 esc(parts.join(", ")) + (p.name ? ` <a href="/relay/peers">registry</a>` : ""), true])
+                 esc(parts.join(", ")) + (p.name ? ` <a href="/admin/members/peers">registry</a>` : ""), true])
       if (info.via) rows.push(["Through", String(info.via).startsWith("router ") ? info.via : `router ${info.via}`])
       if (kind === "registered") {
         rows.push(["Expected at", info.expect ? `router ${info.expect}`

@@ -1,6 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 
-// The role form's "App name" helper (Admin > Relay > Roles, new and edit):
+// The role form's "App name" helper (Admin > Members > Roles, new and edit):
 // an app name fills the four templates with the usual pattern for one app,
 // and suggests a name and a description. Only empty fields are filled,
 // unless the admin agrees to overwrite the others. Nothing is sent: the

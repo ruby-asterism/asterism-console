@@ -171,7 +171,7 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_select ".nav-group.admin", 0
     sign_in_as(users(:admin))
     get calls_path
-    assert_select "nav a[href=?]", "/admin/relay/peers"
+    assert_select "nav a[href=?]", "/admin/members/peers"
   end
 
   test "the nav groups the pages, marks the current one and names the user" do
@@ -181,7 +181,7 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_select ".nav-group.watch a", 5
     assert_select ".nav-group.play a[href=?]", "/passes"
     assert_select ".nav-group.admin a", 4
-    assert_select ".nav-group.admin a[href=?]", "/admin/relay/peers"
+    assert_select ".nav-group.admin a[href=?]", "/admin/members/peers"
     assert_select ".nav-group.admin a[href=?]", "/admin/rooms"
     assert_select "nav a.current[aria-current=page]", 1
     assert_select "nav a.current[href=?]", "/calls"
@@ -189,7 +189,7 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     assert_select ".nav .who", "admin", "no handle: the email address's local part"
     assert_select ".nav form[action=?]", "/session"
     get relay_roles_path
-    assert_select "nav a.current[href=?]", "/admin/relay/peers" # the relay section
+    assert_select "nav a.current[href=?]", "/admin/members/peers" # the Members section
     sign_in_as(users(:user))
     get root_path
     assert_select "nav a.current[href=?]", "/"

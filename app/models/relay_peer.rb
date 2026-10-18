@@ -21,6 +21,11 @@ class RelayPeer < ApplicationRecord
   ROOM_NAME = /\Aroom-[0-9]{2}(-s[0-9]{2})?\z/
   validates :name, format: { without: ROOM_NAME, message: "is kept for the rooms' certificates" }
   validates :kind, inclusion: { in: KINDS }
+  # A display name for the pages and the graph (0.3.5): "Tab5" before the
+  # name, "Tab5 (fmruby-aaaaaa)". Optional; the name stays what the ACL uses.
+  DISPLAY_NAME_MAX = 40
+  normalizes :display_name, with: ->(v) { v.to_s.gsub(/[[:cntrl:]]/, " ").squish.presence }
+  validates :display_name, length: { maximum: DISPLAY_NAME_MAX }
   validates :cert_days, numericality: { only_integer: true, in: 1..Relay::CertAuthority::LEAF_DAYS }
   validate :keys_are_key_expressions
   validate :names_and_addresses
@@ -28,6 +33,11 @@ class RelayPeer < ApplicationRecord
 
   def self.lines(text)
     text.to_s.lines.map(&:strip).reject(&:empty?)
+  end
+
+  # "Tab5 (fmruby-aaaaaa)" with a display name, the name alone without.
+  def label
+    display_name.present? ? "#{display_name} (#{name})" : name
   end
 
   def rw_list = self.class.lines(rw_keys)
@@ -68,7 +78,8 @@ class RelayPeer < ApplicationRecord
   # What the bridge needs to mark the graph.
   def to_registry
     { "name" => name, "kind" => kind, "enabled" => enabled?, "in_acl" => in_acl?,
-      "expires" => cert_expires_at&.utc&.iso8601, "description" => description }
+      "expires" => cert_expires_at&.utc&.iso8601, "description" => description,
+      "display_name" => display_name }
   end
 
   def self.registry

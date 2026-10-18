@@ -236,19 +236,19 @@ router_note() {
   case "$ROUTER_CONFIG" in
     written)
       say "  the registry is applied: the setup wrote the cloud router's configuration from it and restarted"
-      say "  the router on it. Apply (Admin > Relay) is needed only after you change the registry later." ;;
+      say "  the router on it. Apply (Admin > Members) is needed only after you change the registry later." ;;
     unchanged|new)
       say "  the registry is applied: the cloud router's configuration already was the registry's."
-      say "  Apply (Admin > Relay) is needed only after you change the registry later." ;;
+      say "  Apply (Admin > Members) is needed only after you change the registry later." ;;
     written-not-restarted)
       say "  the setup wrote the cloud router's configuration from the registry but could not restart the router:"
-      say "  Apply once (Admin > Relay)." ;;
+      say "  Apply once (Admin > Members)." ;;
     *)
       if [ "$DRY" = 1 ]; then
         say "  (the setup says whether it changed the cloud router's configuration; then nothing more is needed)"
       else
         say "  the setup of $VERSION does not say whether the cloud router's configuration changed:"
-        say "  if Admin > Relay shows \"Changes not yet applied\", Apply once."
+        say "  if Admin > Members shows \"Changes not yet applied\", Apply once."
       fi ;;
   esac
 }

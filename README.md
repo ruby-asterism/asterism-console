@@ -286,10 +286,10 @@ directory.
 
 ## The relay registry: certificates, ACL, apply
 
-Under "Relay" the console keeps the registry of the routers and clients
-the cloud router lets in, issues their certificates through a separate
-signer, makes the cloud router's configuration from the registry and
-applies it.
+Under "Members" ("Relay" before 0.3.5) the console keeps the registry of
+the routers and clients the cloud router lets in, issues their
+certificates through a separate signer, makes the cloud router's
+configuration from the registry and applies it.
 
 ```
  browser --> Rails (registry, ledger, apply) --HTTP 127.0.0.1 + token--> bin/signer (the CA's key)
@@ -301,14 +301,17 @@ applies it.
   name, its subject in the cloud router's ACL and, by convention, its
   Asterism node ID (a client) or its router name (`metadata/name`). The
   graph matches nodes to the registry by it.
-- **Registry** (admins only, under `/admin/relay`): kind (router /
-  client), description, keys it may read and write, keys it may only read
+- **Registry** (admins only, under `/admin/members`; the URLs under
+  `/admin/relay` of the consoles before 0.3.5 lead there): kind (router /
+  client), an optional display name ("Tab5": the pages and the graph show
+  "Tab5 (fmruby-aaaaaa)"; the name stays what the certificate and the ACL
+  use), description, keys it may read and write, keys it may only read
   (one key expression per line), whether it reads the admin space (a
   client) or has its admin space read through (a router), enabled,
   certificate lifetime, extra DNS names / IPs for a router that listens,
   its roles and the node IDs it speaks for (docs/g1_5.md). Reading a key
   also lets it query it, and an Asterism call is a query.
-- **Roles** (admins only, `/admin/relay/roles`): a name and key templates
+- **Roles** (admins only, `/admin/members/roles`): a name and key templates
   (read and write, read, ask, watch), `${node}` standing for each node a
   row speaks for; optionally given to the browsers, and an app a browser
   page starts with. "match" is seeded as an example.
@@ -340,7 +343,7 @@ applies it.
   read-only keys only subscribing and querying from the peer). The file
   starts with a line saying it is generated; the database is the source.
   `bin/rails relay:show` prints it, `relay:generate` writes it.
-- **Apply** ("Relay", the banner "Review and apply" while the registry
+- **Apply** ("Members", the banner "Review and apply" while the registry
   differs from the router's file): shows who joins and leaves the ACL, the
   sessions and router links on the cloud router that the restart will cut,
   and the file; then writes `storage/relay/generated/cloud.json5`
@@ -371,7 +374,7 @@ applies it.
   wait twice as long each time (up to 30 minutes) until a check passes.
   With the defaults a stuck router is restarted some 50 to 80 seconds after
   it stops. The probe sessions carry an ID the watch chose, so the graph
-  leaves them out. Admin > Relay shows the last automatic restart and its
+  leaves them out. Admin > Members shows the last automatic restart and its
   reason (from `router_watch.json` next to the generated file). It runs
   only where the console writes the router's configuration (the generated
   file exists); `ASTERISM_RELAY_WATCH_EVERY=0` turns it off. A stopgap until

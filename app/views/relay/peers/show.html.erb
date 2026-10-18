@@ -1,8 +1,9 @@
-<% content_for(:title, "#{@peer.name} - Asterism Console") %>
+<% content_for(:title, "#{@peer.label} - Asterism Console") %>
 <%= render "relay/peers/tabs" %>
 <section class="card">
-  <h2><%= @peer.name %> <span class="hint"><%= @peer.kind %></span> <span id="peer-acl"><%= acl_badge(@peer) %></span> <%= presence_badge(@peer, @seen) %></h2>
+  <h2><%= @peer.label %> <span class="hint"><%= @peer.kind %></span> <span id="peer-acl"><%= acl_badge(@peer) %></span> <%= presence_badge(@peer, @seen) %></h2>
   <dl class="facts">
+    <dt>Display name</dt><dd><%= @peer.display_name.presence || tag.span("none (the graph shows the profile's name, or the name)", class: "hint") %></dd>
     <dt>Description</dt><dd><%= @peer.description.presence || "-" %></dd>
     <dt>Roles</dt><dd><%= @peer.roles.any? ? safe_join(@peer.roles.map { link_to _1.name, relay_role_path(_1) }, ", ") : tag.span("none", class: "hint") %></dd>
     <dt>Speaks for</dt><dd><%= @peer.speaks_for.join(", ") %><%= tag.span(" (its own name)", class: "hint") if @peer.node_list.empty? %></dd>

@@ -8,6 +8,33 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.5
+
+What an update needs: `./update.sh 0.3.5`. One migration (going back
+needs the update's backup). No change to `.env`, nginx or the router's
+configuration. docs/install.md, "From 0.3.4 to 0.3.5".
+
+- The admin pages "Relay" are called "Members": the menu, the headings,
+  and the URLs, `/admin/members/...` (the peers, roles and applies as
+  before). The old URLs under `/admin/relay` redirect to the same page
+  under `/admin/members`, the query kept. The code keeps the relay's names
+  (`Relay::...`, `RelayPeer`).
+- A display name on each row of the registry (optional, up to 40
+  characters), set when registering or editing: "Tab5" for
+  `fmruby-aaaaaa`. Members lists it next to the name, the row's page and
+  the rooms' page (the permanent tables' node) show `Tab5 (fmruby-aaaaaa)`.
+  The name (the certificate's common name, the ACL's subject) is unchanged
+  and the display name is not in the router's configuration: changing it
+  needs no Apply.
+- The graph's label of a registered node or router is
+  `<display name> (<ID>)`: the row's display name first, else the name
+  the node's profile tells (as before), else the ID alone. A room's seats,
+  a room's game host and the browser build keep their labels. The bridge
+  passes the display name in the node's data `peer` (`display_name`); the
+  label is made by `app/javascript/lib/node_label.js`.
+- The graph details' "registry" link goes to `/admin/members/peers` (it
+  pointed at `/relay/peers`, which did not exist).
+
 ## 0.3.4
 
 What an update needs: `./update.sh 0.3.4`. No migration, no change to

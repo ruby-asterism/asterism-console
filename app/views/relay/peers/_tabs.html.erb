@@ -1,11 +1,11 @@
-<%# The relay pages' tabs (Registry, Roles). Applying is not a tab: while the
+<%# The Members pages' tabs (Registry, Roles). Applying is not a tab: while the
     registry differs from the cloud router's file, a banner leads to the
     confirmation page (relay/applies/new), which links the history. The apply
     pages pass banner: false. The whole of it is #relay-tabs, which a page
     may replace in place (issuing a certificate answers with it). %>
 <% banner = local_assigns.fetch(:banner, true) %>
 <div id="relay-tabs">
-<nav class="tabs" aria-label="Relay">
+<nav class="tabs" aria-label="Members">
   <%= nav_link "Registry", relay_peers_path, under: relay_peers_path %>
   <%= nav_link "Roles", relay_roles_path, under: relay_roles_path %>
   <% if banner && !relay_unapplied? %>

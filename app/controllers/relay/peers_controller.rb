@@ -59,8 +59,8 @@ module Relay
     end
 
     def peer_params
-      params.expect(relay_peer: [ :name, :kind, :description, :rw_keys, :ro_keys, :admin_space, :enabled,
-                                  :dns_names, :ip_addresses, :cert_days, :nodes, { role_ids: [] } ])
+      params.expect(relay_peer: [ :name, :display_name, :kind, :description, :rw_keys, :ro_keys, :admin_space,
+                                  :enabled, :dns_names, :ip_addresses, :cert_days, :nodes, { role_ids: [] } ])
     end
   end
 end

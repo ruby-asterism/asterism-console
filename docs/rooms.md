@@ -181,7 +181,7 @@ tables"). It is one more process of the host with a certificate of its
 own, a row of the registry like any other node, and nothing in the
 console's code is particular to it: two roles and a row.
 
-- **The host's role** (Admin > Relay > Roles, "New role"), `games-host`:
+- **The host's role** (Admin > Members > Roles, "New role"), `games-host`:
 
   ```
   Read and write   asterism/${node}

@@ -1,20 +1,22 @@
-<% content_for(:title, "Relay - Asterism Console") %>
+<% content_for(:title, "Members - Asterism Console") %>
 <%= render "relay/peers/tabs" %>
 <section class="card">
-  <h2>Relay registry</h2>
+  <h2>Members</h2>
   <p>The routers and clients that may connect to the cloud router <code><%= @cloud %></code>.
      A name is the certificate's common name, the subject in the router's ACL and the Asterism node ID
-     (or the router's name), so the graph can tell who is who.
+     (or the router's name), so the graph can tell who is who. A display name ("Tab5") is only for the pages
+     and the graph: they show it before the name.
      Changes reach the cloud router when they are applied.</p>
   <% if @peers.empty? %>
     <p class="hint">Nobody is registered yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Name</th><th>Kind</th><th>Roles (for)</th><th>Other keys (read and write / read only)</th><th>Console sees</th>
+      <thead><tr><th>Display name</th><th>Name (ID)</th><th>Kind</th><th>Roles (for)</th><th>Other keys (read and write / read only)</th><th>Console sees</th>
                  <th>Certificate until</th><th>ACL (next apply)</th><th>Now</th></tr></thead>
       <tbody>
         <% @peers.each do |p| %>
           <tr>
+            <td class="display-name"><%= p.display_name.present? ? link_to(p.display_name, relay_peer_path(p)) : tag.span("-", class: "hint") %></td>
             <td><%= link_to p.name, relay_peer_path(p) %><br><span class="hint"><%= p.description %></span></td>
             <td><%= p.kind %><%= tag.span(" (this router)", class: "hint") if p.name == @cloud %></td>
             <td><%= p.roles.any? ? safe_join(p.roles.map { link_to _1.name, relay_role_path(_1) }, ", ") : tag.span("none", class: "hint") %>

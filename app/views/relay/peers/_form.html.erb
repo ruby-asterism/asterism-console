@@ -2,6 +2,8 @@
 <%= form_with model: peer, url: peer.persisted? ? relay_peer_path(peer) : relay_peers_path, class: "grid-form" do |f| %>
   <label>Name (certificate CN = node ID)
     <%= f.text_field :name, required: true, disabled: peer.persisted?, pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]{0,62}" %></label>
+  <label title="The pages and the graph show it before the name: Tab5 (<%= peer.name.presence || "name" %>)">Display name (optional)
+    <%= f.text_field :display_name, maxlength: RelayPeer::DISPLAY_NAME_MAX, placeholder: "Tab5" %></label>
   <label>Kind <%= f.select :kind, RelayPeer::KINDS %></label>
   <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
   <label class="check"><%= f.check_box :enabled %> Enabled</label>

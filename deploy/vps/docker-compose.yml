@@ -30,7 +30,7 @@
 name: asterism
 
 x-console: &console
-  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.4}
+  image: ${CONSOLE_IMAGE:-ghcr.io/ruby-asterism/asterism-console}:${CONSOLE_VERSION:-0.3.5}
   init: true
   restart: unless-stopped
   env_file: ${ASTERISM_ENV_FILE:-.env}

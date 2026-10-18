@@ -228,7 +228,7 @@ def write_router_config(update: false)
   done "wrote #{path} from the registry"
   return "new" unless existed
   unless update
-    done "a running router keeps its configuration until it restarts: Apply in the console (Admin > Relay) restarts it on this one"
+    done "a running router keeps its configuration until it restarts: Apply in the console (Admin > Members) restarts it on this one"
     return "written-not-restarted"
   end
   out, ok = applier.restart
@@ -238,7 +238,7 @@ def write_router_config(update: false)
   else
     done "could not restart the cloud router (#{Relay::Settings.restart_command.join(' ')}): " \
          "#{out.lines.drop(1).last.to_s.strip.presence || 'no output'}"
-    done "Apply in the console (Admin > Relay) once the console runs"
+    done "Apply in the console (Admin > Members) once the console runs"
     "written-not-restarted"
   end
 end
@@ -372,8 +372,8 @@ when "setup"
   write_rooms_file
   if update
     say "\nDone. update.sh restarts the stack next."
-    say(router == "written-not-restarted" ? "The cloud router still runs its previous configuration: Apply once (Admin > Relay)." :
-        "The cloud router runs the registry; Apply (Admin > Relay) is needed only after you change the registry later.")
+    say(router == "written-not-restarted" ? "The cloud router still runs its previous configuration: Apply once (Admin > Members)." :
+        "The cloud router runs the registry; Apply (Admin > Members) is needed only after you change the registry later.")
     say "ROUTER_CONFIG=#{router}"
   else
     say <<~TEXT
@@ -381,8 +381,8 @@ when "setup"
       Done. Next (docs/install.md):
         docker compose up -d          # the router, the console, the bridge, the door
         then TLS in front of the console and the browsers' door, and sign in as the admin.
-      #{router == 'written-not-restarted' ? 'A router that is running now still runs its previous configuration: Apply once (Admin > Relay).' : 'The router starts on the configuration written from the registry: no Apply is needed now.'}
-      Apply (Admin > Relay) is needed only after you change the registry later.
+      #{router == 'written-not-restarted' ? 'A router that is running now still runs its previous configuration: Apply once (Admin > Members).' : 'The router starts on the configuration written from the registry: no Apply is needed now.'}
+      Apply (Admin > Members) is needed only after you change the registry later.
     TEXT
   end
 else

@@ -7,7 +7,7 @@
       <span class="error">it cannot read the rooms' file</span><% end %><% if games["without_table"].present? %>,
       <span class="error">rooms without a table (more than its limit): <%= games["without_table"].join(", ") %></span><% end %>.</p>
     <% if (perm = Relay::GamesStatus.permanent_text(games)) %>
-      <p class="hint">Permanent tables<% if games.dig("permanent", "node") %> of the node <code><%= games.dig("permanent", "node") %></code><% end %>
+      <p class="hint">Permanent tables<% if games.dig("permanent", "node") %> of the node <code><%= member_label(games.dig("permanent", "node")) %></code><% end %>
         (outside the rooms, for the registry's boards and the browsers with a pass): <%= perm[0] %><% if perm[1].any? %>,<br>
         <%= safe_join(perm[1], tag.br) %><% end %>.</p>
     <% end %>

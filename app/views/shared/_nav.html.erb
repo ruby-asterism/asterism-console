@@ -28,7 +28,7 @@
       <% if current_user.admin? %>
         <div class="nav-group admin" role="group" aria-label="Admin" title="Admin pages (/admin)">
           <span class="nav-label">Admin</span>
-          <%= nav_link "Relay", relay_peers_path, under: "/admin/relay" %>
+          <%= nav_link "Members", relay_peers_path, under: "/admin/members" %>
           <%= nav_link "Rooms", admin_rooms_path %>
           <%= nav_link "Call permissions", call_permissions_path %>
           <%= nav_link "Users", admin_users_path, under: [ admin_users_path, admin_invitations_path, admin_browser_passes_path ] %>

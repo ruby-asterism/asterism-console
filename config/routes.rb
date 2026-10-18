@@ -67,12 +67,15 @@ Rails.application.routes.draw do
 
   # Everything an admin manages lives under /admin, one prefix that the
   # proxy can limit by address (deploy/vps/nginx) on top of the admin role
-  # (and CONSOLE_ADMIN_NETS here): the relay registry, certificates and
+  # (and CONSOLE_ADMIN_NETS here): the members (the relay registry), certificates and
   # apply, the call permissions, the users and invitations, every pass.
   scope "admin" do
     resources :call_permissions, only: %i[index create destroy]
-    # The relay: registry, roles, certificates (through the signer, or imported), apply.
-    namespace :relay do
+    # Members (0.3.5; "Relay" before): the registry, roles, certificates
+    # (through the signer, or imported), apply. The code keeps the relay's
+    # names (Relay::..., relay_peers_path); only the pages and their URLs
+    # (/admin/members/...) changed.
+    namespace :relay, path: "members" do
       resources :peers do
         resources :certificates, only: :create do
           patch :revoke, on: :member
@@ -82,8 +85,13 @@ Rails.application.routes.draw do
       resources :applies, only: %i[index new create show] do
         patch :cancel, on: :member
       end
-      get "/", to: redirect("/admin/relay/peers")
+      get "/", to: redirect("/admin/members/peers")
     end
+    # The URLs before 0.3.5 (/admin/relay/...) lead to the same pages under
+    # /admin/members, the query kept, so that bookmarks still work.
+    get "relay(/*rest)", format: false, to: redirect { |params, req|
+      [ "/admin/members", params[:rest] ].compact.join("/").then { req.query_string.present? ? "#{_1}?#{req.query_string}" : _1 }
+    }
     namespace :admin, path: "" do
       resources :users, only: %i[index update destroy] do
         delete :otp, on: :member, action: :otp_off
@@ -97,7 +105,7 @@ Rails.application.routes.draw do
         post :link, on: :member
       end
     end
-    get "/", to: redirect("/admin/relay/peers"), as: :admin_root
+    get "/", to: redirect("/admin/members/peers"), as: :admin_root
   end
 
   get "up" => "rails/health#show", as: :rails_health_check

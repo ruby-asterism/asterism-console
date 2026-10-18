@@ -328,11 +328,31 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert edge?(g, "expect", "reg:w2bot", "router:#{ROUTER}")
     assert_equal "console", c["machine"]
     assert_nil node(g, "a_node:fmruby-aaaaaa")["data"]["machine"], "no profile: nothing guessed from the name (O1)"
+    refute node(g, "a_node:fmruby-aaaaaa")["data"]["peer"].key?("display_name"), "none: not passed"
     refute g["nodes"].any? { _1["id"] == "reg:console" }
     # Sessions and ROS 2 nodes are not names of the registry: left as they are.
     assert_nil node(g, "session:#{BOARD}")["data"]["registry"]
     assert_nil node(g, "r_node:#{ROS}/0")["data"]["registry"]
     # No registry: no marks.
     assert_nil node(graph, "a_node:console")["data"]["registry"]
+  end
+
+  test "a registry row's display name goes with the node (0.3.5), the ID stays the label" do
+    adm = admin
+    adm[ROUTER]["router"]["metadata"] = { "name" => "zenohd-cloud" }
+    registry = [
+      { "name" => "fmruby-aaaaaa", "kind" => "client", "enabled" => true, "in_acl" => true, "display_name" => "Tab5" },
+      { "name" => "zenohd-cloud", "kind" => "router", "enabled" => true, "in_acl" => true, "display_name" => "Cloud" },
+      { "name" => "w2bot", "kind" => "client", "enabled" => true, "in_acl" => true, "display_name" => "Bot" }
+    ]
+    g = Bridge::Graph.build(admin: adm, asterism: asterism, self_zids: [ READER ], registry: registry,
+                            profiles: { "fmruby-aaaaaa" => { "kind" => "family_mruby", "name" => "Alice's board" } },
+                            cloud: "zenohd-cloud").to_h
+    a = node(g, "a_node:fmruby-aaaaaa")
+    assert_equal "fmruby-aaaaaa", a["label"], "the page puts the display name before it"
+    assert_equal "Tab5", a["data"]["peer"]["display_name"]
+    assert_equal "Alice's board", a["data"]["profile"]["name"], "the profile stays (the page prefers the display name)"
+    assert_equal "Cloud", node(g, "router:#{ROUTER}")["data"]["peer"]["display_name"]
+    assert_equal "Bot", node(g, "reg:w2bot")["data"]["peer"]["display_name"]
   end
 end

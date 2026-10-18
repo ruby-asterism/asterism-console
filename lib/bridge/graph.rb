@@ -34,7 +34,9 @@
 #             (data "registry"): "registered" (in the registry, here),
 #             "disabled" (here, but disabled in the registry), "unregistered"
 #             (here, not in the registry); a registered name not seen gets a
-#             node of its own ("absent", kind "registered").
+#             node of its own ("absent", kind "registered"). The row's
+#             display name (0.3.5, data "peer" "display_name") goes with it:
+#             the page puts it before the ID, ahead of the profile's name.
 #   peer_links: [zid, zid] pairs of sessions connected to each other without
 #             a router (the bridge's own: Session#peer_zids)
 #   cloud:    the cloud router's name (Relay::Settings.cloud_name), for the
@@ -603,7 +605,7 @@ module Bridge
         if peer
           seen[name] = true
           n["data"]["registry"] = peer["enabled"] ? "registered" : "disabled"
-          n["data"]["peer"] = peer.slice("name", "kind", "enabled", "in_acl", "expires").compact
+          n["data"]["peer"] = peer.slice("name", "kind", "enabled", "in_acl", "expires", "display_name").compact
         else
           n["data"]["registry"] = "unregistered"
         end
@@ -612,7 +614,7 @@ module Bridge
       by_name.each do |name, peer|
         next if seen[name]
         node("reg:#{name}", "registered", name, "registry" => "absent",
-             "peer" => peer.slice("name", "kind", "enabled", "in_acl", "expires", "description").compact)
+             "peer" => peer.slice("name", "kind", "enabled", "in_acl", "expires", "description", "display_name").compact)
       end
     end
 
