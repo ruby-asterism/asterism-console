@@ -1011,6 +1011,15 @@ From 0.3.8 to 0.3.9 (a closed tab opened again is the same person):
   hands the role on; the two can be updated in any order.
 - Going back to 0.3.8: `./update.sh 0.3.8` (no backup needed).
 
+From 0.3.9 to 0.3.10 (asterism 0.8.0):
+
+- `./update.sh 0.3.10`. No migration, no change to `.env`, nginx or the
+  router's configuration.
+- The image has asterism 0.8.0 (from 0.7.1); what the console shows and
+  how it talks to the nodes stay the same. The game host can be updated
+  before or after it.
+- Going back to 0.3.9: `./update.sh 0.3.9` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

@@ -12,7 +12,7 @@
 #
 # The reading is asterism's (docs/protocol.md 8.4): a map, the entries with
 # a non-empty str key, 1024 bytes at most packed. Done here rather than by
-# Asterism::Status, which the released asterism 0.7.1 does not have yet.
+# Asterism::Status (written before asterism 0.8.0 had it; the same rules).
 # Thread-safe: the puts come on the receiving thread, the answers on the
 # worker.
 module Bridge

@@ -8,6 +8,20 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.3.10
+
+What an update needs: `./update.sh 0.3.10`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.9
+to 0.3.10".
+
+- The image takes asterism 0.8.0 from rubygems.org (the Gemfile's
+  `ASTERISM_GEMS=rubygems` line: `~> 0.8`, was `~> 0.7.1`); asterism-zenoh
+  stays 0.4.1. Wire protocol 1 as before: nothing changes in what the
+  console shows or how it talks to the nodes (the applications' statuses
+  in the graph's details, the rooms, the door). The development Gemfile
+  takes the checkouts next to the repository as before (asterism 0.8.0
+  in `Gemfile.lock`).
+
 ## 0.3.9
 
 What an update needs: `./update.sh 0.3.9`. No migration, no change to

@@ -130,7 +130,7 @@ node.
 
 ### The Asterism gems
 
-The console needs asterism 0.7.0 or later (wire protocol 1: it talks
+The console takes asterism 0.8 (`~> 0.8`; wire protocol 1: it talks
 only to nodes of 0.7.0 and later, docs/x1.md) and asterism-zenoh 0.4.0 or
 later (the versions in `Gemfile.lock`). The Gemfile takes them from the checkouts next to this
 repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
@@ -139,7 +139,7 @@ build it). To use the gems from rubygems.org instead, replace the two
 `path:` lines of the Gemfile with
 
 ```ruby
-gem "asterism", "~> 0.7.0", require: false   # asterism-zenoh comes with it
+gem "asterism", "~> 0.8", require: false   # asterism-zenoh comes with it
 ```
 
 and run `bundle install`. Installing asterism-zenoh compiles a C extension

@@ -58,16 +58,16 @@ group :test do
   gem "selenium-webdriver"
 end
 
-# Asterism 0.7.1 (wire protocol 1, X1; reconnects across a router restart, G1.5b): the local checkouts next to this repository.
+# Asterism 0.8.0 (wire protocol 1, X1; reconnects across a router restart, G1.5b; @status, the methods' texts in the meta): the local checkouts next to this repository.
 # ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
 # rubygems.org instead, replace these two lines with
-#   gem "asterism", "~> 0.7.1", require: false
+#   gem "asterism", "~> 0.8", require: false
 # (asterism-zenoh comes with it) and run `bundle install` (README, "The
 # Asterism gems").
 # ASTERISM_GEMS=rubygems takes them from rubygems.org (the container of
 # deploy/vps does; Bundler then resolves the lock again inside the image).
 if ENV["ASTERISM_GEMS"] == "rubygems"
-  gem "asterism", "~> 0.7.1", require: false
+  gem "asterism", "~> 0.8", require: false
 else
   gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
   gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
