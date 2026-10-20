@@ -8,7 +8,23 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## 0.3.10
+## Unreleased
+
+Documents only; nothing in the console's code changes.
+
+- docs/rooms.md, "Watching the tables from outside" (asterism-games
+  0.18.0): the game host puts each table with the four mahjong hands on
+  `asterism/<host>/spectate/<table>/state` (a room's table as
+  `room<slot>-<table>`), outside the players' role and every room. The
+  role `games-host` gets two more lines (`asterism/${node}/spectate`,
+  `asterism/${node}/spectate/**`); a new role `spectator` (Read
+  `asterism/*/spectate`, `asterism/*/spectate/**`, Watch `asterism/**`)
+  reads them with the command line, the viewer role with the command line
+  and the MCP bridge. docs/g1_5.md says the viewer reads them.
+- `test/lib/relay/spectate_roles_test.rb` asks the router's rules who
+  receives the spectate keys: the host writes them, a spectator and a
+  viewer read them, the players, the browsers and the rooms' seats do not.
+
 
 What an update needs: `./update.sh 0.3.10`. No migration, no change to
 `.env`, nginx or the router's configuration. docs/install.md, "From 0.3.9

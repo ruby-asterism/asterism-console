@@ -188,10 +188,17 @@ console's code is particular to it: two roles and a row.
                    asterism/${node}/games/**
                    asterism/${node}/@profile
                    asterism/${node}/*/@status
+                   asterism/${node}/spectate
+                   asterism/${node}/spectate/**
   Read             asterism/*/game
   Watch            asterism/**
   Browsers have this role: no
   ```
+
+  `asterism/${node}/spectate` and `asterism/${node}/spectate/**` let the
+  host put its tables' spectate views (asterism-games 0.18.0, "Spectate";
+  "Watching the tables from outside" below). A role made before them
+  works as before: the router drops those puts.
 
   `asterism/${node}/*/@status` lets the host tell its tables' counts
   (asterism-games 0.9.0, "Status"; asterism `docs/protocol.md` 8): a
@@ -267,6 +274,77 @@ room's frame. The host's profile names it (asterism-games 0.7.1,
 profile's: `permanent tables (games)`, next to `games (room 01)` in a
 room's frame. (Before 0.3.3 the cloud router let no profile through to the
 console, and the node was `games`.)
+
+## Watching the tables from outside (asterism-games 0.18.0)
+
+A game host can put each table as a spectator sees it, with what the
+players do not see of each other (the four mahjong hands), on a key that
+no player's role reads and no room reaches (asterism-games README,
+"Spectate"):
+
+```
+asterism/<host>/spectate/<table>/state               a permanent table (asterism/games/spectate/mahjong1/state)
+asterism/<host>/spectate/room<slot>-<table>/state    a room's table (asterism/games/spectate/room01-mahjong1/state)
+```
+
+The application chunk is `spectate`, not the host's `games`, so the
+players' role (`Read asterism/*/games/**`) does not match it. A room's
+host puts its tables' keys on a second connection of its own, with its
+own certificate and without the room's namespace: they are on the
+registered side, outside `room/<slot>/**`, and the seats' rules
+(`room/<slot>/**`, their own node, their calls) and the rooms' host rules
+(`room/*/asterism/<host>$*`) do not reach them. The host only puts what a
+spectator may know: never the wall, the ura dora, a member's node or
+token. It holds each view for the table's spectator delay (none by
+default) before it puts it. Nothing in the console's code is particular
+to it: two lines of a role and a role.
+
+- **The host's role**, `games-host`: the two lines `asterism/${node}/spectate`
+  and `asterism/${node}/spectate/**` in "Read and write" (section "A game
+  host's permanent tables" above). The rooms' host uses the same row, so
+  the same lines cover its rooms' tables.
+- **A role for those who watch**, `spectator` (Admin > Members > Roles,
+  "New role"):
+
+  ```
+  Read             asterism/*/spectate
+                   asterism/*/spectate/**
+  Watch            asterism/**
+  Browsers have this role: no
+  ```
+
+  Give it to a row of its own (Register, kind `client`, a name for the
+  person, e.g. `spectator-a`; "Issue a certificate", "Save all (.tar)"),
+  and Apply. Only the spectate keys reach it, and the host's application
+  `spectate` (its liveliness token, for the command line's watch); it
+  writes nothing and calls nothing. Leave "Browsers have this role" off:
+  every browser is one subject at the router (docs/g1_5.md, "Browsers"),
+  so a role for browsers would show every pass holder, players included,
+  the hands. Do not give it to a player's row either: the router cannot
+  tell a seat's player from a spectator of the same certificate.
+- **The viewer role** (docs/g1_5.md, "Looking only") reads `asterism/**`,
+  so the spectate keys reach it as they are, with the command line and
+  the MCP bridge; an AI assistant's read-only row with the same `read
+  asterism/**` too.
+- **Looking** (the asterism gem's command line, asterism 0.10.0):
+
+  ```
+  asterism object echo 'games/spectate/*' --credentials spectator-a.tar        # each put as it comes
+  asterism object echo games/spectate/mahjong1 --credentials spectator-a.tar -o json   # a JSON line each
+  asterism object get games/spectate/room01-mahjong1 --credentials viewer.tar  # the next one
+  ```
+
+  The MCP bridge (`asterism mcp --credentials viewer.tar`):
+  `asterism_values` with the pattern `games/spectate/*/state`. The bridge
+  subscribes to `asterism/**`, which the router refuses to a `spectator`
+  row (it may subscribe to the spectate keys only), so the bridge needs
+  the viewer role.
+
+What these roles keep closed (`test/lib/relay/spectate_roles_test.rb`): the
+players' rows, the browsers and every seat of every room neither receive
+nor subscribe to the spectate keys; only the host's row writes them; a
+`spectator` row reads them and nothing of the tables' calls, the players'
+keys or the rooms.
 
 ## Seats (0.3.0)
 
