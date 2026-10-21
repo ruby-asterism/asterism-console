@@ -8,7 +8,7 @@
 # The Asterism gems come from rubygems.org (ASTERISM_GEMS=rubygems in the
 # Gemfile); asterism-zenoh compiles its C extension against the zenoh-c
 # release it pins, downloaded while the image is built.
-ARG RUBY_VERSION=3.2.6
+ARG RUBY_VERSION=3.4.11
 FROM ruby:${RUBY_VERSION}-slim AS build
 
 RUN apt-get update -qq && \
@@ -52,11 +52,15 @@ COPY --from=build /app /app
 
 # The console and the bridge run as "rails" (1000); the signer as "signer"
 # (1001), whose CA directory (/ca, a volume) nobody else mounts or reads.
+# Gemfile.lock is rails's too: the Bundler of Gemfile.lock (4.x, which
+# RubyGems 3.6 of Ruby 3.4 switches to) touches the lock on every
+# `bundler/setup` when it is not frozen, and fails when it cannot.
 RUN groupadd --system --gid 1000 rails && useradd --uid 1000 --gid 1000 --create-home rails && \
     groupadd --system --gid 1001 signer && useradd --uid 1001 --gid 1001 --no-create-home signer && \
     mkdir -p /ca /generated /certs /backups /rooms /seats storage tmp log && \
     chown signer:signer /ca && chmod 0700 /ca && \
-    chown -R rails:rails /generated /certs /backups /rooms /seats storage tmp log db
+    chown -R rails:rails /generated /certs /backups /rooms /seats storage tmp log db && \
+    chown rails:rails Gemfile.lock
 USER 1000:1000
 
 EXPOSE 3000

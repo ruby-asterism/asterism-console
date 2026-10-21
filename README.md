@@ -97,7 +97,7 @@ and how it works.
 
 ## Running it from the source
 
-Needs Ruby 3.2+, a zenohd router (1.x; the admin space is readable with
+Needs Ruby 3.4+, a zenohd router (1.x; the admin space is readable with
 the default configuration) and the two Asterism gems.
 
 ```
