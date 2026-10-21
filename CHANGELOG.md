@@ -10,7 +10,22 @@ the command that goes back).
 
 ## Unreleased
 
-Documents only; nothing in the console's code changes.
+## 0.3.11
+
+What an update needs: `./update.sh 0.3.11`. No migration, no change to
+`.env`, nginx or the router's configuration. docs/install.md, "From 0.3.10
+to 0.3.11".
+
+- The image is built on Ruby 3.4.11 (`ruby:3.4.11-slim`, Debian 13; it was
+  Ruby 3.2.6 on Debian 12): Ruby 3.2 is past its end of life. Its
+  ca-certificates no longer carries the emSign ECC Root CA - G3 (the
+  eMudhra intermediates of October 2026). The checkout's `.ruby-version`
+  is 3.4.11. The Asterism gems in the image are the same as in 0.3.10.
+- `Gemfile.lock` in the image belongs to the `rails` user: on Ruby 3.4,
+  RubyGems runs the Bundler that `Gemfile.lock` names (4.0.6), which
+  touches the lock at every start; owned by root, the console and the
+  bridge stopped at boot.
+- Documents:
 
 - docs/rooms.md, "Watching the tables from outside" (asterism-games
   0.18.0): the game host puts each table with the four mahjong hands on

@@ -1020,6 +1020,15 @@ From 0.3.9 to 0.3.10 (asterism 0.8.0):
   before or after it.
 - Going back to 0.3.9: `./update.sh 0.3.9` (no backup needed).
 
+From 0.3.10 to 0.3.11 (Ruby 3.4.11):
+
+- `./update.sh 0.3.11`. No migration, no change to `.env`, nginx or the
+  router's configuration.
+- The image runs Ruby 3.4.11 on Debian 13 (from Ruby 3.2.6 on Debian 12);
+  what the console shows and how it talks to the nodes stay the same.
+  The game host can be updated before or after it.
+- Going back to 0.3.10: `./update.sh 0.3.10` (no backup needed).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
