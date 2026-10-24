@@ -9,7 +9,6 @@
     <dt>Ask (calls, meta)</dt><dd><%= keys_list(@role.ask_templates) %></dd>
     <dt>Watch</dt><dd><%= keys_list(@role.watch_templates) %></dd>
     <dt>Browsers</dt><dd><%= @role.for_browsers? ? "have this role#{' (no browsers are let in now)' unless @browsers_listen}" : "no" %></dd>
-    <dt>Opens in a browser page</dt><dd><%= @role.browser_app.present? ? tag.code(@role.browser_app) : "-" %></dd>
   </dl>
   <p><%= link_to "Edit", edit_relay_role_path(@role) %></p>
 </section>

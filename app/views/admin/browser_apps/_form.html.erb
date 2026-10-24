@@ -1,0 +1,12 @@
+<% if app.errors.any? %><p class="error"><%= app.errors.full_messages.to_sentence %></p><% end %>
+<%= form_with model: app, url: app.persisted? ? admin_browser_app_path(app) : admin_browser_apps_path,
+              class: "grid-form" do |f| %>
+  <label>Path <span class="field-help">What the page starts, e.g. <code>/app/test/othello.app.rb</code>.</span>
+    <%= f.text_field :path, required: true, maxlength: 200, pattern: "[A-Za-z0-9_./\\-]{1,200}",
+                     placeholder: "/app/test/othello.app.rb" %></label>
+  <label>Label <span class="field-help">Optional: shown before the path in the menus.</span>
+    <%= f.text_field :label, maxlength: 80, placeholder: "Othello" %></label>
+  <label>Order <span class="field-help">Optional: smaller first; the ones without come last, by label.</span>
+    <%= f.number_field :position, step: 1 %></label>
+  <%= f.submit app.persisted? ? "Save" : "Add" %>
+<% end %>

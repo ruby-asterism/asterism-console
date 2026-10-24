@@ -55,11 +55,10 @@ module BrowserPage
     t[%r{\Ahttps?://[^/?#]+}]
   end
 
-  # What the page can start: nothing, or the apps the roles name.
+  # What the page can start: nothing, or an app of the list (BrowserApp,
+  # Admin > Studio apps; the roles named them before 0.3.12).
   # [[label, value]]
   def apps
-    [ [ "Nothing (the page's own start)", "" ] ] +
-      RelayRole.where.not(browser_app: [ nil, "" ]).order(:name).map { [ "#{_1.browser_app} (#{_1.name})", _1.browser_app ] }
-               .uniq { _1[1] }
+    [ [ "Nothing (the page's own start)", "" ] ] + BrowserApp.in_order.map(&:option)
   end
 end

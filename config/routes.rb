@@ -79,7 +79,7 @@ Rails.application.routes.draw do
   # Everything an admin manages lives under /admin, one prefix that the
   # proxy can limit by address (deploy/vps/nginx) on top of the admin role
   # (and CONSOLE_ADMIN_NETS here): the members (the relay registry), certificates and
-  # apply, the call permissions, the users and invitations, every pass.
+  # apply, the call permissions, the users and invitations, every pass, the Studio apps.
   scope "admin" do
     resources :call_permissions, only: %i[index create destroy]
     # Members (0.3.5; "Relay" before): the registry, roles, certificates
@@ -111,6 +111,8 @@ Rails.application.routes.draw do
         patch :revoke, on: :member
       end
       resources :browser_passes, path: "passes", only: :index
+      # The apps "Launch Web Studio" may start (0.3.12; each role named one before).
+      resources :browser_apps, path: "studio-apps", except: %i[show new]
       # Rooms (G2): time-limited key spaces anyone with the link joins.
       resources :rooms, only: %i[index create show destroy] do
         post :link, on: :member

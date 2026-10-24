@@ -12,7 +12,7 @@ class RelayRoleSeedTest < ActiveSupport::TestCase
     seeded = RelayRole.sole
     # A migrated console gets the role from the G1.5 migration, then the
     # @adv lines from RelayRoleAdvKeys.
-    migrated = RelayRole.new(RelayRoles.match_role("game"))
+    migrated = RelayRole.new(RelayRoles.match_role("game").except(:browser_app)) # the column went in 0.3.12
     adv = RelayRoleAdvKeys.with_adv(migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
     migrated.assign_attributes(rw_templates: adv[:rw], read_templates: adv[:read], ask_templates: adv[:ask])
     assert_equal migrated.to_config["templates"].transform_values(&:sort), seeded.to_config["templates"].transform_values(&:sort)

@@ -3,7 +3,9 @@
 # roles allow, with ${node} in a template expanded to each node the row
 # speaks for (RelayPeer#node_list: the boards behind a home router, or the
 # row's own name). The browsers (the ws/ subject) take the roles marked
-# for_browsers, with ${node} expanded to the browsers' node pattern.
+# for_browsers, with ${node} expanded to the browsers' node pattern. A role
+# is permissions only: the apps a browser page starts are a list of their
+# own (BrowserApp, 0.3.12; each role had one before).
 #
 # Four lists, one per kind of access (Relay::CloudConfig::SECTIONS):
 #   rw     every message, both directions: the role's own place
@@ -17,16 +19,11 @@ class RelayRole < ApplicationRecord
   # A key template: a key expression, where ${node} stands for one chunk.
   TEMPLATE = %r{\A[A-Za-z0-9_\-.*@~%:+=/${}]{1,200}\z}
   VARIABLE = "${node}".freeze
-  # What the browser page starts: whatever the page understands (an app's
-  # path or name); free text within these characters (it travels in a URL
-  # fragment).
-  APP = %r{\A[A-Za-z0-9_./-]{1,200}\z}
 
   has_many :peer_roles, class_name: "RelayPeerRole", dependent: :destroy
   has_many :peers, through: :peer_roles, source: :relay_peer
 
   validates :name, format: { with: NAME, message: "is lower case letters, digits, - and _" }, uniqueness: true
-  validates :browser_app, format: { with: APP }, allow_blank: true
   validate :templates_are_keys
 
   def self.lines(text)

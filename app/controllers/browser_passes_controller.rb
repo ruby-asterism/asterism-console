@@ -27,8 +27,8 @@ class BrowserPassesController < ApplicationController
   end
 
   # Opens the browser build in the tab this form targets: a fresh pass, the
-  # node ID for this user (Relay::BrowserNode) and the app chosen (one the
-  # roles name, or nothing). The URL goes to the tab in the body of a page
+  # node ID for this user (Relay::BrowserNode) and the app chosen (one of
+  # the Studio apps, BrowserApp, or nothing). The URL goes to the tab in the body of a page
   # that is not kept, never in a redirect (the log would show it).
   def open
     return head :not_found unless BrowserPage.enabled?

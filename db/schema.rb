@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_18_180000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_24_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -31,6 +31,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_180000) do
     t.index ["created_at"], name: "index_bridge_requests_on_created_at"
     t.index ["status"], name: "index_bridge_requests_on_status"
     t.index ["user_id"], name: "index_bridge_requests_on_user_id"
+  end
+
+  create_table "browser_apps", force: :cascade do |t|
+    t.string "label"
+    t.string "path", null: false
+    t.integer "position"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["path"], name: "index_browser_apps_on_path", unique: true
   end
 
   create_table "browser_passes", force: :cascade do |t|
@@ -241,7 +250,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_18_180000) do
     t.text "read_templates"
     t.text "ask_templates"
     t.text "watch_templates"
-    t.string "browser_app"
     t.boolean "for_browsers", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false

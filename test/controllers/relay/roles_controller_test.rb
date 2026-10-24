@@ -5,7 +5,7 @@ require "test_helper"
 class Relay::RolesControllerTest < ActionDispatch::IntegrationTest
   PARAMS = { relay_role: { name: "rover-home", description: "show a rover", rw_templates: "asterism/${node}/rover/**\n",
                            read_templates: "", ask_templates: "asterism/*/rover/*/call/${node}\n",
-                           watch_templates: "asterism/**", browser_app: "", for_browsers: "0" } }.freeze
+                           watch_templates: "asterism/**", for_browsers: "0" } }.freeze
 
   test "an admin makes a role, gives it to a row and sees what it becomes" do
     sign_in_as(users(:admin))
@@ -44,7 +44,10 @@ class Relay::RolesControllerTest < ActionDispatch::IntegrationTest
       assert_select ".field-help", minimum: 5
       assert_select ".template-help dt code", "${node}"
       assert_select ".template-help dt code", "**"
+      assert_select "input[name='relay_role[for_browsers]']"
+      assert_select "[name='relay_role[browser_app]']", 0, "a role is permissions only (0.3.12)"
     end
+    assert_no_match "Opens in a browser page", response.body
     get relay_roles_path
     assert_select "th", "What it is for"
     assert_select "td.role-desc", relay_roles(:match).description

@@ -10,6 +10,30 @@ the command that goes back).
 
 ## Unreleased
 
+## 0.3.12
+
+What an update needs: `./update.sh 0.3.12`. One migration (going back
+needs the update's backup). No change to `.env`, nginx or the router's
+configuration, and no apply. docs/install.md, "From 0.3.11 to 0.3.12".
+
+- The apps "Launch Web Studio" may start are a list of their own, kept by
+  an admin under Admin > Studio apps (`/admin/studio-apps`: a path in the
+  same characters as before, an optional label and an optional order).
+  Make a pass offers "Nothing" and these, and `POST /passes/open` takes
+  nothing else, as before. The rooms' page offers them after
+  `ASTERISM_ROOM_APPS`, as it offered the roles' apps.
+- A role is permissions only: "Opens in a browser page" is gone from the
+  roles' pages, and "Browsers have this role" stays. Migration:
+  `browser_apps` is made, every app a role named is copied to it (not
+  blank, each path once, labelled with the name of a role that names it,
+  one marked for the browsers if any), then `relay_roles.browser_app` is
+  dropped. The roles, their rows and the router's rules do not change.
+- Documents: README, docs/install.md (section 12, the rooms' apps),
+  docs/g1_5.md, docs/rooms.md and docs/v4.md speak of the Studio apps.
+- Tests: the page (admins only, `CONSOLE_ADMIN_NETS`), the order of the
+  list, Make a pass offering it, open refusing an app not on it, and the
+  migration copying the roles' apps (`test/db/browser_apps_out_of_roles_test.rb`).
+
 ## 0.3.11
 
 What an update needs: `./update.sh 0.3.11`. No migration, no change to

@@ -30,6 +30,7 @@
           <span class="nav-label">Admin</span>
           <%= nav_link "Members", relay_peers_path, under: "/admin/members" %>
           <%= nav_link "Rooms", admin_rooms_path %>
+          <%= nav_link "Studio apps", admin_browser_apps_path, under: admin_browser_apps_path %>
           <%= nav_link "Call permissions", call_permissions_path %>
           <%= nav_link "Users", admin_users_path, under: [ admin_users_path, admin_invitations_path, admin_browser_passes_path ] %>
         </div>

@@ -50,8 +50,6 @@
                     data: { role_form_target: "watch", label: "Watch" } %></label>
   <label class="check wide"><%= f.check_box :for_browsers %> Browsers have this role (every ws/ session;
     <code>${node}</code> is <code><%= Relay::Settings.cloud_settings["browser_nodes"] %></code>)</label>
-  <label class="wide">Opens in a browser page (optional: what the page opened from the console starts, for example
-    an app's path) <%= f.text_field :browser_app %></label>
   <p class="hint wide">A template without <code>${node}</code> is the same for every row. For calls under the
     caller's own name only, put <code>asterism/*/&lt;app&gt;/*/call/${node}</code> under Ask (with
     <code>asterism/*/&lt;app&gt;/*/meta</code> and <code>asterism/*/@profile</code> when the app needs them), not the

@@ -225,19 +225,18 @@ console's code is particular to it: two roles and a row.
   Ask              asterism/*/games/*/call/${node}
                    asterism/*/games/*/meta
   Browsers have this role: yes
-  Opens in a browser page: /app/game/mahjong/mahjong.app.rb
   ```
 
-  (or `/app/game/board/board.app.rb` for the drawing board: a pass's link
-  then opens the board's screen; the role reads and calls every table of
-  the host either way.)
+  The table's screen, `/app/game/mahjong/mahjong.app.rb`, goes on Admin >
+  Studio apps (or `/app/game/board/board.app.rb` for the drawing board:
+  "Launch Web Studio" then opens the board's screen; the role reads and
+  calls every table of the host either way). Before 0.3.12 it was the
+  role's "Opens in a browser page".
 
   The tables' states and presence to read, the tables to call in its own
   name only. It writes nothing: a board's own presence comes from the role
   it has already ("match", the app `game` the table's screen runs as).
-  Give it to the rows of the boards (Edit, tick `games` next to `match`);
-  "Opens in a browser page" puts the table's screen among the apps of "Open
-  the browser build".
+  Give it to the rows of the boards (Edit, tick `games` next to `match`).
 - **The host's row**: Register, kind `client`, name `games` (the
   certificate's name is the host's node ID), role `games-host`. Open it,
   "Issue a certificate", "Save all (.tar)": `games.tar` goes to the game

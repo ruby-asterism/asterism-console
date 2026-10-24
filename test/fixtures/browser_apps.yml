@@ -1,0 +1,4 @@
+# The Studio apps (0.3.12): what "Launch Web Studio" may start.
+othello:
+  label: Othello
+  path: /app/test/othello.app.rb

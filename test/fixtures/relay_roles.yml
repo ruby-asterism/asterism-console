@@ -6,5 +6,4 @@ match:
   read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/@profile"
   ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}"
   watch_templates: "asterism/**"
-  browser_app: /app/test/othello.app.rb
   for_browsers: true

@@ -73,7 +73,7 @@ class Relay::RoleMigrationTest < ActiveSupport::TestCase
   test "after the migration a player's ACL means the same, calls narrowed to its own names" do
     players = { "alice" => [], "home-bob" => %w[fmruby-aaaaaa fmruby-bbbbbb] }
     old = LegacyG0.access_control(players, browsers: true)
-    role = RelayRole.new(RelayRoles.match_role("game"))
+    role = RelayRole.new(RelayRoles.match_role("game").except(:browser_app)) # the column went in 0.3.12
     peers = players.map { |name, nodes| { "name" => name, "roles" => %w[match], "nodes" => nodes, "in_acl" => true } }
     new = Relay::CloudConfig.new(peers, { "browsers" => "ws/[::]:7449" }, roles: [ role.to_config ]).access_control
     own = { "alice" => %w[alice], "home-bob" => %w[fmruby-aaaaaa fmruby-bbbbbb], ws: %w[wasm-abc123] }

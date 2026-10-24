@@ -1,7 +1,7 @@
 require "test_helper"
 
 # "Launch Web Studio" (G1.5): only with a page configured; a fresh
-# pass, a node ID tied to the user, an app the roles name; the URL reaches
+# pass, a node ID tied to the user, one of the Studio apps; the URL reaches
 # the new tab in the body (never a redirect or the log).
 class BrowserPageOpenTest < ActionDispatch::IntegrationTest
   PAGE = "https://play.example.org/?zenoh={router}#zenoh_pass={pass}&zenoh_node={node}&app={app}".freeze
@@ -72,7 +72,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       post open_browser_passes_path, params: { app: "" }
       assert_includes page_url, "zenoh_node=wasm-pat_2", "the first page has not connected yet: the next name"
       post open_browser_passes_path, params: { app: "/etc/passwd" }
-      assert_response :unprocessable_content, "only the apps the roles name"
+      assert_response :unprocessable_content, "only the Studio apps"
       sign_out
       get check_browser_passes_path, headers: { "X-Asterism-Pass" => token }
       assert_response :no_content

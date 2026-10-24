@@ -31,7 +31,8 @@ module RoomPage
 
   # What a room's link may open, offered on the rooms' page: the apps of
   # ASTERISM_ROOM_APPS ("Othello=/app/test/othello.app.rb,Mahjong=/app/game/mahjong/mahjong.app.rb")
-  # first, then the roles' browser apps. [[label, value]] (no blank one).
+  # first, then the Studio apps (BrowserApp, the roles' browser apps before
+  # 0.3.12). [[label, value]] (no blank one).
   def apps(env = ENV)
     (listed_apps(env) + BrowserPage.apps.reject { _1[1].blank? }).uniq { _1[1] }
   end

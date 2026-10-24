@@ -1,0 +1,6 @@
+<% content_for(:title, "#{@app.path_was} - Asterism Console") %>
+<section class="card">
+  <h2><%= @app.path_was %> <span class="hint">Studio app</span></h2>
+  <%= render "form", app: @app %>
+  <p><%= link_to "Back to the Studio apps", admin_browser_apps_path %></p>
+</section>

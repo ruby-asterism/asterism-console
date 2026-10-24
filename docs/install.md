@@ -403,11 +403,14 @@ signed-in user makes one under "Make a pass", for the node named after
 their handle (`wasm-<handle>`); a user without a handle is asked to choose
 one first. With `ASTERISM_BROWSER_PAGE` set (a URL template with `{pass}`
 after the `#` and `{node}`, `env.example`), every pass comes with a link
-that carries the pass and the node, and the same page has "Open the
-browser build": a fresh pass, the user's node ID and the app to start (the
-roles' "Opens in a browser page") go to the page in the URL's fragment,
-which never reaches the page's server. Browsers get the roles marked
-"Browsers have this role". Without the setting there is no button and a
+that carries the pass and the node, and the same page has "Launch Web
+Studio": a fresh pass, the user's node ID and the app to start go to the
+page in the URL's fragment, which never reaches the page's server. The
+apps it may start are a list of their own, kept by an admin under
+Admin > Studio apps (a path, an optional label and order; 0.3.12): the
+user picks "Nothing" or one of them, and the console opens no other.
+Browsers get the roles marked "Browsers have this role": a role says what
+a browser may read and write, not what it opens. Without the setting there is no button and a
 pass is shown with its node, without a link. The browser build refuses a
 link with a pass but no node.
 
@@ -457,8 +460,9 @@ app. How it works: [rooms.md](rooms.md).
   admin's own test in a room from CRuby: rooms.md, "An admin in a room".
 - **What a link opens** (0.2.2): `ASTERISM_ROOM_APPS` lists the apps the
   rooms' page offers ("Label=/path", comma separated; env.example has
-  Othello and Mahjong), before the roles' browser apps; "Or another app"
-  takes any other path.
+  Othello and Mahjong), before the Studio apps (Admin > Studio apps; the
+  roles' browser apps before 0.3.12); "Or another app" takes any other
+  path.
 
 ### A game host (optional, 0.2.2)
 
@@ -1028,6 +1032,20 @@ From 0.3.10 to 0.3.11 (Ruby 3.4.11):
   what the console shows and how it talks to the nodes stay the same.
   The game host can be updated before or after it.
 - Going back to 0.3.10: `./update.sh 0.3.10` (no backup needed).
+
+From 0.3.11 to 0.3.12 (the Studio apps leave the roles):
+
+- `./update.sh 0.3.12`. One migration. No change to `.env`, nginx or the
+  router's configuration, and no apply: the router's rules do not change.
+- The apps "Launch Web Studio" may start are a list of their own,
+  Admin > Studio apps, instead of one per role ("Opens in a browser page"
+  is gone from the roles). The migration copies every app a role named
+  (each path once, labelled with a role's name: one marked "Browsers have
+  this role" if any) and then drops the column, so Make a pass and the
+  rooms' page offer the same apps as before. Rename, reorder, add or
+  remove them on the new page.
+- Going back to 0.3.11 is restoring the backup the update made (it prints
+  the command); apps added after the update are lost with it.
 
 ## 21. When something is wrong
 

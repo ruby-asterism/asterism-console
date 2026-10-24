@@ -64,7 +64,7 @@ module Relay
 
     def role_params
       params.expect(relay_role: %i[ name description rw_templates read_templates ask_templates watch_templates
-                                    browser_app for_browsers ])
+                                    for_browsers ])
     end
   end
 end

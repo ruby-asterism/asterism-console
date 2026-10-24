@@ -1,0 +1,36 @@
+<% content_for(:title, "Studio apps - Asterism Console") %>
+<section class="card">
+  <h2>Studio apps</h2>
+  <p>The apps "Launch Web Studio" may start: Make a pass offers "Nothing (the page's own start)" and these, and the
+    console opens no other. The rooms' page offers them too, after <code>ASTERISM_ROOM_APPS</code>. What a browser
+    may read and write is up to the roles marked "Browsers have this role" (Members &gt; Roles), not this list.</p>
+  <% unless BrowserPage.enabled? %>
+    <p class="hint"><code>ASTERISM_BROWSER_PAGE</code> is not set: there is no "Launch Web Studio" now.</p>
+  <% end %>
+  <% if @apps.empty? %>
+    <p class="hint">No apps yet: the page starts nothing of its own.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Label</th><th>Path</th><th>Order</th><th></th></tr></thead>
+      <tbody>
+        <% @apps.each do |a| %>
+          <tr>
+            <td><%= a.label || tag.span("none", class: "hint") %></td>
+            <td><code><%= a.path %></code></td>
+            <td><%= a.position || "-" %></td>
+            <td class="row">
+              <%= link_to "Edit", edit_admin_browser_app_path(a) %>
+              <%= button_to "Remove", admin_browser_app_path(a), method: :delete, class: "small",
+                            form: { data: { turbo_confirm: "Remove #{a.path} from the Studio apps?" } } %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
+
+<section class="card">
+  <h2>Add an app</h2>
+  <%= render "form", app: @app %>
+</section>
