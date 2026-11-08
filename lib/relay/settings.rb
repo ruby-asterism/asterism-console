@@ -25,6 +25,8 @@
 #   ASTERISM_RELAY_ACCEPT_PENDING 16    (transport/unicast/accept_pending)
 #   ASTERISM_RELAY_ACCEPT_TIMEOUT 5000  (ms, transport/unicast/accept_timeout)
 #   ASTERISM_RELAY_MAX_MESSAGE    4194304 (bytes, transport/link/rx/max_message_size)
+#   ASTERISM_CONSOLE_NODE         console (the bridge's node ID: the members marked to send files
+#                                 to the console call asterism/<it>/transfer/inbox, T4b)
 #
 # Rooms (G2, docs/rooms.md):
 #
@@ -72,7 +74,8 @@ module Relay
         "accept_pending" => int.("ASTERISM_RELAY_ACCEPT_PENDING"),
         "accept_timeout_ms" => int.("ASTERISM_RELAY_ACCEPT_TIMEOUT"),
         "max_message_size" => int.("ASTERISM_RELAY_MAX_MESSAGE"),
-        "room_hosts" => room_hosts(env)
+        "room_hosts" => room_hosts(env),
+        "console_node" => env["ASTERISM_CONSOLE_NODE"].presence
       }.compact
     end
 

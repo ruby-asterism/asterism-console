@@ -1066,6 +1066,30 @@ From 0.3.12 to 0.3.13 (Files: send to the machines, receive from them, a record)
 - Going back to 0.3.12 is restoring the backup the update made (it prints
   the command); the transfer record is lost with it.
 
+From 0.3.13 to 0.3.14 (files with the console: two marks per member):
+
+- `./update.sh 0.3.14`. One migration. Who may send files to the console
+  and who receives files from it are two marks of each row in Admin >
+  Members now, instead of `ASTERISM_TRANSFER_FROM` and the call
+  permissions' "Allow sending files". The migration marks the rows that
+  speak for a node one of those patterns matches ("Allow sending files"
+  rows: "Receives files from the console"; `ASTERISM_TRANSFER_FROM`, read
+  from `.env` this once: "May send files to the console"), then deletes
+  the file rows and the column `call_permissions.kind`. A pattern that
+  matches no row is said in the console's log
+  (`docker compose logs console | grep "nothing marked"`): mark those rows
+  by hand. Call permissions stay as they were.
+- Then apply (Admin > Members, the banner): the router's lines for files
+  (`asterism/console/transfer/inbox/call/<node>` for a row that sends to
+  the console, `asterism/<node>/transfer` and `asterism/<node>/transfer/**`
+  for one that receives) are made from the marks. The lines a role gave
+  for files before can be taken out of the role (apply again); keeping
+  them changes nothing. A row's page shows the lines its marks give.
+- Delete `ASTERISM_TRANSFER_FROM` from `.env` (the bridge says it is no
+  longer read while it is there). No change to nginx.
+- Going back to 0.3.13 is restoring the backup the update made (it prints
+  the command); marks changed after the update are lost with it.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

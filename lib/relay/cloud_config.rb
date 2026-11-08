@@ -78,6 +78,19 @@
 # Bridge::Statuses). A node that tells a status needs a role that lets it
 # write asterism/${node}/*/@status (docs/rooms.md: games-host does).
 #
+# Files with the console (0.3.14, T4b, docs/files.md): a row marked
+# files_to_console gets, for each node it speaks for, the ask line
+# asterism/<console node>/transfer/inbox/call/<node> (the console's inbox,
+# called under its own name only: the query from it, and the reply to it
+# on the same keys; zenohd 1.10.1 checks a reply going to the caller
+# against the caller's egress rules, and without it the calls go
+# unanswered, which a role's ask line gets from its read lines); a row
+# marked files_from_console gets the
+# rw lines asterism/<node>/transfer and asterism/<node>/transfer/** (its
+# inbox's tokens, queryable and replies, where the console sends). The
+# rules are the row's own, beside its roles'; the settings "console_node"
+# is the bridge's node ID (ASTERISM_CONSOLE_NODE).
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -149,7 +162,9 @@ module Relay
       "seat_node_prefix" => "wasm-",
       # Game hosts in the rooms (0.3.0): node IDs whose rows get the rooms'
       # tables (room/*/asterism/<host>$*).
-      "room_hosts" => []
+      "room_hosts" => [],
+      # The bridge's Asterism node ID (the console's inbox for files, T4b).
+      "console_node" => "console"
     }.freeze
 
     attr_reader :peers, :settings, :roles
@@ -265,6 +280,7 @@ module Relay
           mine.push("#{id}_ro_in", "#{id}_ro_out")
         end
         mine.concat(role_rules(rules, shared, id, Array(p["roles"]), nodes_of(p)))
+        mine.concat(file_rules(rules, id, p))
         if p["admin_space"]
           ids = p["kind"] == "router" ? %w[admin_relay_in admin_relay_out] : %w[admin_read]
           ids.each { shared[_1] = true }
@@ -382,6 +398,45 @@ module Relay
         rules << { "id" => rid, "messages" => messages, "flows" => flows, "permission" => "allow", "key_exprs" => keys }
         rid
       end
+    end
+
+    # The lines of the two marks for files with the console (T4b):
+    # [[suffix, section, keys], ...] for one peer (as RelayPeer#to_config).
+    def file_lines(peer)
+      nodes = nodes_of(peer)
+      console = @settings["console_node"]
+      lines = []
+      if peer["files_to_console"]
+        lines << [ "files_to_console", "ask", nodes.map { "asterism/#{console}/transfer/inbox/call/#{_1}" } ]
+      end
+      if peer["files_from_console"]
+        lines << [ "files_from_console", "rw", nodes.flat_map { [ "asterism/#{_1}/transfer", "asterism/#{_1}/transfer/**" ] } ]
+      end
+      lines
+    end
+
+    # The rules of a mark's section: an ask line also lets the replies to
+    # those calls reach the caller (above).
+    FILE_SECTION_RULES = SECTION_RULES.merge(
+      "ask" => [ *SECTION_RULES["ask"], [ "answer", %w[reply], %w[egress] ] ]
+    ).freeze
+
+    # The rules of those marks (pushed onto rules) and their ids.
+    def file_rules(rules, id, peer)
+      file_lines(peer).flat_map do |suffix, section, keys|
+        FILE_SECTION_RULES[section].map do |rsuffix, messages, flows|
+          rule_id = "#{id}__#{suffix}_#{rsuffix}"
+          rules << { "id" => rule_id, "messages" => messages, "flows" => flows, "permission" => "allow",
+                     "key_exprs" => keys }
+          rule_id
+        end
+      end
+    end
+
+    # What one peer gets from its marks for files, for the pages:
+    # [{ "mark", "section", "keys" }].
+    def files_expansion(peer)
+      file_lines(peer.transform_keys(&:to_s)).map { |mark, section, keys| { "mark" => mark, "section" => section, "keys" => keys } }
     end
 
     # The nodes a peer speaks for: the list, or its own name.

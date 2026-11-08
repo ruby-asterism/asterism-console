@@ -25,6 +25,16 @@
           <span class="role-desc"><%= b.object.description.presence || tag.span("no description", class: "hint") %></span></span></label>
     <% end %>
   </fieldset>
+  <fieldset class="wide files">
+    <legend>Files with the console (<%= link_to "Files", transfers_path %>), for the nodes it speaks for</legend>
+    <label class="check"><%= f.check_box :files_to_console %> May send files to the console: the console takes them
+      (<code>asend <%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %> &lt;file&gt;</code> on the machine) and the ACL lets it call
+      <code>asterism/<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>/transfer/inbox/call/&lt;node&gt;</code></label>
+    <label class="check"><%= f.check_box :files_from_console %> Receives files from the console: the Files page may send to it
+      and the ACL gives it <code>asterism/&lt;node&gt;/transfer</code> and <code>asterism/&lt;node&gt;/transfer/**</code>
+      (the machine takes them only when its <code>/home/asterism/receive.toml</code> has
+      <code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>)</label>
+  </fieldset>
   <label class="wide">Description <%= f.text_field :description %></label>
   <label>Other keys it may read and write, outside its roles (one per line)
     <%= f.text_area :rw_keys, rows: 4 %></label>

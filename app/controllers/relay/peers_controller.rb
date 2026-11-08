@@ -15,7 +15,9 @@ module Relay
     def show
       response.headers["Cache-Control"] = "no-store" # the issuing page holds a key while open
       @seen = Relay::Presence.seen(GraphState.current.graph)
-      @expansion = Relay::Applier.config_for.expansion_for(@peer.to_config)
+      config = Relay::Applier.config_for
+      @expansion = config.expansion_for(@peer.to_config)
+      @files_expansion = config.files_expansion(@peer.to_config)
     end
 
     # A router starts with its admin space read through (the graph shows what
@@ -60,7 +62,8 @@ module Relay
 
     def peer_params
       params.expect(relay_peer: [ :name, :display_name, :kind, :description, :rw_keys, :ro_keys, :admin_space,
-                                  :enabled, :dns_names, :ip_addresses, :cert_days, :nodes, { role_ids: [] } ])
+                                  :enabled, :dns_names, :ip_addresses, :cert_days, :nodes, :files_to_console,
+                                  :files_from_console, { role_ids: [] } ])
     end
   end
 end

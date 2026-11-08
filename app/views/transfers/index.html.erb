@@ -7,8 +7,9 @@
     The machine takes it only when its <code>/home/asterism/receive.toml</code> lets this console in
     (<code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>). At most
     <%= FileTransfer::MAX_UPLOAD / FileTransfer::MB %> MB.</p>
-  <% unless @any_file_rule %>
-    <p class="hint">No node may be sent files yet: an admin allows them under Admin &gt; Call permissions ("Allow sending files").</p>
+  <% if @receivers.empty? %>
+    <p class="hint">No node may be sent files yet: an admin marks the members under Admin &gt; Members
+      ("Receives files from the console"), then applies.</p>
   <% end %>
   <%= form_with url: transfers_path, scope: :transfer, multipart: true, class: "stack", id: "send-file" do |f| %>
     <label>File <%= f.file_field :file, required: true %></label>
@@ -30,7 +31,7 @@
     <h2>Received</h2>
     <p class="hint">What the machines sent here (<code>asend <%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %> &lt;file&gt;</code> on a
       machine). Taken from:
-      <% if FileTransfer.receive_from.empty? %>nobody (<code>ASTERISM_TRANSFER_FROM</code> is not set)<% else %><%= safe_join(FileTransfer.receive_from.map { tag.code(_1) }, ", ") %><% end %>.
+      <% if @senders.empty? %>nobody (no member is marked "May send files to the console" in Admin &gt; Members)<% else %><%= safe_join(@senders.map { |p| safe_join([ link_to(p.label, relay_peer_path(p)), (" (for #{p.speaks_for.join(', ')})" if p.node_list.any?) ].compact) }, ", ") %><% end %>.
       <%= number_to_human_size(FileTransfer.received_bytes) %> of at most <%= number_to_human_size(FileTransfer::INBOX_MAX) %>.</p>
     <% if @received.empty? %>
       <p class="hint">None.</p>

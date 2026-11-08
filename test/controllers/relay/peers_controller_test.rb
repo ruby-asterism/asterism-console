@@ -31,6 +31,29 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_difference("RelayPeer.count", -1) { delete relay_peer_path(peer) }
   end
 
+  test "the marks for files (T4b): set on the form, shown in the list and on the row's page with its ACL lines" do
+    sign_in_as(users(:admin))
+    get new_relay_peer_path(kind: "client")
+    assert_select "input[type=checkbox][name='relay_peer[files_to_console]']", 1
+    assert_select "input[type=checkbox][name='relay_peer[files_from_console]']", 1
+    post relay_peers_path, params: { relay_peer: PARAMS[:relay_peer].merge(name: "fmruby-aaaaaa", files_to_console: "1") }
+    peer = RelayPeer.find_by!(name: "fmruby-aaaaaa")
+    assert [ peer.files_to_console?, !peer.files_from_console? ].all?
+    patch relay_peer_path(peer), params: { relay_peer: { files_from_console: "1", nodes: "fmruby-aaaaaa\nfmruby-bbbbbb" } }
+    assert peer.reload.files_from_console?
+    assert_equal %w[fmruby-aaaaaa fmruby-bbbbbb], RelayPeer.file_receivers
+    assert_equal %w[fmruby-aaaaaa fmruby-bbbbbb], RelayPeer.file_senders
+    get relay_peers_path
+    assert_select "th", "Files with the console"
+    assert_select "td", "sends to, receives from"
+    get relay_peer_path(peer)
+    assert_select "dd", /may send files to the console; receives files from the console \(for fmruby-aaaaaa, fmruby-bbbbbb\)/
+    assert_select "#files-acl code", "asterism/console/transfer/inbox/call/fmruby-bbbbbb"
+    assert_select "#files-acl code", "asterism/fmruby-aaaaaa/transfer/**"
+    peer.update!(enabled: false)
+    assert_equal [ [], [] ], [ RelayPeer.file_senders, RelayPeer.file_receivers ], "a disabled row neither sends nor receives"
+  end
+
   test "a display name (0.3.5): saved when registering and editing, shown before the name" do
     sign_in_as(users(:admin))
     get new_relay_peer_path(kind: "client")

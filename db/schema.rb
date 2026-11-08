@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_08_100100) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_200000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -75,7 +75,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_100100) do
     t.integer "created_by_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "kind", default: "call", null: false
     t.index ["created_by_id"], name: "index_call_permissions_on_created_by_id"
   end
 
@@ -266,6 +265,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_100100) do
     t.datetime "updated_at", null: false
     t.text "nodes"
     t.string "display_name"
+    t.boolean "files_to_console", default: false, null: false
+    t.boolean "files_from_console", default: false, null: false
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 

@@ -1,4 +1,4 @@
-# Files: sending to the machines, receiving from them (T4)
+# Files: sending to the machines, receiving from them (T4, T4b)
 
 The console sends a file from the browser to a machine, receives the files
 the machines send to it, and records both. The carrying is Asterism's
@@ -10,7 +10,8 @@ the page is "Files" (`/files`).
 
 ## What it does
 
-- **Send** (every signed-in user, to the nodes an admin allowed): pick a
+- **Send** (every signed-in user, to the nodes of the members marked
+  "Receives files from the console"): pick a
   file on the PC, the node, and whether a file of the same name is
   overwritten (otherwise the machine puts it beside it as `name(1)`) and
   whether it goes to the SD card (`/sd/inbox/`; a machine without a card
@@ -23,8 +24,8 @@ the page is "Files" (`/files`).
   it held). The upload is deleted when the file has gone (or failed).
 - **Receive** (admins see them): the bridge answers at
   `<console>/transfer/inbox`, where a machine's `asend console <file>`
-  (or `FmrbTransfer`) sends, for the nodes `ASTERISM_TRANSFER_FROM` names
-  (patterns with `*`; empty: nobody). Whole files go to
+  (or `FmrbTransfer`) sends, for the nodes of the members marked "May send
+  files to the console" (none marked: nobody). Whole files go to
   `storage/transfers/inbox/` (the same rules as a machine's
   `/home/inbox/`: a name that stays there, `name(1)` beside a name already
   there unless the sender asks to overwrite, the pieces hidden beside it
@@ -39,23 +40,49 @@ the page is "Files" (`/files`).
   received files and refused senders included (a refused begin is recorded
   once a minute per node and reason).
 
-## Two keys
+## The members' marks (T4b, 0.3.14)
 
-- **The console's**: a row of the call permissions of kind "file" ("Allow
-  sending files", Admin > Call permissions) names the nodes the page may
-  send to (a pattern with `*`). The page checks it when it takes the
-  upload (a node no row names is a "denied" row, nothing uploaded) and the
-  bridge again before it sends (a row removed meanwhile). A file row allows
-  no call, and a call row (even `*/*/*` `*`) lets no file go: the column
-  `kind` ("call" or "file") keeps them apart, and every existing row is a
-  call row.
-- **The machine's**: its `/home/asterism/receive.toml` must let the console
-  in, `[file] from = ["console"]` (T2). Without it the machine refuses at
-  begin and the row says so (`fmruby-xxxxxx takes no file from console
-  (file from in /home/asterism/receive.toml)`).
+Who takes part is chosen per row of the relay registry (Admin > Members,
+the row's Edit), for the nodes the row speaks for (its own name, or the
+nodes behind a home router):
 
-Receiving has the console's setting only (`ASTERISM_TRANSFER_FROM`); a
-machine sends to whom its user types.
+| Mark | The console | The cloud router's ACL (on apply) |
+|---|---|---|
+| May send files to the console | the bridge's inbox takes files from its nodes | ask: `asterism/<console>/transfer/inbox/call/<node>` (the query from it, the reply to it) |
+| Receives files from the console | the page may send to its nodes | rw: `asterism/<node>/transfer`, `asterism/<node>/transfer/**` |
+
+`<console>` is the bridge's node ID (`ASTERISM_CONSOLE_NODE`, `console`).
+The ACL lines are the row's own rules beside its roles' (rule ids
+`<row>__files_to_console_ask` and `_answer`, `<row>__files_from_console_rw`);
+no role needs a line for files. The ask line carries the reply too: zenohd
+1.10.1 checks a reply going to the caller against the caller's egress
+rules, and a role's ask line gets that from the role's read lines; a
+mark has no read lines, and with the query alone the calls went
+unanswered (found on the PC through the generated ACL). A row's page lists the lines its marks give, the
+Members list shows the marks, and a changed mark needs an apply like any
+other change of the registry. A disabled row's nodes neither send nor
+receive (the console's side too, before the apply).
+
+- **Sending, the console's key**: the page checks the mark when it takes
+  the upload (another node is a "denied" row, nothing uploaded) and the
+  bridge again before it sends (a mark cleared meanwhile). Call
+  permissions have nothing to do with files: a call row (even `*/*/*` `*`)
+  lets no file go.
+- **Sending, the machine's key**: its `/home/asterism/receive.toml` must
+  let the console in, `[file] from = ["console"]` (T2). Without it the
+  machine refuses at begin and the row says so (`fmruby-xxxxxx takes no
+  file from console (file from in /home/asterism/receive.toml)`).
+- **Receiving**: the bridge reads the marks again every 2 seconds
+  (`Bridge::Transfers::FROM_EVERY`), so a mark set or cleared takes effect
+  without restarting it; a node not marked is refused at begin
+  (`console takes no file from <node>`, a "refused" row). A machine sends
+  to whom its user types.
+
+0.3.13 had `ASTERISM_TRANSFER_FROM` (`.env`) for receiving and call
+permissions of kind "file" ("Allow sending files") for sending. The
+migration of 0.3.14 (`db/migrate/*_member_file_marks.rb`) marks the rows
+that speak for a node one of their patterns matches, says the patterns
+that match no row, then deletes the file rows and the column `kind`.
 
 ## How it is built
 
@@ -76,7 +103,9 @@ machine sends to whom its user types.
   hands them to the main loop through a queue), the senders.
 - `FileTransfer` (the rows; `storage/transfers/` is under the gitignored
   `storage/`, `ASTERISM_TRANSFERS_DIR` moves it), `TransfersController`
-  (`/files`), `CallPermission#kind`.
+  (`/files`), `RelayPeer#files_to_console` / `#files_from_console`
+  (`RelayPeer.file_senders`, `.file_receivers`), the ACL lines in
+  `Relay::CloudConfig#file_rules`.
 - `ASTERISM_TRANSFERS=0` leaves the bridge's side out (no inbox, nothing
   sent).
 
@@ -88,25 +117,19 @@ machine sends to whom its user types.
 - **Migrations** (two, run when the console starts): `call_permissions`
   gets `kind` (default "call": the existing rows stay what they are);
   `file_transfers` is a new table. Nothing is deleted.
-- **`.env`**: `ASTERISM_TRANSFER_FROM` (who may send to the console; unset:
-  nobody), and if the defaults do not suit, `ASTERISM_TRANSFER_INBOX_MAX_BYTES`
+- **`.env`**: if the defaults do not suit, `ASTERISM_TRANSFER_INBOX_MAX_BYTES`
   and `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES`. The files live in the `storage`
   volume (`storage/transfers/`), with the databases; the daily backup
   copies the databases only.
 - **nginx**: `client_max_body_size 300m` (as for the recordings) lets a
   256 MB upload through; a larger `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES` needs
   more there.
-- **The router's rules** (Admin > Members > Roles, then apply): the
-  console's certificate has `asterism/**` already. A machine that sends
-  to the console calls `asterism/console/transfer/inbox/call/<itself>`: a
-  role with that ask line (`asterism/console/transfer/inbox/call/${node}`),
-  and a machine the console sends to answers on its own
-  `asterism/${node}/transfer/**` (its rw lines, with
-  `asterism/${node}/transfer` for its application's token).
+- **The router's rules**: the members' marks, then apply (above). The
+  console's certificate has `asterism/**` already.
 
-## How it was checked (2026-11-08)
+## How it was checked
 
-`bin/rails test` (the model, the controller, the bridge's side over a
+T4 (2026-11-08, 0.3.13, before the marks): `bin/rails test` (the model, the controller, the bridge's side over a
 stand-in connection: receive, refuse, send, overwrite, the permission
 removed, cancel; the call permissions' kinds). On the PC: zenohd 1.10.1,
 the console from the source (`bin/dev`) and a Family mruby native program
@@ -125,3 +148,12 @@ headless Chromium (`script/headless`):
   the console: failed with the machine's reason;
 - the record shows all of it (sent / from, node, name, placed name, size,
   SHA-256, result, who).
+
+T4b (2026-11-08): `bin/rails test` (the migration with patterns that match
+rows and patterns that match nobody, and back down; the ACL lines and what
+zenohd decides with them; a member's form, list and page; the Files page's
+suggestions and senders; the bridge taking a mark set or cleared while it
+runs). On the PC: zenohd, the console from the source and the CRuby sender
+`fmruby-core/tools/fmrb_send.rb`: a marked node's file placed in the
+inbox, an unmarked one refused at begin, the mark cleared and set on the
+running bridge; the generated `cloud.json5` with the lines of both marks.

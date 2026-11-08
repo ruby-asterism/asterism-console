@@ -4,14 +4,17 @@
 #     answering at <console>/transfer/inbox (Asterism::Transfer::Endpoint on
 #     the bridge's Zenoh connection: the object layer's application is
 #     "console", and the machines send to <node>/transfer/inbox). It takes
-#     files from the nodes ASTERISM_TRANSFER_FROM allows, up to
+#     files from the nodes of the members marked "may send files to the
+#     console" (RelayPeer.file_senders, T4b; read again every FROM_EVERY
+#     seconds, so a mark takes effect without restarting), up to
 #     FileTransfer::INBOX_MAX in all. Each file is a row: "receiving" at its
 #     begin, then "done", "refused" (its sha256 did not match) or "dropped"
 #     (cancelled by its sender, or no piece for a minute). A begin refused
 #     (a node not allowed, a name, no room) is a "refused" row too, once a
 #     minute per node and reason.
-#   - Sending: a "pending" send row is sent by an Asterism::Transfer::Sender
-#     on a thread of its own (it steps every STEP seconds: the main loop's
+#   - Sending: a "pending" send row (to a node of a member marked
+#     "receives files from the console", RelayPeer.file_receivers) is sent
+#     by an Asterism::Transfer::Sender on a thread of its own (it steps every STEP seconds: the main loop's
 #     tick would give a piece window every 0.1 s), at most MAX_SENDING at
 #     once. The main loop writes the progress and the end into the row and
 #     passes the page's Cancel on.
@@ -26,6 +29,8 @@ module Bridge
     PENDING_FOR = 120
     # The same refused begin (node and reason) is recorded once per this many seconds.
     REFUSALS_EVERY = 60
+    # The senders allowed (the members' marks) are read again this often.
+    FROM_EVERY = 2
 
     # What the inbox and the senders log goes to the bridge's lines.
     class Log
@@ -38,11 +43,15 @@ module Bridge
     # What sends a file (the tests give a Sender whose calls go elsewhere).
     attr_writer :sender_class
 
-    def initialize(conn:, node:, say:, from: FileTransfer.receive_from)
+    # from: the senders allowed, a callable giving node IDs (or patterns
+    # with *); by default the registry's marks.
+    def initialize(conn:, node:, say:, from: -> { RelayPeer.file_senders })
       @conn = conn
       @node = node
       @say = say
-      @from = from
+      @from_source = from
+      @from = Array(from.call)
+      @from_at = monotonic
       @events = Queue.new
       @sends = {}  # row id => { thread:, sender:, cancel:, done:, error: }
       @receiving = {} # inbox file id => row id
@@ -59,8 +68,11 @@ module Bridge
       @inbox.start
       @endpoint = Asterism::Transfer::Endpoint.new(@conn, @inbox, node: @node).start
       take_up_held
-      @say.call("bridge: files: answering at #{@endpoint.path}, from " \
-                "#{@from.empty? ? 'nobody (ASTERISM_TRANSFER_FROM)' : @from.join(' ')}")
+      @say.call("bridge: files: answering at #{@endpoint.path}, from #{from_text}")
+      if ENV["ASTERISM_TRANSFER_FROM"].present?
+        @say.call("bridge: files: ASTERISM_TRANSFER_FROM is not read since 0.3.14: the members' marks in " \
+                  "Admin > Members say who may send (delete it from .env)")
+      end
       self
     end
 
@@ -106,6 +118,7 @@ module Bridge
 
     # The main loop, every SYNC_EVERY.
     def sync
+      refresh_from
       @endpoint&.tick
       take_events
       report_receiving
@@ -130,6 +143,22 @@ module Bridge
     end
 
     private
+
+    def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    def from_text = @from.empty? ? "nobody (no member is marked to send files to the console)" : @from.join(" ")
+
+    # The members' marks, read again every FROM_EVERY seconds; the inbox
+    # checks a begin against them.
+    def refresh_from(now: false)
+      return if !now && monotonic - @from_at < FROM_EVERY
+      @from_at = monotonic
+      list = Array(@from_source.call)
+      return if list == @from
+      @from = list
+      @endpoint ? @endpoint.synchronize { @inbox.from = list } : (@inbox&.from = list)
+      @say.call("bridge: files: taking files from #{from_text}")
+    end
 
     # ---------------------------------------------------------- receiving
 
@@ -252,8 +281,8 @@ module Bridge
     def start_send(row)
       # The page checked the permission when it wrote the row; again here
       # (a row may have been removed since).
-      unless CallPermission.allows_file?(row.node)
-        row.update!(status: "denied", reason: "no call permission lets the page send files to #{row.node} (checked by the bridge)",
+      unless RelayPeer.receives_files?(row.node)
+        row.update!(status: "denied", reason: "no member row lets the console send files to #{row.node} (checked by the bridge)",
                     finished_at: Time.current)
         FileUtils.rm_f(row.outbox_path) if row.outbox_path
         return

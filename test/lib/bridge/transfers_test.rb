@@ -81,7 +81,11 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
     FileUtils.rm_rf(FileTransfer.dir)
     @said = []
     @conn = Conn.new
-    @t = Bridge::Transfers.new(conn: @conn, node: "console", say: ->(text) { @said << text }, from: [ "fmruby-*" ])
+    # the members' marks (T4b): home-a speaks for two nodes that may send
+    # to the console and receive from it
+    @home = RelayPeer.create!(name: "home-a", kind: "router", nodes: "fmruby-abcdef\nfmruby-a",
+                              files_to_console: true, files_from_console: true)
+    @t = Bridge::Transfers.new(conn: @conn, node: "console", say: ->(text) { @said << text })
     @t.start
     @src = Rails.root.join("tmp", "transfer-src-#{Process.pid}.bin").to_s
     @bytes = Random.new(3).bytes(200_000)
@@ -135,7 +139,7 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
     assert_equal %w[photo(1).bin photo.bin], FileTransfer.received_files.map { _1["name"] }.sort
   end
 
-  test "a node the setting does not allow is refused at begin, recorded once a minute" do
+  test "a node no member's mark allows is refused at begin, recorded once a minute" do
     s = machine_sends("linux-1")
     assert_equal "console takes no file from linux-1", s.reason
     assert_difference("FileTransfer.count", 0) { machine_sends("linux-1") }
@@ -145,6 +149,20 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
     assert_equal "console has no SD card to write to", machine_sends("fmruby-a", meta: { "inbox" => "sd" }).reason
   end
 
+  test "the marks are read again: a node marked later is taken, one unmarked is refused" do
+    assert_match(/answering at console\/transfer\/inbox, from fmruby-a fmruby-abcdef/, @said.join("\n"))
+    RelayPeer.create!(name: "linux-1", kind: "client", files_to_console: true)
+    @home.update!(files_to_console: false)
+    @t.send(:refresh_from, now: true)
+    assert_match(/taking files from linux-1/, @said.last)
+    assert machine_sends("linux-1").ok?
+    assert_equal "console takes no file from fmruby-abcdef", machine_sends("fmruby-abcdef").reason
+    # a mark that only receives does not let a node send
+    RelayPeer.find_by!(name: "linux-1").update!(files_to_console: false, files_from_console: true)
+    @t.send(:refresh_from, now: true)
+    assert_equal "console takes no file from linux-1", machine_sends("linux-1", name: "b.bin").reason
+  end
+
   test "a pending send goes to the machine's inbox; the row gets the placed name and the upload goes" do
     machine = Conn.new
     inbox = Asterism::Transfer::FileInbox.new(Rails.root.join("tmp/transfer-machine-#{Process.pid}").to_s,
@@ -152,7 +170,6 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
     inbox.logger = nil
     Asterism::Transfer::Endpoint.new(machine, inbox, node: "fmruby-a").start
     @t.sender_class = self.class.sender_through(machine, "console")
-    CallPermission.create!(kind: "file", node: "fmruby-*")
     FileUtils.mkdir_p(FileTransfer.outbox)
     row = FileTransfer.create!(direction: "send", status: "pending", node: "fmruby-a", name: "notes.bin", size: @bytes.bytesize,
                                sha256: Digest::SHA256.hexdigest(@bytes), stored: SecureRandom.hex(12), user: users(:user))
@@ -167,8 +184,8 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
                                 sha256: Digest::SHA256.hexdigest(@bytes), stored: SecureRandom.hex(12), overwrite: true)
     FileUtils.cp(@src, row2.outbox_path)
     assert_equal "notes.bin", wait_for(row2, "done", "failed").placed_name
-    # the permission removed: the bridge checks again
-    CallPermission.files.delete_all
+    # the mark removed: the bridge checks again
+    @home.update!(files_from_console: false)
     row3 = FileTransfer.create!(direction: "send", status: "pending", node: "fmruby-a", name: "x.bin", size: 1, stored: SecureRandom.hex(12))
     assert_equal "denied", wait_for(row3, "denied", "failed").status
   ensure
@@ -178,7 +195,6 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
   test "cancel: the sender stops and tells the machine" do
     machine = Conn.new
     @t.sender_class = self.class.sender_through(machine, "console", hang: true)
-    CallPermission.create!(kind: "file", node: "*")
     FileUtils.mkdir_p(FileTransfer.outbox)
     row = FileTransfer.create!(direction: "send", status: "pending", node: "fmruby-a", name: "x.bin", size: @bytes.bytesize,
                                sha256: Digest::SHA256.hexdigest(@bytes), stored: SecureRandom.hex(12))

@@ -8,6 +8,38 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased (0.3.14)
+
+What an update needs: one migration (going back needs the update's
+backup), then an apply (Admin > Members): the router's lines for files are
+made from the members' marks now. Delete `ASTERISM_TRANSFER_FROM` from
+`.env` after the update (the migration reads it once).
+
+- Files with the console per member (T4b, docs/files.md): a row of Admin >
+  Members has two marks, "May send files to the console" and "Receives
+  files from the console", for the nodes it speaks for. The bridge takes
+  files from the first (read again every 2 seconds), the Files page sends
+  to the second, and the cloud router's ACL gets their lines from the
+  registry on apply: an ask line
+  `asterism/<console>/transfer/inbox/call/<node>` (the query from the
+  node and the reply to it on the same keys), and the rw lines
+  `asterism/<node>/transfer` and `asterism/<node>/transfer/**`. No role
+  needs editing for files any more. The Members list, a row's page (with
+  the lines in the ACL) and the Files page ("Taken from", "On the network
+  now and allowed") show the marks.
+- Gone: `ASTERISM_TRANSFER_FROM` and the call permissions' "Allow sending
+  files" (their column `kind`). The migration marks the members that speak
+  for a node a file row's pattern matches ("Receives files from the
+  console") and those `ASTERISM_TRANSFER_FROM` matches when it is still
+  set ("May send files to the console"), says each pattern that matches no
+  member in its output (the console's log), then deletes the file rows and
+  the column. The call rows stay as they are. The bridge says so when
+  `ASTERISM_TRANSFER_FROM` is still set.
+- Tests: the migration (marks, patterns that match nobody, back down), the
+  ACL lines (and what zenohd decides with them), the form, list and page
+  of a member, the Files page's suggestions and senders, the bridge taking
+  a mark set or cleared while it runs.
+
 ## 0.3.13
 
 What an update needs: the asterism gem with `Asterism::Transfer::FileInbox`

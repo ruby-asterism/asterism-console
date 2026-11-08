@@ -13,11 +13,6 @@ class FileTransferTest < ActiveSupport::TestCase
     refute FileTransfer.new(direction: "send", status: "pending", node: "a/b", name: "x").valid?
   end
 
-  test "who may send to the console, from the setting" do
-    assert_equal [], FileTransfer.receive_from({})
-    assert_equal %w[fmruby-* wasm-1], FileTransfer.receive_from("ASTERISM_TRANSFER_FROM" => "fmruby-*, wasm-1")
-  end
-
   test "the received files, hidden pieces left out" do
     FileUtils.mkdir_p(FileTransfer.inbox)
     File.write(FileTransfer.inbox.join("a.txt"), "aa")

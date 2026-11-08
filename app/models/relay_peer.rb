@@ -2,6 +2,14 @@
 # name of its certificates, its subject in the cloud router's ACL and, by
 # convention, its Asterism node ID (a client) or its router name (a
 # router's metadata/name): the graph matches nodes to the registry by it.
+#
+# Files with the console (T4b, docs/files.md): two marks per row, for the
+# nodes it speaks for. files_to_console: they may send files to the console
+# (the bridge's inbox takes them; the ACL gets the ask line
+# asterism/<console>/transfer/inbox/call/<node>). files_from_console: the
+# console may send files to them (the page offers them; the ACL gets the rw
+# lines asterism/<node>/transfer and asterism/<node>/transfer/**). A
+# disabled row's nodes neither send nor receive.
 class RelayPeer < ApplicationRecord
   KINDS = %w[router client].freeze
   NAME = Relay::CertAuthority::NAME_RE
@@ -72,7 +80,23 @@ class RelayPeer < ApplicationRecord
   def to_config
     { "name" => name, "kind" => kind, "rw" => rw_list, "ro" => ro_list,
       "admin_space" => admin_space?, "in_acl" => in_acl?,
-      "roles" => roles.map(&:name), "nodes" => node_list }
+      "roles" => roles.map(&:name), "nodes" => node_list,
+      "files_to_console" => files_to_console?, "files_from_console" => files_from_console? }
+  end
+
+  # The nodes that may send files to the console (the enabled rows marked
+  # files_to_console), sorted.
+  def self.file_senders
+    where(enabled: true, files_to_console: true).flat_map(&:speaks_for).uniq.sort
+  end
+
+  # The nodes the console may send files to (files_from_console), sorted.
+  def self.file_receivers
+    where(enabled: true, files_from_console: true).flat_map(&:speaks_for).uniq.sort
+  end
+
+  def self.receives_files?(node)
+    file_receivers.include?(node.to_s)
   end
 
   # What the bridge needs to mark the graph.

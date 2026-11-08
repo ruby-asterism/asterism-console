@@ -1,8 +1,8 @@
 # Files (T4, docs/files.md): send a file from the browser to a machine,
 # the files the machines sent to the console, and the record of both.
 #
-# Sending is for every signed-in user, to the nodes a call permission of
-# kind "file" names (Admin > Call permissions); the page uploads the file,
+# Sending is for every signed-in user, to the nodes of the members marked
+# "receives files from the console" (Admin > Members, T4b); the page uploads the file,
 # the bridge sends it (FileTransfer). A user sees and cancels their own
 # sends; an admin everyone's. The received files and their records are for
 # admins only (like the recordings, W4: they hold whatever the machines
@@ -19,9 +19,10 @@ class TransfersController < ApplicationController
     @rows = scope.to_a
     respond_to do |f|
       f.html do
+        @receivers = RelayPeer.file_receivers
         @nodes = file_nodes
         @received = current_user.admin? ? FileTransfer.received_files : []
-        @any_file_rule = CallPermission.files.exists?
+        @senders = RelayPeer.where(enabled: true, files_to_console: true).order(:name).to_a
       end
       f.json { render json: @rows.map(&:as_payload) }
     end
@@ -43,8 +44,8 @@ class TransfersController < ApplicationController
     return refuse(row.errors.full_messages.to_sentence) unless row.valid?
     return refuse("The file is empty.") if file.size.zero?
     return refuse("The file is over #{FileTransfer::MAX_UPLOAD / FileTransfer::MB} MB.") if file.size > FileTransfer::MAX_UPLOAD
-    unless CallPermission.allows_file?(node)
-      row.assign_attributes(status: "denied", reason: "no call permission lets the page send files to #{node}",
+    unless RelayPeer.receives_files?(node)
+      row.assign_attributes(status: "denied", reason: "no member row lets the console send files to #{node}",
                             finished_at: Time.current)
       row.save!
       return refuse(row.reason)
@@ -102,15 +103,15 @@ class TransfersController < ApplicationController
 
   def truthy?(v) = [ true, "1", "true", "on" ].include?(v)
 
-  # The Asterism nodes on the network now that a "file" row lets the page
-  # send to (the form's suggestions), this console's own left out.
+  # The Asterism nodes on the network now that the members' marks let the
+  # page send to (the form's suggestions), this console's own left out.
   def file_nodes
-    rows = CallPermission.files.to_a
+    allowed = @receivers.to_set
     own = GraphState.current.info["node"]
     GraphState.current.graph["nodes"].filter_map do |n|
       next unless n["kind"] == "a_node"
       id = n.dig("data", "node") || n["label"]
-      id if id.is_a?(String) && id != own && CallPermission.allows_file?(id, rows: rows)
+      id if id.is_a?(String) && id != own && allowed.include?(id)
     end.uniq.sort
   rescue JSON::ParserError
     []

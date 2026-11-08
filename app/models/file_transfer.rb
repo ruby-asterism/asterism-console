@@ -8,12 +8,14 @@
 # resending (Asterism::Transfer::Sender), writes the progress into the row
 # ("sending", done_bytes) and the end ("done" with placed_name, "failed"
 # with the reason, "cancelled" after the page's Cancel: "cancelling"), then
-# deletes the upload. Only nodes a CallPermission of kind "file" names may
-# be sent to; a row for another node ends "denied".
+# deletes the upload. Only the nodes of the members marked "receives files
+# from the console" (RelayPeer.file_receivers, T4b) may be sent to; a row
+# for another node ends "denied".
 #
 # Receiving: the bridge answers at <console>/transfer/inbox
-# (Asterism::Transfer::FileInbox) for the nodes ASTERISM_TRANSFER_FROM
-# allows and puts whole files into the inbox (storage/transfers/inbox);
+# (Asterism::Transfer::FileInbox) for the nodes of the members marked "may
+# send files to the console" (RelayPeer.file_senders) and puts whole files
+# into the inbox (storage/transfers/inbox);
 # each file is a row ("receiving", then "done", "refused" or "dropped").
 class FileTransfer < ApplicationRecord
   DIRECTIONS = %w[send receive].freeze
@@ -53,12 +55,6 @@ class FileTransfer < ApplicationRecord
   def self.outbox = dir.join("outbox")
   def self.inbox = dir.join("inbox")
   def self.work = dir.join("work")
-
-  # The nodes allowed to send files to the console (ASTERISM_TRANSFER_FROM:
-  # node IDs and patterns with *, comma separated; empty: nobody).
-  def self.receive_from(env = ENV)
-    env["ASTERISM_TRANSFER_FROM"].to_s.split(/[\s,]+/).reject(&:empty?)
-  end
 
   # Whether the name is one a machine takes (the same rule as
   # Asterism::Transfer.file_name?; Puma does not load Asterism).

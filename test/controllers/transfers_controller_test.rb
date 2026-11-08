@@ -3,7 +3,8 @@ require "test_helper"
 class TransfersControllerTest < ActionDispatch::IntegrationTest
   setup do
     FileUtils.rm_rf(FileTransfer.dir)
-    CallPermission.create!(kind: "file", node: "fmruby-*")
+    # a member that receives files from the console (T4b), for two nodes
+    @home = RelayPeer.create!(name: "home-a", kind: "router", nodes: "fmruby-abcdef\nfmruby-a", files_from_console: true)
   end
 
   teardown do
@@ -38,19 +39,26 @@ class TransfersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ "renamed.txt", true ], [ FileTransfer.last.name, FileTransfer.last.sd ]
   end
 
-  test "a node no file row allows: a denied row, nothing uploaded" do
+  test "a node no member's mark allows: a denied row, nothing uploaded" do
     sign_in_as(users(:user))
     assert_difference("FileTransfer.count", 1) do
       post transfers_path, params: { transfer: { file: upload, node: "linux-1" } }
     end
     r = FileTransfer.last
     assert_equal "denied", r.status
-    assert_match(/no call permission lets the page send files to linux-1/, flash[:alert])
+    assert_match(/no member row lets the console send files to linux-1/, flash[:alert])
     assert_nil r.outbox_path
     refute Dir.exist?(FileTransfer.outbox) && Dir.children(FileTransfer.outbox).any?
-    # a call row does not stand in for a file row
+    # a call row does not let files go
     CallPermission.create!(node: "*", app: "*", object: "*", method_name: "*")
     post transfers_path, params: { transfer: { file: upload, node: "linux-1" } }
+    assert_equal "denied", FileTransfer.last.status
+    # nor a member that may only send to the console, nor a disabled one
+    RelayPeer.create!(name: "linux-1", kind: "client", files_to_console: true)
+    post transfers_path, params: { transfer: { file: upload, node: "linux-1" } }
+    assert_equal "denied", FileTransfer.last.status
+    @home.update!(enabled: false)
+    post transfers_path, params: { transfer: { file: upload, node: "fmruby-abcdef" } }
     assert_equal "denied", FileTransfer.last.status
   end
 
@@ -85,6 +93,28 @@ class TransfersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ got.id, other.id, mine.id ], response.parsed_body.map { _1["id"] }
     get transfers_path
     assert_select "#transfer-records tr[data-transfer-id='#{got.id}']", /from/
+  end
+
+  test "the page's suggestions and its senders come from the members' marks (T4b)" do
+    GraphState.current.update!(snapshot: JSON.generate("nodes" => [
+      { "id" => "a_node:fmruby-abcdef", "kind" => "a_node", "label" => "fmruby-abcdef" },
+      { "id" => "a_node:linux-1", "kind" => "a_node", "label" => "linux-1" }
+    ], "edges" => []))
+    sign_in_as(users(:admin))
+    get transfers_path
+    assert_select "#file-nodes option", 1
+    assert_select "#file-nodes option[value=?]", "fmruby-abcdef"
+    assert_select "#received p.hint", /Taken from:\s+nobody \(no member is marked/
+    RelayPeer.create!(name: "linux-1", kind: "client", display_name: "Pi", files_to_console: true)
+    @home.update!(files_to_console: true)
+    get transfers_path
+    assert_select "#received p.hint a", "Pi (linux-1)"
+    assert_select "#received p.hint", /home-a \(for fmruby-abcdef, fmruby-a\)/
+    assert_select "#file-nodes option", 1, "a mark to send to the console does not let the page send to it"
+    @home.update!(files_from_console: false)
+    get transfers_path
+    assert_select "#file-nodes option", 0
+    assert_select "p.hint", /No node may be sent files yet/
   end
 
   test "the received files: an admin lists, downloads and deletes them; a user cannot" do

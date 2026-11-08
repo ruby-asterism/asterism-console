@@ -48,6 +48,17 @@ module RelayHelper
     end
   end
 
+  # The two marks for files with the console (T4b): "to" (may send files
+  # to the console) and "from" (receives files from it).
+  def files_marks(peer, long: false)
+    marks = []
+    marks << (long ? "may send files to the console" : "sends to") if peer.files_to_console?
+    marks << (long ? "receives files from the console" : "receives from") if peer.files_from_console?
+    return tag.span(long ? "none" : "-", class: "hint") if marks.empty?
+    text = marks.join(long ? "; " : ", ")
+    long && peer.node_list.any? ? "#{text} (for #{peer.speaks_for.join(', ')})" : text
+  end
+
   def keys_list(text)
     lines = RelayPeer.lines(text)
     return tag.span("none", class: "hint") if lines.empty?

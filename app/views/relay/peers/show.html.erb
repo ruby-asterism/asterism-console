@@ -9,6 +9,7 @@
     <dt>Speaks for</dt><dd><%= @peer.speaks_for.join(", ") %><%= tag.span(" (its own name)", class: "hint") if @peer.node_list.empty? %></dd>
     <dt>Other keys, read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
     <dt>Other keys, read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
+    <dt>Files with the console</dt><dd><%= files_marks(@peer, long: true) %></dd>
     <dt>Console sees</dt><dd><%= console_sees(@peer, long: true) %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
@@ -23,6 +24,22 @@
   <h2>What its roles allow</h2>
   <%= render "relay/roles/expansion", expansion: @expansion %>
 </section>
+
+<% if @files_expansion.any? %>
+  <section class="card" id="files-acl">
+    <h2>What its marks for files allow</h2>
+    <% labels = { "files_to_console" => "may send files to the console", "files_from_console" => "receives files from the console" } %>
+    <table class="list">
+      <thead><tr><th>Mark</th><th>Access</th><th>Keys in the ACL</th></tr></thead>
+      <tbody>
+        <% @files_expansion.each do |e| %>
+          <tr><td><%= labels[e["mark"]] %></td><td><%= e["section"] == "ask" ? "ask (its calls, and the replies to it)" : "read and write (every message, both ways)" %></td>
+            <td><%= safe_join(e["keys"].map { tag.code(_1) }, tag.br) %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
 
 <section class="card">
   <h2>Certificates</h2>

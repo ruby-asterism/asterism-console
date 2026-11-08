@@ -161,6 +161,60 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal [], h["access_control"]["subjects"]
   end
 
+  test "files with the console (T4b): the marks give the row's nodes the ask line and the rw lines" do
+    peers = [
+      { "name" => "fmruby-aaaaaa", "kind" => "client", "files_to_console" => true, "in_acl" => true },
+      { "name" => "home-bob", "kind" => "router", "nodes" => %w[fmruby-bbbbbb linux-1], "files_from_console" => true,
+        "files_to_console" => true, "in_acl" => true },
+      { "name" => "off", "kind" => "client", "files_to_console" => true, "files_from_console" => true, "in_acl" => false },
+      { "name" => "plain", "kind" => "client", "rw" => %w[demo/**], "in_acl" => true }
+    ]
+    h = Relay::CloudConfig.new(peers).to_h
+    to = rule(h, "fmruby_aaaaaa__files_to_console_ask")
+    assert_equal [ %w[query], %w[ingress], [ "asterism/console/transfer/inbox/call/fmruby-aaaaaa" ] ],
+                 to.values_at("messages", "flows", "key_exprs")
+    assert_equal %w[asterism/console/transfer/inbox/call/fmruby-bbbbbb asterism/console/transfer/inbox/call/linux-1],
+                 rule(h, "home_bob__files_to_console_ask")["key_exprs"]
+    from = rule(h, "home_bob__files_from_console_rw")
+    assert_equal [ Relay::CloudConfig::ALL, %w[egress ingress],
+                   %w[asterism/fmruby-bbbbbb/transfer asterism/fmruby-bbbbbb/transfer/** asterism/linux-1/transfer
+                      asterism/linux-1/transfer/**] ], from.values_at("messages", "flows", "key_exprs")
+    ids = h["access_control"]["rules"].map { _1["id"] }
+    refute ids.any? { _1.start_with?("fmruby_aaaaaa__files_from") }, "a mark not set gives nothing"
+    refute ids.any? { _1.start_with?("off__") || _1.start_with?("plain__files") }, "a row out of the ACL, or unmarked"
+    pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
+    assert_equal %w[fmruby_aaaaaa__files_to_console_ask fmruby_aaaaaa__files_to_console_answer], pol["fmruby_aaaaaa"],
+                 "a mark alone puts the row in the ACL"
+    assert_equal [ %w[reply], %w[egress], [ "asterism/console/transfer/inbox/call/fmruby-aaaaaa" ] ],
+                 rule(h, "fmruby_aaaaaa__files_to_console_answer").values_at("messages", "flows", "key_exprs"),
+                 "the replies to its calls reach it"
+    assert_equal %w[home_bob__files_to_console_ask home_bob__files_to_console_answer home_bob__files_from_console_rw],
+                 pol["home_bob"]
+    # what zenohd decides: a node calls the console's inbox under its own name only
+    acl = h["access_control"]
+    call = ->(who, key) { AclEvaluator.allowed?(acl, who, "query", "ingress", key) }
+    assert call.("fmruby-aaaaaa", "asterism/console/transfer/inbox/call/fmruby-aaaaaa")
+    refute call.("fmruby-aaaaaa", "asterism/console/transfer/inbox/call/linux-1")
+    refute call.("fmruby-aaaaaa", "asterism/console/demo/x/call/fmruby-aaaaaa")
+    assert AclEvaluator.allowed?(acl, "fmruby-aaaaaa", "reply", "egress", "asterism/console/transfer/inbox/call/fmruby-aaaaaa")
+    refute AclEvaluator.allowed?(acl, "fmruby-aaaaaa", "reply", "egress", "asterism/console/transfer/inbox/call/linux-1")
+    assert AclEvaluator.allowed?(acl, "home-bob", "declare_queryable", "ingress", "asterism/linux-1/transfer/inbox")
+    assert AclEvaluator.allowed?(acl, "home-bob", "liveliness_token", "ingress", "asterism/linux-1/transfer")
+    refute AclEvaluator.allowed?(acl, "fmruby-aaaaaa", "declare_queryable", "ingress", "asterism/fmruby-aaaaaa/transfer/inbox")
+    # the console's node ID follows the setting
+    other = Relay::CloudConfig.new(peers, { "console_node" => "ops" }).to_h
+    assert_equal [ "asterism/ops/transfer/inbox/call/fmruby-aaaaaa" ],
+                 rule(other, "fmruby_aaaaaa__files_to_console_ask")["key_exprs"]
+    # for the pages
+    assert_equal [ { "mark" => "files_to_console", "section" => "ask",
+                     "keys" => %w[asterism/console/transfer/inbox/call/fmruby-bbbbbb asterism/console/transfer/inbox/call/linux-1] },
+                   { "mark" => "files_from_console", "section" => "rw",
+                     "keys" => %w[asterism/fmruby-bbbbbb/transfer asterism/fmruby-bbbbbb/transfer/** asterism/linux-1/transfer
+                                  asterism/linux-1/transfer/**] } ],
+                 Relay::CloudConfig.new([]).files_expansion(peers[1])
+    assert_equal [], Relay::CloudConfig.new([]).files_expansion(peers[3])
+  end
+
   test "what a row gets, for the pages" do
     c = Relay::CloudConfig.new([], {}, roles: [ MATCH ])
     e = c.expansion_for("name" => "home-a", "roles" => %w[match], "nodes" => %w[fmruby-aaaaaa])

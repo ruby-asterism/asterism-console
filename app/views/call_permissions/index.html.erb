@@ -5,23 +5,18 @@
      <code>&lt;node&gt;/&lt;app&gt;/&lt;object&gt;</code> and the method's name.
      <code>*</code> matches any run of characters within one part. With no rows nothing can be called.
      A row also lets the page read the object's list of methods (its meta).
-     A row <em>Send files</em> lets the page send files to the nodes it names (see
-     <%= link_to "Files", transfers_path %>); it allows no call.</p>
+     Which machines may send or receive files is not here: it is a mark of their row in
+     <%= link_to "Admin > Members", relay_peers_path %> (see <%= link_to "Files", transfers_path %>).</p>
   <% if @rows.empty? %>
     <p class="hint">No rows: nothing can be called from the page.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>What</th><th>Node</th><th>App</th><th>Object</th><th>Method</th><th>Note</th><th>Added</th><th></th></tr></thead>
+      <thead><tr><th>Node</th><th>App</th><th>Object</th><th>Method</th><th>Note</th><th>Added</th><th></th></tr></thead>
       <tbody>
         <% @rows.each do |r| %>
           <tr>
-            <% if r.kind == "file" %>
-              <td>Send files</td><td><code><%= r.node %></code></td><td colspan="3" class="hint">to its <code>transfer/inbox</code></td>
-            <% else %>
-              <td>Call</td><td><code><%= r.node %></code></td><td><code><%= r.app %></code></td><td><code><%= r.object %></code></td>
-              <td><code><%= r.method_name %></code></td>
-            <% end %>
-            <td><%= r.note %></td>
+            <td><code><%= r.node %></code></td><td><code><%= r.app %></code></td><td><code><%= r.object %></code></td>
+            <td><code><%= r.method_name %></code></td><td><%= r.note %></td>
             <td class="hint"><%= r.created_by&.email_address %> <%= l(r.created_at, format: :short) %></td>
             <td><%= button_to "Remove", call_permission_path(r), method: :delete, class: "small", disabled: !current_user.admin? %></td>
           </tr>
@@ -42,20 +37,6 @@
       <label>Method <%= f.text_field :method_name, required: true, placeholder: "say" %></label>
       <label>Note <%= f.text_field :note %></label>
       <%= f.submit "Allow" %>
-    <% end %>
-  </section>
-
-  <section class="card">
-    <h2>Allow sending files</h2>
-    <p class="hint">The nodes the page may send files to (<code>*</code> matches any run of characters).
-       The machine takes them only when its <code>/home/asterism/receive.toml</code> lets this console in:
-       <code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>.</p>
-    <% if @file_row.errors.any? %><p class="error"><%= @file_row.errors.full_messages.to_sentence %></p><% end %>
-    <%= form_with model: @file_row, class: "grid-form", id: "allow-files" do |f| %>
-      <%= f.hidden_field :kind, value: "file" %>
-      <label>Node <%= f.text_field :node, required: true, placeholder: "fmruby-*" %></label>
-      <label>Note <%= f.text_field :note %></label>
-      <%= f.submit "Allow sending files" %>
     <% end %>
   </section>
 <% else %>
