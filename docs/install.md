@@ -1094,8 +1094,8 @@ From 0.3.14 to 0.3.15 (the Terminal, docs/terminal.md):
 
 - `./update.sh 0.3.15`. One migration: two new tables
   (`terminal_sessions`, `terminal_commands`); nothing else changes. The
-  image carries the asterism gem the Terminal needs (the version after
-  0.12.0: its command line runs on the bridge's connection). With an older
+  image carries the asterism gem the Terminal needs (0.13.0: its
+  command line runs on the bridge's connection). With an older
   gem the Terminal page says so and the rest of the console runs as
   before.
 - No change to nginx (the page and its WebSocket go through `location /`

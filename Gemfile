@@ -60,18 +60,17 @@ end
 
 # Asterism 0.8.0 (wire protocol 1, X1; reconnects across a router restart, G1.5b; @status, the methods' texts in the meta): the local checkouts next to this repository.
 # Files (docs/files.md) need Asterism::Transfer::FileInbox and Endpoint
-# (asterism 0.12.0 or newer). The Terminal (docs/terminal.md) needs the
-# version after 0.12.0 (Asterism::CLI.new(net:)); with an older one it says
-# so and the rest runs.
+# (0.12.0); the Terminal (docs/terminal.md) needs Asterism::CLI.new(net:)
+# (0.13.0; with an older one it says so and the rest runs).
 # ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
 # rubygems.org instead, replace these two lines with
-#   gem "asterism", "~> 0.12", require: false
+#   gem "asterism", "~> 0.13", require: false
 # (asterism-zenoh comes with it) and run `bundle install` (README, "The
 # Asterism gems").
 # ASTERISM_GEMS=rubygems takes them from rubygems.org (the container of
 # deploy/vps does; Bundler then resolves the lock again inside the image).
 if ENV["ASTERISM_GEMS"] == "rubygems"
-  gem "asterism", "~> 0.12", require: false
+  gem "asterism", "~> 0.13", require: false
 else
   gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
   gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")

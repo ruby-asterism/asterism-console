@@ -8,14 +8,15 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased (0.3.15)
+## 0.3.15
 
 What an update needs: one migration (two new tables; going back needs the
 update's backup), and the asterism gem with the command line on a
-connection given (the version after 0.12.0; the image takes it from
+connection given (0.13.0; the image takes it from
 rubygems.org). No change to nginx, the router or `.env` (three optional
 limits, below).
 
+- The bridge prints its times (the Terminal's output among them) in `CONSOLE_TIME_ZONE`, as the pages do (it was the container's zone, UTC).
 - The Terminal (`/terminal`, "Terminal" in the menu; VT1, VT2,
   docs/terminal.md): the asterism gem's command line in the page
   (xterm.js 6.0.0, vendored): `node list`, `tree`, `object info`,

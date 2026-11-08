@@ -117,7 +117,7 @@ record of who typed what. This note is the design and how it was checked.
   and their rows written; a bridge that starts finishes the rows one left
   running. While no bridge runs, the page is not held by a row nobody will
   finish (Rails writes it "stopped").
-- **The asterism gem** (Unreleased, the version after 0.12.0): the command
+- **The asterism gem** (0.13.0): the command
   line runs on a connection given to it (`CLI.new(net:, stop:, permit:)`),
   and its table loads alone. With an older gem the page says the Terminal
   needs it and the bridge says so in its log; nothing else changes.

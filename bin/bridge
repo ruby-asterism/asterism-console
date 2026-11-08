@@ -9,6 +9,11 @@
 ENV["RAILS_MAX_THREADS"] ||= "12" # main, two receiving threads, the request workers
 require_relative "../config/environment"
 $stdout.sync = true
+# The times the bridge prints itself (the Terminal's command line output among
+# them) in the console's time zone, as the pages show theirs (CONSOLE_TIME_ZONE).
+if ENV["TZ"].blank? && (zone = ActiveSupport::TimeZone[ENV["CONSOLE_TIME_ZONE"].to_s.strip])
+  ENV["TZ"] = zone.tzinfo.name
+end
 # Held for the bridge's lifetime: bin/asterism restore waits for it to stop.
 ConsoleBackup::Lock.hold_shared(ENV["ASTERISM_STORAGE_DIR"].presence || Rails.root.join("storage").to_s)
 abort "bin/bridge: CONSOLE_FIXTURE is set (fixture mode shows a recorded network; unset it)" if
