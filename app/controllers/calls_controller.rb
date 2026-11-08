@@ -1,7 +1,9 @@
 # The call log: who asked for what, when, and the answer (BridgeRequest
 # rows, newest first). Calls by default; ?all=1 also shows the meta reads.
-# Below them, the playbacks to the network (Playback rows, V4): traffic the
-# console put on the network, by whom.
+# Below them, the commands typed in the Terminal (TerminalCommand rows of
+# kind "run", 0.3.15: what they read or called and how they ended), and the
+# playbacks to the network (Playback rows, V4): traffic the console put on
+# the network, by whom.
 class CallsController < ApplicationController
   LIMIT = 200
   layout "plain"
@@ -12,6 +14,9 @@ class CallsController < ApplicationController
     scope = scope.where(user: current_user) unless current_user.admin?
     scope = scope.where(kind: "call") unless params[:all].present?
     @rows = scope.to_a
+    terminal = TerminalCommand.runs.includes(:user).order(id: :desc).limit(LIMIT)
+    terminal = terminal.where(user: current_user) unless current_user.admin?
+    @terminal = terminal.to_a
     @playbacks = current_user.admin? ? Playback.includes(:user).order(id: :desc).limit(LIMIT).to_a : []
     respond_to do |f|
       f.html

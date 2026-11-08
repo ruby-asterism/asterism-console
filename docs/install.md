@@ -1090,6 +1090,28 @@ From 0.3.13 to 0.3.14 (files with the console: two marks per member):
 - Going back to 0.3.13 is restoring the backup the update made (it prints
   the command); marks changed after the update are lost with it.
 
+From 0.3.14 to 0.3.15 (the Terminal, docs/terminal.md):
+
+- `./update.sh 0.3.15`. One migration: two new tables
+  (`terminal_sessions`, `terminal_commands`); nothing else changes. The
+  image carries the asterism gem the Terminal needs (the version after
+  0.12.0: its command line runs on the bridge's connection). With an older
+  gem the Terminal page says so and the rest of the console runs as
+  before.
+- No change to nginx (the page and its WebSocket go through `location /`
+  as the others do), the router's ACL or the roles: the Terminal reads
+  what the console's certificate may read and calls what the call
+  permissions allow, as the graph page does.
+- Optional, in `.env` (the lines are in `env.example`):
+  `ASTERISM_TERMINAL_PER_USER` (3) and `ASTERISM_TERMINAL_MAX` (12), the
+  commands running at once per user and in all, and
+  `ASTERISM_TERMINAL_MAX_OUTPUT` (4 MB), what one command may print.
+- Check: sign in, open Terminal, type `node list` and `help`; a `call`
+  runs only what Admin > Call permissions allows; the lines appear under
+  "Call log" > "Terminal commands".
+- Going back to 0.3.14 is restoring the backup the update made (it prints
+  the command); the Terminal's record is lost with it.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

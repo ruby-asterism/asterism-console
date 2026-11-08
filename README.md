@@ -82,6 +82,14 @@ calls the methods that Asterism nodes expose.
   to the console"; the router's lines for both come from the marks on
   apply.
 
+- **Terminal** (`/terminal`, docs/terminal.md): the asterism gem's
+  command line in the page (xterm.js): `node list`, `tree`, `status echo`,
+  `watch`, `call` ... with the same output and colours, Tab completion,
+  the history and Ctrl-C. The bridge runs them on its own connection;
+  everyone signed in may read, `call` needs a call permission, nothing but
+  the command line's own commands runs (no shell), and every line typed is
+  kept with the call log.
+
 Nodes appear and disappear without reloading, and what is on the screen
 stays where it is: only new nodes are placed, next to their neighbours
 ("Lay out again" lays out everything; fcose, compound-aware). Click an
@@ -136,6 +144,8 @@ bin/bridge                  # in another terminal: the one process on the networ
 | `ASTERISM_RATES_MAX_BPS` | `8000000` | measuring all topics pauses above this many bytes per second (see Topic rates) |
 | `ASTERISM_GATEWAY_IPS` | | addresses to take as gateways (comma separated), when the bridge cannot see them (docs/v2_4.md) |
 | `ASTERISM_TRANSFER_INBOX_MAX_BYTES`, `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES` | 1 GB, 256 MB | the received files in all; one upload to send |
+| `ASTERISM_TERMINAL_PER_USER`, `ASTERISM_TERMINAL_MAX` | 3, 12 | Terminal commands running at once per user, and in all (docs/terminal.md) |
+| `ASTERISM_TERMINAL_MAX_OUTPUT` | 4194304 | what one Terminal command may print (bytes; then it is stopped) |
 | `ASTERISM_TRANSFERS_DIR` | `storage/transfers` | the outbox, the inbox and the notes of a file coming in |
 | `CONSOLE_BIND` | `127.0.0.1` | the address the server listens on (see Security) |
 | `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
@@ -149,7 +159,10 @@ node.
 
 The console takes asterism 0.8 (`~> 0.8`; wire protocol 1: it talks
 only to nodes of 0.7.0 and later, docs/x1.md) and asterism-zenoh 0.4.0 or
-later (the versions in `Gemfile.lock`). The Gemfile takes them from the checkouts next to this
+later (the versions in `Gemfile.lock`); Files need asterism 0.12.0 and the
+Terminal the version after it (its command line on a connection given,
+`Asterism::CLI.new(net:)`; with an older gem the Terminal says so and the
+rest runs). The Gemfile takes them from the checkouts next to this
 repository (`path:`, or `ASTERISM_DIR` / `ASTERISM_ZENOH_DIR`; build
 asterism-zenoh's C extension there with `rake compile`, or let Bundler
 build it). To use the gems from rubygems.org instead, replace the two
@@ -460,6 +473,18 @@ even on a LAN. What it does, and what it assumes:
   arguments, and the answer (`ok`, `remote_error`, `timeout`, ...), refused
   ones as `denied`. "Call log" shows the last 200 (a user sees their own,
   an admin everyone's).
+- **The Terminal** (0.3.15, docs/terminal.md) runs only the asterism
+  command line's commands, never a shell: a line is split into words and
+  handed to the command line, whose table decides what exists. Commands
+  that read are open to every signed-in user (what the console's own
+  certificate lets it see); `call` and `ping --call` need a call
+  permission for the object and the method, checked by Rails, by the
+  bridge, and by the command line once it has parsed the options;
+  `mcp`, `completion` and the options that choose another connection are
+  refused. Every line typed is kept with the call log (who, when, the line,
+  read or call, the result and the start of the output), refused ones too.
+  A page's output goes to its user only. On the Terminal page alone styles
+  may be inline (xterm.js's own `<style>` elements); scripts keep the nonce.
 - **Admin pages** are under `/admin` (the relay, call permissions, users,
   invitations, passes, the Studio apps), so a proxy can limit them by address;
   `CONSOLE_ADMIN_NETS` limits them (and recordings) in the console too.
@@ -533,6 +558,12 @@ even on a LAN. What it does, and what it assumes:
   (`ConsoleChannel` with `stream: "plots"` / `"logs"`). The bridge alone
   loads the message types (Puma still never loads Asterism). The charts are
   uPlot (vendored by `bin/importmap pin`, its CSS in `vendor/assets`).
+- **The Terminal** (`Bridge::Terminal`): `TerminalCommand` rows, picked
+  up every tick and run with the asterism gem's command line on the object
+  layer's connection (`Asterism::CLI.new(net: Asterism.net)`), a thread
+  each; the output goes on the page's own stream
+  (`ConsoleChannel` with `stream: "terminal"`, its token), sent by the main
+  thread (docs/terminal.md).
 - **Watches** are rows too; the bridge subscribes to each key and sends at
   most 10 values per key and second (text, MessagePack, ROS 2 CDR decoded
   as for the rates, or hex).
@@ -572,10 +603,13 @@ subscribes to for the rate leases, and how it writes answers back, the
 plots and logs (field paths, decimation, bounds, /rosout with the generated
 Log type, the Asterism log key, the stream leases), recording and playback
 (the recorder's files, its limits, the player's wire output, the bridge's
-rows); `test/lib/mcap/` and `test/lib/bag/` the MCAP format and the timeline's
+rows), the Terminal's commands (with a stand-in command line, and the real
+one against a CRuby node over a peer link: `terminal_live_test.rb`);
+`test/lib/terminal/` how a Terminal line is read; `test/lib/mcap/` and `test/lib/bag/` the MCAP format and the timeline's
 reading; `test/controllers/` the page, the graph JSON,
 requests, watches, sign-in (with TOTP), that every route needs it, the call
-permissions and the call log; `test/channels/` that the WebSocket needs it.
+permissions, the call log and the Terminal's requests; `test/channels/` that
+the WebSocket needs it (and a Terminal's stream is its user's).
 
 **Fixture mode** (development only): `CONSOLE_FIXTURE=1 bin/rails server`
 shows a recorded network instead of the bridge's

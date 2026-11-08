@@ -446,3 +446,10 @@ fieldset.roles label.role-pick { display: flex; gap: 8px; align-items: flex-star
 fieldset.roles label.role-pick input { margin-top: 5px; }
 .role-pick .role-desc { display: block; color: var(--text); font-size: 15px; }
 .notice-bar { margin: 8px 0; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); }
+
+/* The Terminal (docs/terminal.md): xterm.js fills the page under the bar.
+   Its own colours (dark, the command line's ANSI colours) in both themes. */
+.terminal-help { align-items: baseline; }
+.terminal-body { display: block; overflow: hidden; background: #14171a; }
+.terminal-wrap { height: 100%; padding: 6px 8px; }
+.terminal-wrap .xterm { height: 100%; }

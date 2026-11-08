@@ -1,7 +1,9 @@
 # The streams of the pages. The graph page takes "console": graph diffs,
 # the bridge's status, answers to requests, watched values and rates. The
 # plot page takes "plots" (points, and what the bridge knows of each
-# plotted target), the log page "logs" (log lines). The bridge broadcasts;
+# plotted target), the log page "logs" (log lines), a Terminal page
+# "terminal" with its token (its commands' output; only for the user whose
+# token it is, docs/terminal.md). The bridge broadcasts;
 # nothing comes back over the socket (the pages write leases and requests
 # through HTTP).
 #
@@ -15,6 +17,7 @@ class ConsoleChannel < ApplicationCable::Channel
   STREAMS = { nil => STREAM, "console" => STREAM, "plots" => "console:plots", "logs" => "console:logs" }.freeze
 
   def subscribed
+    return subscribe_terminal if params[:stream] == "terminal"
     name = STREAMS[params[:stream]]
     return reject unless name
     stream_from name
@@ -36,5 +39,25 @@ class ConsoleChannel < ApplicationCable::Channel
   # To the plot page ("plots") or the log page ("logs").
   def self.send_to(stream, type, payload)
     ActionCable.server.broadcast(STREAMS.fetch(stream), payload.merge("type" => type))
+  end
+
+  # To one Terminal page (its token): the output of its commands, how they
+  # ended, the answers to its Tabs.
+  def self.terminal_stream(page)
+    "console:terminal:#{page}"
+  end
+
+  def self.send_terminal(page, type, payload)
+    ActionCable.server.broadcast(terminal_stream(page), payload.merge("type" => type))
+  end
+
+  private
+
+  # A Terminal page's stream, for the user whose page it is (the page
+  # leases its token before it subscribes).
+  def subscribe_terminal
+    page = params[:page].to_s
+    return reject unless TerminalSession.owned?(page, current_user)
+    stream_from self.class.terminal_stream(page)
   end
 end

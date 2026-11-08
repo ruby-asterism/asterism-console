@@ -51,6 +51,15 @@ Rails.application.routes.draw do
   # Names of machines of ROS 2 nodes (V2.3), from the graph's details.
   resources :machine_names, only: %i[index create update destroy]
   resources :calls, only: :index
+  # The Terminal (0.3.15, docs/terminal.md): the asterism command line's
+  # commands, run by the bridge on its connection.
+  resource :terminal, only: :show do
+    post :lease
+    post :release
+    post :complete
+    post :commands, action: :run
+    post "commands/:id/stop", action: :stop, as: :stop
+  end
   # The icons of the nodes' profiles (V2.5).
   get "icons/:hash", to: "icons#show", as: :icon, format: false
 

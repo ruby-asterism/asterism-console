@@ -28,6 +28,36 @@
   <% end %>
 </section>
 
+<section class="card" id="terminal">
+  <h2>Terminal commands</h2>
+  <p>
+    Command lines typed in the <%= link_to "Terminal", terminal_path, data: { turbo: false } %>, newest first (the last <%= CallsController::LIMIT %>):
+    what they read or called, how they ended, and the start of what they printed. Refused ones are kept too.
+  </p>
+  <% if @terminal.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>When</th><th>Who</th><th>Command</th><th>Kind</th><th>Result</th><th>ms</th></tr></thead>
+      <tbody>
+        <% @terminal.each do |t| %>
+          <tr class="status-<%= { "ok" => "ok", "denied" => "denied", "failed" => "error" }.fetch(t.status, t.status) %>">
+            <td class="nowrap"><%= l(t.created_at, format: "%Y-%m-%d %H:%M:%S") %></td>
+            <td><%= t.user&.email_address || "(a removed user)" %></td>
+            <td><code class="wrap"><%= t.line.truncate(300) %></code></td>
+            <td><%= t.effect == "call" ? tag.strong("call") : (t.effect || "-") %>
+              <% if t.effect == "call" && t.path %><code class="wrap"><%= t.path %> <%= t.method_name %></code><% end %></td>
+            <td><span class="badge"><%= t.status %></span><%= " exit #{t.exit_code}" if t.exit_code %>
+              <% if t.reason.present? %><span class="hint"><%= t.reason.truncate(200) %></span><% end %>
+              <% if t.output.present? %><code class="wrap" title="<%= t.output %>"><%= t.output.squish.truncate(160) %></code><% end %></td>
+            <td><%= t.took_ms %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>
+
 <section class="card" id="playbacks">
   <h2>Playbacks to the network</h2>
   <p>Recordings an admin played back onto the network (newest first). Playing in the page only sends nothing and is not listed.</p>

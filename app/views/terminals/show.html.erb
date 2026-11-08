@@ -1,0 +1,28 @@
+<% content_for(:title, "Terminal - Asterism Console") %>
+<% content_for(:head) do %>
+  <%= stylesheet_link_tag("xterm", "data-turbo-track": "reload") %>
+  <%# Its own content security policy (TerminalsController): never swapped in by Turbo. %>
+  <meta name="turbo-visit-control" content="reload">
+<% end %>
+<div class="console" data-controller="terminal"
+     data-terminal-available-value="<%= @available %>"
+     data-terminal-user-value="<%= current_user.id %>">
+  <header class="bar">
+    <h1><%= link_to "Asterism Console", root_path, data: { turbo: false } %></h1>
+    <span class="hint">Terminal</span>
+    <%= render "shared/nav" %>
+  </header>
+
+  <nav class="layers terminal-help" aria-label="About the Terminal">
+    <span class="hint">The asterism command line's commands, run by the console on its connection
+      (<code>help</code> lists them). Reading is open to everyone signed in; <code>call</code> runs only
+      the methods an admin allowed under Call permissions. Every command is kept in the
+      <%= link_to "Call log", calls_path(anchor: "terminal") %>. Tab completes, &uarr;&darr; the history,
+      Ctrl-C stops.</span>
+    <span class="counts" data-terminal-target="state" role="status"></span>
+  </nav>
+
+  <main class="body terminal-body">
+    <div class="terminal-wrap" data-terminal-target="screen" aria-label="Terminal"></div>
+  </main>
+</div>

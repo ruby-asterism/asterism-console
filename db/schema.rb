@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_08_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_09_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -357,6 +357,42 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_200000) do
     t.index ["user_id"], name: "index_stream_leases_on_user_id"
   end
 
+  create_table "terminal_commands", force: :cascade do |t|
+    t.integer "user_id"
+    t.string "page", null: false
+    t.string "kind", default: "run", null: false
+    t.text "line", null: false
+    t.text "argv"
+    t.string "command"
+    t.string "effect"
+    t.string "path"
+    t.string "method_name"
+    t.integer "cols", default: 80, null: false
+    t.string "status", default: "pending", null: false
+    t.integer "exit_code"
+    t.text "reason"
+    t.text "output"
+    t.integer "output_bytes", default: 0, null: false
+    t.float "took_ms"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_terminal_commands_on_created_at"
+    t.index ["kind", "status"], name: "index_terminal_commands_on_kind_and_status"
+    t.index ["user_id"], name: "index_terminal_commands_on_user_id"
+  end
+
+  create_table "terminal_sessions", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "page", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["page"], name: "index_terminal_sessions_on_page", unique: true
+    t.index ["user_id"], name: "index_terminal_sessions_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email_address", null: false
     t.string "password_digest", null: false
@@ -403,4 +439,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_08_200000) do
   add_foreign_key "rooms", "users", column: "created_by_id"
   add_foreign_key "sessions", "users"
   add_foreign_key "stream_leases", "users"
+  add_foreign_key "terminal_commands", "users", on_delete: :nullify
+  add_foreign_key "terminal_sessions", "users", on_delete: :cascade
 end

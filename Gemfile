@@ -60,7 +60,9 @@ end
 
 # Asterism 0.8.0 (wire protocol 1, X1; reconnects across a router restart, G1.5b; @status, the methods' texts in the meta): the local checkouts next to this repository.
 # Files (docs/files.md) need Asterism::Transfer::FileInbox and Endpoint
-# (asterism 0.12.0 or newer).
+# (asterism 0.12.0 or newer). The Terminal (docs/terminal.md) needs the
+# version after 0.12.0 (Asterism::CLI.new(net:)); with an older one it says
+# so and the rest runs.
 # ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
 # rubygems.org instead, replace these two lines with
 #   gem "asterism", "~> 0.12", require: false

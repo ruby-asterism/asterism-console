@@ -8,6 +8,46 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased (0.3.15)
+
+What an update needs: one migration (two new tables; going back needs the
+update's backup), and the asterism gem with the command line on a
+connection given (the version after 0.12.0; the image takes it from
+rubygems.org). No change to nginx, the router or `.env` (three optional
+limits, below).
+
+- The Terminal (`/terminal`, "Terminal" in the menu; VT1, VT2,
+  docs/terminal.md): the asterism gem's command line in the page
+  (xterm.js 6.0.0, vendored): `node list`, `tree`, `object info`,
+  `status get / echo / hz`, `object get / echo`, `watch`, `ping`, `call`
+  ..., with the command line's output and colours at the page's width,
+  Tab completion (its `__complete`: commands, verbs, options, the names
+  on the network, an object's methods), the history (up / down, kept in
+  the browser) and Ctrl-C. The bridge runs each command on its own
+  connection (the console's node and certificate), a thread each, and
+  sends the output to that page only.
+- Who may run what: the commands that read, every signed-in user; `call`
+  and `ping --call`, when a call permission allows the object and the
+  method (the page's rows; checked by Rails, by the bridge and by the
+  command line's own parse). Never a shell: a line is split into words and
+  handed to the command line; a first word not in its table (`ls`), `mcp`,
+  `completion` and the options that choose another connection (`--router`
+  ...) are refused with the reason, as is a `--timeout` over 30 s.
+- The record: every line typed (refused ones too) is kept with the call
+  log ("Call log" > "Terminal commands": who, when, the line, read or
+  call, how it ended, the exit code and reason, the time, the start of the
+  output). No page removes them; they are kept as long as the call log's
+  rows.
+- Streams (`watch`, `echo`, `hz`) run until Ctrl-C or the page is closed
+  (the page leases a token; the bridge stops what a closed page ran). At
+  most `ASTERISM_TERMINAL_PER_USER` (3) per user and `ASTERISM_TERMINAL_MAX`
+  (12) in all; a command that prints more than
+  `ASTERISM_TERMINAL_MAX_OUTPUT` (4 MB) is stopped.
+- On the Terminal page alone styles may be inline (xterm.js puts `<style>`
+  elements of its own into the page); scripts keep the nonce.
+- A migration test quiets its own migration only (it made another
+  migration test fail when both ran in the same worker).
+
 ## 0.3.14
 
 What an update needs: one migration (going back needs the update's

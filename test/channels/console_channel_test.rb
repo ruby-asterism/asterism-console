@@ -19,6 +19,21 @@ class ConsoleChannelTest < ActionCable::Channel::TestCase
     assert subscription.rejected?
   end
 
+  test "a Terminal page's stream: its user's leased token only" do
+    TerminalSession.renew(page: "page-aaaaaaaaaaaaaaaa", user: users(:user))
+    TerminalSession.renew(page: "page-bbbbbbbbbbbbbbbb", user: users(:admin))
+    subscribe(stream: "terminal", page: "page-aaaaaaaaaaaaaaaa")
+    assert_has_stream "console:terminal:page-aaaaaaaaaaaaaaaa"
+    assert_equal [ "console:terminal:page-aaaaaaaaaaaaaaaa" ], subscription.streams
+    unsubscribe
+    subscribe(stream: "terminal", page: "page-bbbbbbbbbbbbbbbb")
+    assert subscription.rejected?, "another user's page"
+    subscribe(stream: "terminal", page: "page-cccccccccccccccc")
+    assert subscription.rejected?, "not leased"
+    subscribe(stream: "terminal")
+    assert subscription.rejected?
+  end
+
   test "the graph with the rooms for an admin who may use the admin pages from there; without them otherwise" do
     admin = users(:admin)
     stub_connection(current_user: admin, remote_ip: "192.0.2.10")

@@ -38,7 +38,11 @@
 #   - asks each Asterism application that appears for its status (0.3.4,
 #     Bridge::Statuses: asterism/<node>/<app>/@status) on the same worker
 #     and follows the puts on asterism/*/*/@status (the details of an app
-#     and of its node).
+#     and of its node);
+#   - runs the commands typed in the Terminal (0.3.15, Bridge::Terminal,
+#     TerminalCommand rows): the asterism gem's command line on the object
+#     layer's connection, a thread each, the output to the page that typed
+#     them.
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
 # (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
@@ -223,6 +227,7 @@ module Bridge
       @status_sub = @z.subscribe(STATUSES) { |sample| status_notice(sample) }
       @profile_worker = start_profile_worker
       start_transfers
+      start_terminal
       @z.start
       @self_zids = [ @z.zid ]
       say "bridge: zid #{@z.zid}, routers #{@z.router_zids.join(' ')}"
@@ -318,6 +323,7 @@ module Bridge
           sync_recordings
           sync_playbacks
           @transfers&.sync
+          @terminal&.sync
           expire_requests
           next_sync = now + SYNC_EVERY
         end
@@ -333,6 +339,7 @@ module Bridge
           next_streams = now + STREAMS_EVERY
         end
         take_requests
+        @terminal&.tick
         flush_outbox
         if now >= next_beat
           heartbeat
@@ -1072,6 +1079,22 @@ module Bridge
       @transfers = nil
     end
 
+    # --------------------------------------------------------------- terminal
+
+    # The Terminal's commands (0.3.15). An asterism gem without
+    # CLI.new(net:) (0.12.0 and older) leaves them out; the page says so.
+    def start_terminal
+      unless Terminal.available?
+        say "bridge: terminal: not started: this asterism gem cannot run its command line on the bridge's " \
+            "connection (needs 0.13.0 or newer)"
+        return
+      end
+      @terminal = Terminal.new(say: method(:say)).start
+    rescue ActiveRecord::ActiveRecordError => e
+      say "bridge: terminal: not started: #{e.message}"
+      @terminal = nil
+    end
+
     # -------------------------------------------------------------- playbacks
 
     # Starts a pending playback (one at a time), follows the running one,
@@ -1153,6 +1176,8 @@ module Bridge
       @profile_sub = nil
       stop_recordings("the bridge stopped (or lost its router)")
       stop_players
+      @terminal&.close
+      @terminal = nil
       @transfers&.close
       @transfers = nil
       @workers.each { _1.join(3) }

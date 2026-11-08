@@ -12,3 +12,6 @@ pin "cytoscape-fcose" # @2.2.0
 pin "cose-base" # @2.2.0
 pin "layout-base" # @2.0.1
 pin "uplot" # @1.6.32
+# The Terminal (docs/terminal.md) imports these when it opens; the other pages never load them.
+pin "@xterm/xterm", to: "@xterm--xterm.js", preload: false # @6.0.0
+pin "@xterm/addon-fit", to: "@xterm--addon-fit.js", preload: false # @0.11.0

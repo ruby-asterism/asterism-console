@@ -11,6 +11,7 @@ tests); where they differ from install.md, install.md is current.
 
 | Note | |
 |---|---|
+| [terminal.md](terminal.md) | VT1, VT2: the Terminal, the asterism command line's commands run by the bridge, under the sign-in, the call permissions and the call log |
 | [files.md](files.md) | T4: files to and from the machines (Asterism::Transfer), the members' marks for files (T4b), the record |
 | [rooms.md](rooms.md) | G2: rooms (signed keys, room slots, the rooms' door); 0.2.1: the rooms in the graph |
 | [o1.md](o1.md) | O1: a console anyone can install on their own server (published image, first setup, certificates as one file) |

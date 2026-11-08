@@ -10,6 +10,7 @@
         <%= nav_link "Graph", root_path %>
         <%= nav_link "Plots", plots_path %>
         <%= nav_link "Logs", logs_path %>
+        <%= nav_link "Terminal", terminal_path, turbo: false %>
         <%= nav_link "Call log", calls_path %>
         <%= nav_link "Files", transfers_path %>
         <%= nav_link "Recordings", recordings_path, under: recordings_path if current_user.admin? %>
