@@ -10,6 +10,11 @@
     <dt>Other keys, read and write</dt><dd><%= keys_list(@peer.rw_keys) %></dd>
     <dt>Other keys, read only</dt><dd><%= keys_list(@peer.ro_keys) %></dd>
     <dt>Files with the console</dt><dd><%= files_marks(@peer, long: true) %></dd>
+    <dt>Receives files from</dt><dd id="receivers"><%= receivers_text(@peer, "file") %></dd>
+    <dt>Receives apps (checkpoint) from</dt><dd><%= receivers_text(@peer, "checkpoint") %></dd>
+    <% if @peer.managed_receivers? %>
+      <dt>The list on its machines</dt><dd id="receivers-delivered"><%= receivers_delivery(@peer) %></dd>
+    <% end %>
     <dt>Console sees</dt><dd><%= console_sees(@peer, long: true) %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
@@ -27,8 +32,10 @@
 
 <% if @files_expansion.any? %>
   <section class="card" id="files-acl">
-    <h2>What its marks for files allow</h2>
-    <% labels = { "files_to_console" => "may send files to the console", "files_from_console" => "receives files from the console" } %>
+    <h2>What its marks and lists for files allow</h2>
+    <% labels = { "files_to_console" => "may send files to the console", "files_from_console" => "receives files from the console",
+                  "receives_files" => "its machines receive files (and the console's list)",
+                  "sends_files" => "chosen by other rows to send them files" } %>
     <table class="list">
       <thead><tr><th>Mark</th><th>Access</th><th>Keys in the ACL</th></tr></thead>
       <tbody>

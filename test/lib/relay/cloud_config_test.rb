@@ -215,6 +215,51 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal [], Relay::CloudConfig.new([]).files_expansion(peers[3])
   end
 
+  test "who a machine receives from (T6): the senders chosen get the ask line and its answer, the receiver its transfer keys" do
+    peers = [
+      { "name" => "fmruby-aaaaaa", "kind" => "client", "in_acl" => true, "receivers_managed" => true,
+        "receives" => { "file" => %w[fmruby-bbbbbb linux-*], "checkpoint" => %w[fmruby-bbbbbb] } },
+      { "name" => "home-bob", "kind" => "router", "nodes" => %w[fmruby-bbbbbb linux-1 other-1], "in_acl" => true },
+      { "name" => "fmruby-cccccc", "kind" => "client", "in_acl" => true, "receivers_managed" => true,
+        "receives" => { "file" => [], "checkpoint" => [] } },
+      { "name" => "linux-off", "kind" => "client", "in_acl" => false },
+      { "name" => "linux-2", "kind" => "client", "in_acl" => true }
+    ]
+    h = Relay::CloudConfig.new(peers).to_h
+    ask = rule(h, "home_bob__sends_files_ask")
+    assert_equal [ %w[query], %w[ingress],
+                   %w[asterism/fmruby-aaaaaa/transfer/inbox/call/fmruby-bbbbbb asterism/fmruby-aaaaaa/transfer/inbox/call/linux-1] ],
+                 ask.values_at("messages", "flows", "key_exprs"), "the nodes it chose or matched, other-1 not"
+    assert_equal [ %w[reply], %w[egress], ask["key_exprs"] ],
+                 rule(h, "home_bob__sends_files_answer").values_at("messages", "flows", "key_exprs")
+    assert_equal [ "asterism/fmruby-aaaaaa/transfer/inbox/call/linux-2" ], rule(h, "linux_2__sends_files_ask")["key_exprs"]
+    ids = h["access_control"]["rules"].map { _1["id"] }
+    refute ids.any? { _1.start_with?("linux_off") }, "a row out of the ACL sends nothing"
+    assert_equal [ Relay::CloudConfig::ALL, %w[egress ingress],
+                   %w[asterism/fmruby-aaaaaa/transfer asterism/fmruby-aaaaaa/transfer/**] ],
+                 rule(h, "fmruby_aaaaaa__receives_files_rw").values_at("messages", "flows", "key_exprs")
+    assert rule(h, "fmruby_cccccc__receives_files_rw"), "an emptied list keeps the keys (the empty list reaches it)"
+    refute ids.include?("home_bob__receives_files_rw")
+    acl = h["access_control"]
+    call = ->(who, key) { AclEvaluator.allowed?(acl, who, "query", "ingress", key) }
+    assert call.("home-bob", "asterism/fmruby-aaaaaa/transfer/inbox/call/linux-1")
+    refute call.("home-bob", "asterism/fmruby-aaaaaa/transfer/inbox/call/other-1"), "under the chosen names only"
+    refute call.("home-bob", "asterism/fmruby-cccccc/transfer/inbox/call/linux-1"), "only the inboxes that chose it"
+    refute call.("linux-2", "asterism/fmruby-aaaaaa/transfer/inbox/call/linux-1")
+    assert AclEvaluator.allowed?(acl, "fmruby-aaaaaa", "declare_queryable", "ingress", "asterism/fmruby-aaaaaa/transfer/inbox")
+    # "*": every row's nodes
+    every = Relay::CloudConfig.new([ peers[0].merge("receives" => { "file" => %w[*] }), peers[1] ]).to_h
+    assert_equal 3, rule(every, "home_bob__sends_files_ask")["key_exprs"].size
+    # behind one home router: its nodes to each other, never a node to itself
+    home = Relay::CloudConfig.new([ peers[1].merge("receives" => { "file" => %w[linux-1] }, "receivers_managed" => true) ]).to_h
+    assert_equal %w[asterism/fmruby-bbbbbb/transfer/inbox/call/linux-1 asterism/other-1/transfer/inbox/call/linux-1],
+                 rule(home, "home_bob__sends_files_ask")["key_exprs"]
+    # for the pages
+    c = Relay::CloudConfig.new(peers)
+    assert_equal %w[receives_files], c.files_expansion(peers[0]).map { _1["mark"] }
+    assert_equal %w[sends_files], c.files_expansion(peers[1]).map { _1["mark"] }
+  end
+
   test "what a row gets, for the pages" do
     c = Relay::CloudConfig.new([], {}, roles: [ MATCH ])
     e = c.expansion_for("name" => "home-a", "roles" => %w[match], "nodes" => %w[fmruby-aaaaaa])

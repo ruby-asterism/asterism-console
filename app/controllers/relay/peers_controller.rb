@@ -63,7 +63,9 @@ module Relay
     def peer_params
       params.expect(relay_peer: [ :name, :display_name, :kind, :description, :rw_keys, :ro_keys, :admin_space,
                                   :enabled, :dns_names, :ip_addresses, :cert_days, :nodes, :files_to_console,
-                                  :files_from_console, { role_ids: [] } ])
+                                  :files_from_console, :receive_files_from_more, :receive_checkpoints_from_more,
+                                  { role_ids: [] }, { receive_files_from_picked: [] },
+                                  { receive_checkpoints_from_picked: [] } ])
     end
   end
 end

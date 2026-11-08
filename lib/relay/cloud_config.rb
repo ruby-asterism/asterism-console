@@ -91,6 +91,19 @@
 # rules are the row's own, beside its roles'; the settings "console_node"
 # is the bridge's node ID (ASTERISM_CONSOLE_NODE).
 #
+# Who a machine receives files from (0.3.16, T6, docs/files.md): a row's
+# lists (RelayPeer#receivers, "receives" => {"file" => [...], "checkpoint"
+# => [...]}: node IDs and patterns with *) are matched against the nodes
+# of the other rows in the ACL. A row with a node that matches gets, for
+# each such node and each node of the receiving row, the ask line
+# asterism/<receiver>/transfer/inbox/call/<sender> with the reply to it
+# (the same rule pair as files_to_console; the two kinds share the inbox,
+# so the ACL does not tell them apart: the machine does). The receiving
+# row, once its lists were ever chosen ("receivers_managed"), gets the rw
+# lines asterism/<node>/transfer and asterism/<node>/transfer/** (its
+# inbox, and the console's call that brings the lists; kept when the lists
+# are emptied, so that the empty list still reaches it).
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -181,6 +194,7 @@ module Relay
       @peers = peers.map { _1.transform_keys(&:to_s) }
                     .select { _1["in_acl"] && _1["name"] != @settings["name"] && !seats.include?(_1["name"]) }
                     .sort_by { _1["name"] }
+      @sends = sender_keys
     end
 
     def self.ident(name)
@@ -410,9 +424,39 @@ module Relay
         lines << [ "files_to_console", "ask", nodes.map { "asterism/#{console}/transfer/inbox/call/#{_1}" } ]
       end
       if peer["files_from_console"]
-        lines << [ "files_from_console", "rw", nodes.flat_map { [ "asterism/#{_1}/transfer", "asterism/#{_1}/transfer/**" ] } ]
+        lines << [ "files_from_console", "rw", transfer_keys(nodes) ]
       end
+      lines << [ "receives_files", "rw", transfer_keys(nodes) ] if peer["receivers_managed"]
+      sends = Array(@sends[peer["name"]])
+      lines << [ "sends_files", "ask", sends ] unless sends.empty?
       lines
+    end
+
+    def transfer_keys(nodes) = nodes.flat_map { [ "asterism/#{_1}/transfer", "asterism/#{_1}/transfer/**" ] }
+
+    # A node ID against a receiver's entry (a node ID, or a pattern with *).
+    def self.receiver_match?(entry, node)
+      entry == node || (entry.include?("*") && File.fnmatch?(entry, node))
+    end
+
+    # {sender row's name => [ask keys]}: for every row in the ACL whose
+    # lists name (or match) a node of a row (another row's, or another node
+    # behind the same home router), the inbox calls of its nodes under those
+    # senders' names (T6). A node is not its own sender.
+    def sender_keys
+      out = Hash.new { |h, k| h[k] = [] }
+      @peers.each do |r|
+        entries = Hash(r["receives"]).values.flatten.map(&:to_s).uniq
+        next if entries.empty?
+        receivers = nodes_of(r)
+        @peers.each do |sp|
+          nodes_of(sp).each do |sn|
+            next unless entries.any? { self.class.receiver_match?(_1, sn) }
+            receivers.each { |rn| out[sp["name"]] << "asterism/#{rn}/transfer/inbox/call/#{sn}" unless rn == sn }
+          end
+        end
+      end
+      out.transform_values(&:uniq).transform_values(&:sort)
     end
 
     # The rules of a mark's section: an ask line also lets the replies to

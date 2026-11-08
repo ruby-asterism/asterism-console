@@ -54,6 +54,35 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ [], [] ], [ RelayPeer.file_senders, RelayPeer.file_receivers ], "a disabled row neither sends nor receives"
   end
 
+  test "who a machine receives from (T6): chosen on the form, shown on the row's page with its ACL lines" do
+    sign_in_as(users(:admin))
+    RelayPeer.create!(name: "home-a", kind: "router", nodes: "fmruby-bbbbbb\nlinux-1")
+    peer = RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client")
+    get edit_relay_peer_path(peer)
+    assert_select "input[type=checkbox][name='relay_peer[receive_files_from_picked][]'][value=fmruby-bbbbbb]", 1
+    assert_select "input[type=checkbox][name='relay_peer[receive_checkpoints_from_picked][]'][value=console]", 1
+    assert_select "input[type=checkbox][name='relay_peer[receive_files_from_picked][]'][value=fmruby-aaaaaa]", 0,
+                  "not its own"
+    get relay_peer_path(peer)
+    assert_select "#receivers", /not chosen/
+    patch relay_peer_path(peer), params: { relay_peer: { receive_files_from_picked: [ "", "fmruby-bbbbbb" ],
+                                                         receive_files_from_more: "linux-*",
+                                                         receive_checkpoints_from_picked: [ "" ],
+                                                         receive_checkpoints_from_more: "" } }
+    assert_redirected_to relay_peer_path(peer)
+    assert_equal [ %w[fmruby-bbbbbb linux-*], [] ], [ peer.reload.receivers("file"), peer.receivers("checkpoint") ]
+    get edit_relay_peer_path(peer)
+    assert_select "input[type=checkbox][name='relay_peer[receive_files_from_picked][]'][value=fmruby-bbbbbb][checked]", 1
+    assert_select "textarea#receive_files_from_more", "linux-*"
+    get relay_peer_path(peer)
+    assert_select "#receivers code", "linux-*"
+    assert_select "#receivers-delivered", /not sent yet/
+    get relay_peers_path
+    assert_select "td", "takes from members"
+    patch relay_peer_path(peer), params: { relay_peer: { receive_files_from_more: "bad name" } }
+    assert_response :unprocessable_content
+  end
+
   test "a display name (0.3.5): saved when registering and editing, shown before the name" do
     sign_in_as(users(:admin))
     get new_relay_peer_path(kind: "client")

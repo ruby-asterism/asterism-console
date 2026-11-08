@@ -1,4 +1,4 @@
-# Files: sending to the machines, receiving from them (T4, T4b)
+# Files: sending to the machines, receiving from them (T4, T4b, T6)
 
 The console sends a file from the browser to a machine, receives the files
 the machines send to it, and records both. The carrying is Asterism's
@@ -84,6 +84,41 @@ migration of 0.3.14 (`db/migrate/*_member_file_marks.rb`) marks the rows
 that speak for a node one of their patterns matches, says the patterns
 that match no row, then deletes the file rows and the column `kind`.
 
+## Who a machine receives from (T6, 0.3.16)
+
+A row's Edit also chooses who its machines (the nodes it speaks for)
+receive files from, one list per kind: "Files (to /home/inbox)" (kind
+`file`) and "Apps moved here (checkpoint)". The choices are the nodes of
+the registry's rows and the console's; a client row's own node is left
+out, a home router's nodes may send to each other. Under them, patterns and
+other nodes, one per line (`fmruby-*`, `*` for every member): letters,
+digits, `.` `_` `-` and `*`, at most 64. The row's page shows the lists and
+what each of its machines holds.
+
+| Where | What |
+|---|---|
+| The cloud router's ACL (on apply) | every row with a node a list names or matches gets, for that node and each node of the receiving row, ask `asterism/<receiver>/transfer/inbox/call/<sender>` and the reply to it (`<row>__sends_files_ask` / `_answer`); the receiving row, once its lists were ever chosen, rw `asterism/<node>/transfer` and `asterism/<node>/transfer/**` (`<row>__receives_files_rw`; kept when the lists are emptied, so that the empty list still reaches the machine). The two kinds share the inbox: the ACL does not tell them apart, the machine does |
+| The bridge (`Bridge::Receivers`) | calls `<node>/transfer/inbox` `policy_set({"file" => [...], "checkpoint" => [...], "at" => <when the lists changed>})` as the console's node: when the lists changed, when the machine's transfer app appears (again), every 10 minutes while it stays, and 30 s after a failure. What each node got (or why not) is kept on the row (`receivers_delivered`) and said once in the bridge's log |
+| The machine (Family mruby's transfer app) | takes the list from the console's node only (`console` in its `/home/asterism/config.toml`, `console` by default), and only over a connection with its certificate (a `tls/` router: the router's ACL binds the caller's node ID to its certificate there). It writes the list below a mark in `/home/asterism/receive.toml` (`[managed]` `by`, `at`; `[managed.file]` and `[managed.checkpoint]` `from`), only when it changed (the flash is not written for the same list), leaves the part above the mark (written by hand) as it is, and takes a kind from the nodes of both parts. While the console cannot be reached it goes on with the last list it wrote (no time limit). The shell's `asend -l` shows both parts |
+
+A machine with the console's credentials (a `.tar` in `/home/asterism/`)
+starts its transfer app at boot, receive.toml or not, so that the list can
+reach it.
+
+**Connections without certificates.** On a connection without
+certificates (a home router's `tcp/`, peer to peer, the browser build's
+`ws/`) any node could call as `console`, so a machine there refuses the
+list ("takes no list from console over a connection without certificates")
+and the row shows that reason. Such a machine receives what its
+receive.toml says by hand (and a list it took earlier over a `tls/`
+router). The native Linux program and the simulation have no TLS link
+(`Z_FEATURE_LINK_TLS`) today, so the list reaches the ESP32 boards that
+connect to the cloud router with their certificate.
+
+The marks above stay: "Receives files from the console" is the console's
+key for sending; the machine's key is its receive.toml, by hand (`[file]
+from = ["console"]`) or by choosing `console` in the row's list.
+
 ## How it is built
 
 - `Asterism::Transfer::FileInbox` and `Asterism::Transfer::Endpoint`
@@ -106,8 +141,13 @@ that match no row, then deletes the file rows and the column `kind`.
   (`/files`), `RelayPeer#files_to_console` / `#files_from_console`
   (`RelayPeer.file_senders`, `.file_receivers`), the ACL lines in
   `Relay::CloudConfig#file_rules`.
+- `Bridge::Receivers` (`lib/bridge/receivers.rb`): the lists to the
+  machines, one call at a time on a thread of its own (10 s per call).
+  `RelayPeer#receivers`, `#receivers_payload`, `.managed`,
+  `.sender_choices`; the ACL lines in `Relay::CloudConfig#file_lines`
+  (`sender_keys`).
 - `ASTERISM_TRANSFERS=0` leaves the bridge's side out (no inbox, nothing
-  sent).
+  sent, no lists).
 
 ## On a server (the VPS)
 
@@ -157,3 +197,15 @@ runs). On the PC: zenohd, the console from the source and the CRuby sender
 `fmruby-core/tools/fmrb_send.rb`: a marked node's file placed in the
 inbox, an unmarked one refused at begin, the mark cleared and set on the
 running bridge; the generated `cloud.json5` with the lines of both marks.
+
+T6 (0.3.16): `bin/rails test` (the lists on the form, the ACL lines with
+`AclEvaluator`, the bridge's sending with a stand-in machine, the
+migration). On the PC: a cloud zenohd with the ACL made from a working
+copy's registry (mTLS), a home zenohd with a router certificate, three
+native programs behind it, the bridge with the console's certificate. The
+list chosen on the page reached the three machines after the apply, and
+each refused it (their connection is the home router's `tcp/`); the row's
+page showed the reason. The machine's own part (written by its transfer
+app, taken and refused by it, kept while the console is stopped and after
+a restart) was checked on the native programs and in Family mruby's
+`rake regress:transfer:quick` (fmruby-core doc/asterism_file_transfer/report/t6.md).

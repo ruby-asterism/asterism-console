@@ -54,9 +54,40 @@ module RelayHelper
     marks = []
     marks << (long ? "may send files to the console" : "sends to") if peer.files_to_console?
     marks << (long ? "receives files from the console" : "receives from") if peer.files_from_console?
+    marks << (long ? "receives from the members chosen (below)" : "takes from members") if peer.receives_any?
     return tag.span(long ? "none" : "-", class: "hint") if marks.empty?
     text = marks.join(long ? "; " : ", ")
     long && peer.node_list.any? ? "#{text} (for #{peer.speaks_for.join(', ')})" : text
+  end
+
+  # A row's senders of a kind (T6), or "nobody".
+  def receivers_text(peer, kind)
+    list = peer.receivers(kind)
+    return tag.span(peer.managed_receivers? ? "nobody (an empty list is sent)" : "not chosen (only what its receive.toml has by hand)",
+                    class: "hint") if list.empty?
+    safe_join(list.map { tag.code(_1) }, ", ")
+  end
+
+  # What the bridge last delivered to each of the row's nodes (T6).
+  def receivers_delivery(peer)
+    got = peer.delivered
+    digest = peer.receivers_digest
+    lines = peer.speaks_for.map do |node|
+      d = got[node]
+      text = if d.nil?
+        "not sent yet (it is sent when the machine is on the network)"
+      elsif d["digest"] == digest
+        "has this list (since #{when_text(Time.iso8601(d['at']))})"
+      elsif d["error"].present?
+        "not delivered: #{d['error']}" + (d["at"] ? " (has an older list)" : "")
+      else
+        "has an older list; this one is sent when the machine is on the network"
+      end
+      safe_join([ tag.code(node), " ", text ])
+    end
+    safe_join(lines, tag.br)
+  rescue ArgumentError
+    "-"
   end
 
   def keys_list(text)

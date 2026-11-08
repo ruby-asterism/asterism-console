@@ -34,7 +34,8 @@
 #   - sends files to the machines and receives files from them (T4,
 #     Bridge::Transfers, FileTransfer rows): answers at
 #     <console>/transfer/inbox on the reading session, sends the pending
-#     rows on threads of their own;
+#     rows on threads of their own; sends each member machine the list of
+#     who it receives files from (0.3.16, T6, Bridge::Receivers);
 #   - asks each Asterism application that appears for its status (0.3.4,
 #     Bridge::Statuses: asterism/<node>/<app>/@status) on the same worker
 #     and follows the puts on asterism/*/*/@status (the details of an app
@@ -323,6 +324,7 @@ module Bridge
           sync_recordings
           sync_playbacks
           @transfers&.sync
+          @receivers&.sync(asterism_apps)
           @terminal&.sync
           expire_requests
           next_sync = now + SYNC_EVERY
@@ -1070,6 +1072,7 @@ module Bridge
     def start_transfers
       return if ENV["ASTERISM_TRANSFERS"] == "0"
       @transfers = Transfers.new(conn: @z, node: @node_id, say: method(:say)).start
+      @receivers = Receivers.new(say: method(:say)).start
     rescue SystemCallError, ArgumentError => e
       say "bridge: files: not started: #{e.class}: #{e.message}"
       @transfers = nil
@@ -1180,6 +1183,8 @@ module Bridge
       @terminal = nil
       @transfers&.close
       @transfers = nil
+      @receivers&.close
+      @receivers = nil
       @workers.each { _1.join(3) }
       @workers.clear
       @subs.each_value { _1[1].close rescue nil }

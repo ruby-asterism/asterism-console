@@ -8,6 +8,30 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased (0.3.16)
+
+What an update needs: one migration (four columns on the members' rows;
+going back needs the update's backup). No change to nginx or `.env`. An
+apply is needed only after choosing who a machine receives from (the ACL
+lines come from the lists).
+
+- Who a machine receives files from, per member (T6, docs/files.md "Who a
+  machine receives from"): a row's Edit chooses, per kind (files, apps
+  moved here), the members' nodes (and the console) its machines take
+  files from, or patterns (`fmruby-*`, `*`). The apply makes the router's
+  lines from them: the senders' ask line on the receivers' inboxes (with
+  the reply), the receivers' transfer keys. The bridge sends each machine
+  its list (`<node>/transfer/inbox` `policy_set`) when it changes, when the
+  machine appears, and every 10 minutes; the row's page shows what each of
+  its machines holds, or why it did not take it.
+- A Family mruby machine keeps the list in its receive.toml (a part of its
+  own below a mark, written only when it changes) and decides on it, also
+  while the console cannot be reached; it takes the list only from the
+  console's node over a connection with its certificate (a `tls/` router).
+  On a connection without certificates (a home router, peer to peer) it
+  refuses it, and the row says so.
+- The members' marks for files with the console stay as they were.
+
 ## 0.3.15
 
 What an update needs: one migration (two new tables; going back needs the

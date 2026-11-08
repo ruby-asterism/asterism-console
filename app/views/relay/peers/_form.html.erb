@@ -33,7 +33,34 @@
     <label class="check"><%= f.check_box :files_from_console %> Receives files from the console: the Files page may send to it
       and the ACL gives it <code>asterism/&lt;node&gt;/transfer</code> and <code>asterism/&lt;node&gt;/transfer/**</code>
       (the machine takes them only when its <code>/home/asterism/receive.toml</code> has
-      <code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>)</label>
+      <code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>, or the console is ticked
+      under "Receives files from" below)</label>
+  </fieldset>
+  <fieldset class="wide files receivers">
+    <legend>Receives files from (the machines of this row keep the list in their
+      <code>/home/asterism/receive.toml</code>; the console sends it to them)</legend>
+    <% choices = RelayPeer.sender_choices(except: peer) %>
+    <% { "file" => [ :receive_files_from, "Files (to /home/inbox)" ],
+         "checkpoint" => [ :receive_checkpoints_from, "Apps moved here (checkpoint)" ] }.each do |kind, (column, title)| %>
+      <% chosen = peer.receivers(kind) %>
+      <div class="receive-kind" data-kind="<%= kind %>">
+        <strong><%= title %></strong>
+        <% if choices.empty? %><p class="hint">No other members yet.</p><% end %>
+        <% choices.each do |label, node| %>
+          <label class="check"><%= check_box_tag "relay_peer[#{column}_picked][]", node, chosen.include?(node),
+                                                 id: "#{column}_#{node.parameterize(separator: '_')}" %> <%= label %></label>
+        <% end %>
+        <%= hidden_field_tag "relay_peer[#{column}_picked][]", "", id: nil %>
+        <label>Patterns and other nodes (one per line: <code>fmruby-*</code>, <code>*</code> for every member)
+          <%= text_area_tag "relay_peer[#{column}_more]", (chosen - choices.map(&:last)).join("\n"), rows: 2,
+                            id: "#{column}_more" %></label>
+      </div>
+    <% end %>
+    <p class="hint">Each node chosen may call the inbox of this row's nodes
+      (<code>asterism/&lt;node&gt;/transfer/inbox/call/&lt;sender&gt;</code>, made on Apply), and the machine takes what
+      it sends; what the owner wrote by hand in <code>receive.toml</code> is taken too. A machine keeps the last list
+      it was sent while the console cannot be reached. It takes the list only over a connection with its
+      certificate (a <code>tls/</code> router).</p>
   </fieldset>
   <label class="wide">Description <%= f.text_field :description %></label>
   <label>Other keys it may read and write, outside its roles (one per line)

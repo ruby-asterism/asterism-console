@@ -1112,6 +1112,26 @@ From 0.3.14 to 0.3.15 (the Terminal, docs/terminal.md):
 - Going back to 0.3.14 is restoring the backup the update made (it prints
   the command); the Terminal's record is lost with it.
 
+From 0.3.15 to 0.3.16 (who a machine receives files from, docs/files.md):
+
+- `./update.sh 0.3.16`. One migration: four columns on `relay_peers`
+  (`receive_files_from`, `receive_checkpoints_from`, `receivers_changed_at`,
+  `receivers_delivered`), empty: nothing is sent to a machine and no ACL
+  line changes until an admin chooses.
+- No change to nginx, `.env` or the roles.
+- To use it: Admin > Members, a machine's row, Edit, "Receives files from":
+  tick the members (or write `fmruby-*`), Save, then Review and apply (the
+  senders' lines on the router). The row's page says, per machine, whether
+  it holds the list. A machine takes it over its own certificate (a board
+  connected straight to the cloud router); behind a home router or peer to
+  peer it refuses it, and the row shows that reason.
+- Check: the bridge's log has "receivers: <node> has the list of <row>"
+  (or the machine's reason); on the machine the shell's `asend -l` lists
+  the senders, by hand and from the console.
+- Going back to 0.3.15 is restoring the backup the update made (it prints
+  the command); the lists are lost with it, and the machines keep the last
+  list they wrote.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
