@@ -13,15 +13,17 @@ class RoomInviteRecordsGroupTest < ActiveSupport::TestCase
 
   test "the invite links made before get a group each" do
     m = RoomInviteRecordsGroup.new
-    m.verbose = false
-    m.migrate(:down)
+    # Quiet for this migration only: Migration#verbose= sets it for every
+    # migration of the process (and the other migration tests read what
+    # their migrations say).
+    ActiveRecord::Migration.suppress_messages { m.migrate(:down) }
     RoomInvite.reset_column_information
     c = ActiveRecord::Base.connection
     2.times do |i|
       c.execute("INSERT INTO room_invites (name, token_digest, expires_at, max_rooms, apps, created_at, updated_at) " \
                 "VALUES ('old #{i}', '#{'%064x' % i}', '2030-01-01', 1, '[]', '2026-10-18', '2026-10-18')")
     end
-    m.migrate(:up)
+    ActiveRecord::Migration.suppress_messages { m.migrate(:up) }
     RoomInvite.reset_column_information
     groups = RoomInvite.pluck(:records_group)
     assert_equal 2, groups.compact.size
