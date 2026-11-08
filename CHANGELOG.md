@@ -8,10 +8,10 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased
+## 0.3.13
 
 What an update needs: the asterism gem with `Asterism::Transfer::FileInbox`
-and `Endpoint` (after 0.11.0). Two migrations (going back needs the
+and `Endpoint` (0.12.0). Two migrations (going back needs the
 update's backup). `.env`: `ASTERISM_TRANSFER_FROM` to let machines send to
 the console (optional). The router's rules: a role for the machines that
 send to the console or receive from it (docs/files.md, "On a server").

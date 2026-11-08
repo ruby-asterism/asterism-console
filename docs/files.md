@@ -83,8 +83,8 @@ machine sends to whom its user types.
 ## On a server (the VPS)
 
 - **The gem**: the console needs the asterism gem with
-  `Asterism::Transfer::FileInbox` and `Endpoint` (after 0.11.0; in the
-  image, the gem from rubygems.org: a release of the gem first).
+  `Asterism::Transfer::FileInbox` and `Endpoint` (0.12.0; the image takes
+  it from rubygems.org).
 - **Migrations** (two, run when the console starts): `call_permissions`
   gets `kind` (default "call": the existing rows stay what they are);
   `file_transfers` is a new table. Nothing is deleted.

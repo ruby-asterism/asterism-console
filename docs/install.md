@@ -1047,6 +1047,25 @@ From 0.3.11 to 0.3.12 (the Studio apps leave the roles):
 - Going back to 0.3.11 is restoring the backup the update made (it prints
   the command); apps added after the update are lost with it.
 
+From 0.3.12 to 0.3.13 (Files: send to the machines, receive from them, a record):
+
+- `./update.sh 0.3.13`. Two migrations (`call_permissions.kind`, default
+  "call", so every existing row stays a call permission; the new table
+  `file_transfers`). Nothing is deleted. The image has asterism 0.12.0.
+- `.env` (optional): `ASTERISM_TRANSFER_FROM` lets machines send to the
+  console (unset: nobody); `ASTERISM_TRANSFER_INBOX_MAX_BYTES` (1 GB) and
+  `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES` (256 MB). nginx as before
+  (`client_max_body_size 300m` passes 256 MB).
+- The router's rules, only for the machines that take part (Admin >
+  Members > Roles, then apply; docs/files.md, "On a server"): an ask line
+  `asterism/console/transfer/inbox/call/${node}` for a machine that sends
+  to the console, and `asterism/${node}/transfer` with
+  `asterism/${node}/transfer/**` (rw) for a machine the console sends to.
+  A machine also lets the console in with `[file] from = ["console"]` in
+  its `/home/asterism/receive.toml`.
+- Going back to 0.3.12 is restoring the backup the update made (it prints
+  the command); the transfer record is lost with it.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
