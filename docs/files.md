@@ -101,9 +101,10 @@ what each of its machines holds.
 | The bridge (`Bridge::Receivers`) | calls `<node>/transfer/inbox` `policy_set({"file" => [...], "checkpoint" => [...], "at" => <when the lists changed>})` as the console's node: when the lists changed, when the machine's transfer app appears (again), every 10 minutes while it stays, and 30 s after a failure. What each node got (or why not) is kept on the row (`receivers_delivered`) and said once in the bridge's log |
 | The machine (Family mruby's transfer app) | takes the list from the console's node only (`console` in its `/home/asterism/config.toml`, `console` by default), and only over a connection with its certificate (a `tls/` router: the router's ACL binds the caller's node ID to its certificate there). It writes the list below a mark in `/home/asterism/receive.toml` (`[managed]` `by`, `at`; `[managed.file]` and `[managed.checkpoint]` `from`), only when it changed (the flash is not written for the same list), leaves the part above the mark (written by hand) as it is, and takes a kind from the nodes of both parts. While the console cannot be reached it goes on with the last list it wrote (no time limit). The shell's `asend -l` shows both parts |
 
-A machine with the console's credentials (a `.tar` in `/home/asterism/`)
-starts its transfer app at boot, receive.toml or not, so that the list can
-reach it.
+A machine starts its transfer app at boot only when it has a
+`/home/asterism/receive.toml` (an empty one is enough): put one on the
+machines that should take the console's list (on an ESP32 the transfer
+app holds one more TLS connection, so it is not started on every member).
 
 **Connections without certificates.** On a connection without
 certificates (a home router's `tcp/`, peer to peer, the browser build's
