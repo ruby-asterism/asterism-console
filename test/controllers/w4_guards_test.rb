@@ -178,7 +178,8 @@ class W4GuardsTest < ActionDispatch::IntegrationTest
     sign_in_as(users(:admin))
     get calls_path
     assert_select ".nav-group.watch .nav-label", "Watch"
-    assert_select ".nav-group.watch a", 5
+    assert_select ".nav-group.watch a", 6
+    assert_select ".nav-group.watch a[href=?]", "/files", "Files"
     assert_select ".nav-group.play a[href=?]", "/passes"
     assert_select ".nav-group.admin a", 5
     assert_select ".nav-group.admin a[href=?]", "/admin/members/peers"

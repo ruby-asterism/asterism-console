@@ -44,4 +44,22 @@ class CallPermissionsControllerTest < ActionDispatch::IntegrationTest
     get covering_permissions_path(path: "linux/demo/screen"), as: :json
     assert_equal [], response.parsed_body
   end
+
+  test "an admin allows sending files to nodes (kind file)" do
+    sign_in_as(users(:admin))
+    get call_permissions_path
+    assert_select "form#allow-files"
+    assert_difference("CallPermission.count", 1) do
+      post call_permissions_path, params: { call_permission: { kind: "file", node: "fmruby-*", note: "boards" } }
+    end
+    row = CallPermission.last
+    assert_equal [ "file", "fmruby-*", "transfer", "inbox", "*" ], [ row.kind, row.node, row.app, row.object, row.method_name ]
+    assert_equal "Allowed sending files to fmruby-*.", flash[:notice]
+    get call_permissions_path
+    assert_select "td", "Send files"
+    assert_no_difference("CallPermission.count") do
+      post call_permissions_path, params: { call_permission: { kind: "file", node: "a/b" } }
+    end
+    assert_response :unprocessable_content
+  end
 end

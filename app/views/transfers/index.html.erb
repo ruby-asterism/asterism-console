@@ -1,0 +1,85 @@
+<% content_for(:title, "Files - Asterism Console") %>
+<section class="card">
+  <h2>Send a file to a machine</h2>
+  <p class="hint">The bridge (node <code><%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %></code>) sends it in pieces to the
+    machine's <code>transfer/inbox</code>, going on from where the machine stands after a lost piece or connection, and the
+    machine checks the whole by its SHA-256. It lands in the machine's <code>/home/inbox/</code> (or <code>/sd/inbox/</code>).
+    The machine takes it only when its <code>/home/asterism/receive.toml</code> lets this console in
+    (<code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>). At most
+    <%= FileTransfer::MAX_UPLOAD / FileTransfer::MB %> MB.</p>
+  <% unless @any_file_rule %>
+    <p class="hint">No node may be sent files yet: an admin allows them under Admin &gt; Call permissions ("Allow sending files").</p>
+  <% end %>
+  <%= form_with url: transfers_path, scope: :transfer, multipart: true, class: "stack", id: "send-file" do |f| %>
+    <label>File <%= f.file_field :file, required: true %></label>
+    <div class="grid-form">
+      <label>To the node <%= f.text_field :node, required: true, list: "file-nodes", placeholder: "fmruby-abcdef", autocomplete: "off" %></label>
+      <label>As <%= f.text_field :name, placeholder: "the file's own name", maxlength: 48 %></label>
+    </div>
+    <datalist id="file-nodes"><% @nodes.each do |n| %><option value="<%= n %>"></option><% end %></datalist>
+    <% if @nodes.any? %><p class="hint">On the network now and allowed: <%= safe_join(@nodes.map { tag.code(_1) }, ", ") %></p><% end %>
+    <label class="check"><%= f.check_box :overwrite, {}, "1", "0" %> Overwrite a file of the same name
+      (otherwise it goes beside it as <code>name(1)</code>)</label>
+    <label class="check"><%= f.check_box :sd, {}, "1", "0" %> To the SD card (<code>/sd/inbox/</code>; a machine without a card refuses)</label>
+    <div><%= f.submit "Send" %></div>
+  <% end %>
+</section>
+
+<% if current_user.admin? %>
+  <section class="card" id="received">
+    <h2>Received</h2>
+    <p class="hint">What the machines sent here (<code>asend <%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %> &lt;file&gt;</code> on a
+      machine). Taken from:
+      <% if FileTransfer.receive_from.empty? %>nobody (<code>ASTERISM_TRANSFER_FROM</code> is not set)<% else %><%= safe_join(FileTransfer.receive_from.map { tag.code(_1) }, ", ") %><% end %>.
+      <%= number_to_human_size(FileTransfer.received_bytes) %> of at most <%= number_to_human_size(FileTransfer::INBOX_MAX) %>.</p>
+    <% if @received.empty? %>
+      <p class="hint">None.</p>
+    <% else %>
+      <table class="list">
+        <thead><tr><th>Name</th><th>Size</th><th>Arrived</th><th></th></tr></thead>
+        <tbody>
+          <% @received.each do |r| %>
+            <tr>
+              <td><%= link_to r["name"], received_transfers_path(name: r["name"]) %></td>
+              <td><%= number_to_human_size(r["size"]) %></td>
+              <td class="hint"><%= l(r["mtime"].in_time_zone, format: :short) %></td>
+              <td><%= button_to "Delete", received_transfers_path(name: r["name"]), method: :delete, class: "small", form_class: "inline",
+                                data: { turbo_confirm: "Delete #{r['name']}?" } %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    <% end %>
+  </section>
+<% end %>
+
+<section class="card" data-controller="transfers" data-transfers-active-value="<%= @rows.any?(&:active?) %>">
+  <h2>Record</h2>
+  <p class="hint"><%= current_user.admin? ? "Every file sent and received" : "The files you sent" %>, newest first.</p>
+  <% if @rows.empty? %>
+    <p class="hint">None yet.</p>
+  <% else %>
+    <table class="list" id="transfer-records">
+      <thead><tr><th>When</th><th></th><th>Node</th><th>File</th><th>Size</th><th>SHA-256</th><th>Result</th><th>Who</th><th></th></tr></thead>
+      <tbody>
+        <% @rows.each do |t| %>
+          <tr data-transfer-id="<%= t.id %>" class="status-<%= t.status == "done" ? "ok" : t.status %>">
+            <td class="hint nowrap"><%= l(t.created_at, format: :short) %></td>
+            <td class="nowrap"><%= t.sending? ? "sent to" : "from" %></td>
+            <td class="nowrap"><code><%= t.node %></code></td>
+            <td><%= t.name %><% if t.placed_name.present? && t.placed_name != t.name %> <span class="hint">as <%= t.placed_name %></span><% end %>
+              <% if t.overwrite %> <span class="hint">overwrite</span><% end %><% if t.sd %> <span class="hint">SD</span><% end %></td>
+            <td class="nowrap"><span data-field="done"><%= t.active? ? "#{number_to_human_size(t.done_bytes)} of " : "" %></span><%= number_to_human_size(t.size) %></td>
+            <td><code title="<%= t.sha256 %>"><%= t.sha256.to_s[0, 12] %></code></td>
+            <td><span class="badge" data-field="status"><%= t.status %></span>
+              <span class="hint" data-field="reason"><%= t.reason %></span>
+              <% if t.took_ms && t.status == "done" %><span class="hint"><%= format("%.1f s", t.took_ms / 1000.0) %></span><% end %></td>
+            <td class="hint"><%= t.user&.email_address %></td>
+            <td><% if t.sending? && %w[pending sending].include?(t.status) && t.owned_by?(current_user) %>
+              <%= button_to "Cancel", cancel_transfer_path(t), class: "small", form_class: "inline" %><% end %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</section>

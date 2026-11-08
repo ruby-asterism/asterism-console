@@ -67,6 +67,20 @@ calls the methods that Asterism nodes expose.
   cursor and plots; the graph as it was at any time; playback in the page
   or, for admins, to the network (see [Recordings](#recordings)).
 
+- **Files** (`/files`, docs/files.md): send a file from the browser to a
+  machine's `/home/inbox/` (or its SD card), with the progress, Cancel,
+  and overwrite or `name(1)` beside a file of the same name; receive what
+  the machines send to the console (`asend console <file>` on a Family
+  mruby machine), listed and downloaded by admins; a record of both (who,
+  when, the file, its size and SHA-256, the node, the result). The bridge
+  carries them with the asterism gem's `Asterism::Transfer` (pieces resent
+  from the receiver's position, the whole checked by SHA-256) as the node
+  `console`, and answers at `console/transfer/inbox`. Only the nodes an
+  admin allowed ("Allow sending files" in the call permissions) can be
+  sent to, and the machine must let the console in (its `receive.toml`,
+  `[file] from = ["console"]`); only the nodes `ASTERISM_TRANSFER_FROM`
+  names can send to it.
+
 Nodes appear and disappear without reloading, and what is on the screen
 stays where it is: only new nodes are placed, next to their neighbours
 ("Lay out again" lays out everything; fcose, compound-aware). Click an
@@ -120,6 +134,9 @@ bin/bridge                  # in another terminal: the one process on the networ
 | `ASTERISM_CONSOLE_NODE` | `console` | the bridge's Asterism node ID (app `console`) |
 | `ASTERISM_RATES_MAX_BPS` | `8000000` | measuring all topics pauses above this many bytes per second (see Topic rates) |
 | `ASTERISM_GATEWAY_IPS` | | addresses to take as gateways (comma separated), when the bridge cannot see them (docs/v2_4.md) |
+| `ASTERISM_TRANSFER_FROM` | | the nodes that may send files to the console (comma separated, `*` patterns; empty: nobody; docs/files.md) |
+| `ASTERISM_TRANSFER_INBOX_MAX_BYTES`, `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES` | 1 GB, 256 MB | the received files in all; one upload to send |
+| `ASTERISM_TRANSFERS_DIR` | `storage/transfers` | the outbox, the inbox and the notes of a file coming in |
 | `CONSOLE_BIND` | `127.0.0.1` | the address the server listens on (see Security) |
 | `CONSOLE_EXTRA_HOST` | | one more host name the development server answers to (e.g. `host.docker.internal` for a browser in a container) |
 | `ASTERISM_DIR`, `ASTERISM_ZENOH_DIR` | `../asterism`, `../asterism-zenoh` | the gem checkouts |

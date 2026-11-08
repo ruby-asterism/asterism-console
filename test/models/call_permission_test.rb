@@ -41,4 +41,20 @@ class CallPermissionTest < ActiveSupport::TestCase
     refute CallPermission.allows?("aXb/x/y", "z")
     assert CallPermission.allows?("a.b/x/y", "z")
   end
+
+  test "a row of kind file lets files go to its nodes and allows no call" do
+    row = CallPermission.create!(kind: "file", node: "fmruby-*")
+    assert_equal %w[transfer inbox *], [ row.app, row.object, row.method_name ]
+    assert CallPermission.allows_file?("fmruby-abcdef")
+    refute CallPermission.allows_file?("linux-1")
+    # not a call permission, not even for the inbox it sends to
+    refute CallPermission.allows?("fmruby-abcdef/transfer/inbox", "begin")
+    refute CallPermission.allows?("fmruby-abcdef/transfer/inbox")
+    assert_empty CallPermission.for_path("fmruby-abcdef/transfer/inbox")
+    # and a call row lets no file go
+    allow("*", "*", "*", "*")
+    refute CallPermission.allows_file?("linux-1")
+    assert CallPermission.allows?("linux-1/transfer/inbox", "begin")
+    refute CallPermission.new(kind: "other", node: "*", app: "*", object: "*", method_name: "x").valid?
+  end
 end

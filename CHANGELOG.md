@@ -10,6 +10,33 @@ the command that goes back).
 
 ## Unreleased
 
+What an update needs: the asterism gem with `Asterism::Transfer::FileInbox`
+and `Endpoint` (after 0.11.0). Two migrations (going back needs the
+update's backup). `.env`: `ASTERISM_TRANSFER_FROM` to let machines send to
+the console (optional). The router's rules: a role for the machines that
+send to the console or receive from it (docs/files.md, "On a server").
+
+- Files (`/files`, docs/files.md): send a file from the browser to a
+  machine (`<node>/transfer/inbox`, its `/home/inbox/` or `/sd/inbox/`;
+  overwrite or `name(1)` beside; progress and Cancel), receive the files
+  the machines send to `console/transfer/inbox` (`storage/transfers/inbox`,
+  admins list, download and delete them), and a record of both
+  (`file_transfers`: who, when, the file, size, SHA-256, the node, the
+  result). The bridge carries them with `Asterism::Transfer` (pieces
+  resent from the receiver's position, the whole checked by SHA-256).
+- The call permissions have a kind: "call" (every existing row) or "file"
+  ("Allow sending files": the nodes the page may send files to). A file
+  row allows no call and a call row lets no file go. Migration: the column
+  `kind`, default "call".
+- Settings: `ASTERISM_TRANSFER_FROM` (who may send to the console; unset:
+  nobody), `ASTERISM_TRANSFER_INBOX_MAX_BYTES` (1 GB),
+  `ASTERISM_TRANSFER_UPLOAD_MAX_BYTES` (256 MB), `ASTERISM_TRANSFERS_DIR`,
+  `ASTERISM_TRANSFERS=0` (the bridge leaves files out).
+- Tests: the rows, the page (who sees and cancels what, the received files
+  for admins, refused names and nodes), the bridge's side over a stand-in
+  connection (receive, refuse, send, overwrite, the permission removed on
+  the way, cancel), the call permissions' kinds.
+
 ## 0.3.12
 
 What an update needs: `./update.sh 0.3.12`. One migration (going back

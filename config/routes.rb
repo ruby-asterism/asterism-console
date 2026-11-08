@@ -39,6 +39,12 @@ Rails.application.routes.draw do
     end
     post :upload, on: :collection
   end
+  # Files (T4, docs/files.md): send to a machine, the files received, the record.
+  resources :transfers, path: "files", only: %i[index create show] do
+    post :cancel, on: :member
+    get :received, on: :collection
+    delete :received, on: :collection, action: :destroy_received
+  end
   resources :playbacks, only: %i[create show] do
     post :stop, on: :member
   end

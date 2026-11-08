@@ -31,6 +31,10 @@
 #     Bridge::Profiles) on a worker thread of its own, follows the notices
 #     put on asterism/*/@profile, keeps the icons (NodeIcon), and tells its
 #     own profile (kind console, app/assets/images/asterism_console.png);
+#   - sends files to the machines and receives files from them (T4,
+#     Bridge::Transfers, FileTransfer rows): answers at
+#     <console>/transfer/inbox on the reading session, sends the pending
+#     rows on threads of their own;
 #   - asks each Asterism application that appears for its status (0.3.4,
 #     Bridge::Statuses: asterism/<node>/<app>/@status) on the same worker
 #     and follows the puts on asterism/*/*/@status (the details of an app
@@ -218,6 +222,7 @@ module Bridge
       @profile_sub = @z.subscribe("asterism/*/@profile") { |sample| profile_notice(sample) }
       @status_sub = @z.subscribe(STATUSES) { |sample| status_notice(sample) }
       @profile_worker = start_profile_worker
+      start_transfers
       @z.start
       @self_zids = [ @z.zid ]
       say "bridge: zid #{@z.zid}, routers #{@z.router_zids.join(' ')}"
@@ -312,6 +317,7 @@ module Bridge
           sync_logs
           sync_recordings
           sync_playbacks
+          @transfers&.sync
           expire_requests
           next_sync = now + SYNC_EVERY
         end
@@ -1050,6 +1056,22 @@ module Bridge
       end
     end
 
+    # ------------------------------------------------------------------ files
+
+    # Files (T4): the inbox at <console>/transfer/inbox and the senders.
+    # ASTERISM_TRANSFERS=0 leaves them out.
+    def start_transfers
+      return if ENV["ASTERISM_TRANSFERS"] == "0"
+      @transfers = Transfers.new(conn: @z, node: @node_id, say: method(:say)).start
+    rescue SystemCallError, ArgumentError => e
+      say "bridge: files: not started: #{e.class}: #{e.message}"
+      @transfers = nil
+    rescue LoadError, NameError => e
+      # an asterism gem before Asterism::Transfer::FileInbox (0.11.0 and older)
+      say "bridge: files: not started: this asterism gem has no Asterism::Transfer::FileInbox (#{e.message})"
+      @transfers = nil
+    end
+
     # -------------------------------------------------------------- playbacks
 
     # Starts a pending playback (one at a time), follows the running one,
@@ -1131,6 +1153,8 @@ module Bridge
       @profile_sub = nil
       stop_recordings("the bridge stopped (or lost its router)")
       stop_players
+      @transfers&.close
+      @transfers = nil
       @workers.each { _1.join(3) }
       @workers.clear
       @subs.each_value { _1[1].close rescue nil }

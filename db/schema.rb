@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_24_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_08_100100) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -75,7 +75,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_100000) do
     t.integer "created_by_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "kind", default: "call", null: false
     t.index ["created_by_id"], name: "index_call_permissions_on_created_by_id"
+  end
+
+  create_table "file_transfers", force: :cascade do |t|
+    t.string "direction", null: false
+    t.string "status", null: false
+    t.integer "user_id"
+    t.string "node", null: false
+    t.string "name", null: false
+    t.string "placed_name"
+    t.bigint "size", default: 0, null: false
+    t.string "sha256"
+    t.bigint "done_bytes", default: 0, null: false
+    t.boolean "overwrite", default: false, null: false
+    t.boolean "sd", default: false, null: false
+    t.string "stored"
+    t.text "reason"
+    t.integer "piece"
+    t.integer "window"
+    t.float "took_ms"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["direction", "status"], name: "index_file_transfers_on_direction_and_status"
+    t.index ["user_id"], name: "index_file_transfers_on_user_id"
   end
 
   create_table "graph_states", force: :cascade do |t|
@@ -356,6 +382,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_24_100000) do
   add_foreign_key "browser_passes", "users"
   add_foreign_key "browser_passes", "users", column: "revoked_by_id"
   add_foreign_key "call_permissions", "users", column: "created_by_id"
+  add_foreign_key "file_transfers", "users", on_delete: :nullify
   add_foreign_key "invitations", "users"
   add_foreign_key "invitations", "users", column: "created_by_id"
   add_foreign_key "machine_names", "users", column: "created_by_id", on_delete: :nullify

@@ -59,6 +59,9 @@ group :test do
 end
 
 # Asterism 0.8.0 (wire protocol 1, X1; reconnects across a router restart, G1.5b; @status, the methods' texts in the meta): the local checkouts next to this repository.
+# Files (docs/files.md) need Asterism::Transfer::FileInbox and Endpoint
+# (the gem after 0.11.0): with ASTERISM_GEMS=rubygems, a release of the gem
+# that has them, and its version below.
 # ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
 # rubygems.org instead, replace these two lines with
 #   gem "asterism", "~> 0.8", require: false
