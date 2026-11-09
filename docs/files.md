@@ -69,9 +69,11 @@ receive (the console's side too, before the apply).
   permissions have nothing to do with files: a call row (even `*/*/*` `*`)
   lets no file go.
 - **Sending, the machine's key**: its `/home/asterism/receive.toml` must
-  let the console in, `[file] from = ["console"]` (T2). Without it the
-  machine refuses at begin and the row says so (`fmruby-xxxxxx takes no
-  file from console (file from in /home/asterism/receive.toml)`).
+  have receiving on (`enabled = true`, T7) and let the console in,
+  `[file] from = ["console"]` (T2). Without them the machine refuses at
+  begin and the row says so (`fmruby-xxxxxx takes no file from console
+  (file from in /home/asterism/receive.toml)`, or `fmruby-xxxxxx does not
+  receive (receiving is off there: areceive on)`).
 - **Receiving**: the bridge reads the marks again every 2 seconds
   (`Bridge::Transfers::FROM_EVERY`), so a mark set or cleared takes effect
   without restarting it; a node not marked is refused at begin
@@ -101,10 +103,22 @@ what each of its machines holds.
 | The bridge (`Bridge::Receivers`) | calls `<node>/transfer/inbox` `policy_set({"file" => [...], "checkpoint" => [...], "at" => <when the lists changed>})` as the console's node: when the lists changed, when the machine's transfer app appears (again), every 10 minutes while it stays, and 30 s after a failure. What each node got (or why not) is kept on the row (`receivers_delivered`) and said once in the bridge's log |
 | The machine (Family mruby's transfer app) | takes the list from the console's node only (`console` in its `/home/asterism/config.toml`, `console` by default), and only over a connection with its certificate (a `tls/` router: the router's ACL binds the caller's node ID to its certificate there). It writes the list below a mark in `/home/asterism/receive.toml` (`[managed]` `by`, `at`; `[managed.file]` and `[managed.checkpoint]` `from`), only when it changed (the flash is not written for the same list), leaves the part above the mark (written by hand) as it is, and takes a kind from the nodes of both parts. While the console cannot be reached it goes on with the last list it wrote (no time limit). The shell's `asend -l` shows both parts |
 
-A machine starts its transfer app at boot only when it has a
-`/home/asterism/receive.toml` (an empty one is enough): put one on the
-machines that should take the console's list (on an ESP32 the transfer
-app holds one more TLS connection, so it is not started on every member).
+**Receiving on the machine (T7).** A Family mruby machine receives only
+while its owner has turned receiving on: `enabled = true` in its
+receive.toml (the machine's own `/home/asterism/receive.toml`, else the
+copy the system ships, `/etc/asterism/receive.toml`, which is off). The
+switch is the Receiving app or the shell's `areceive on` / `areceive off`;
+a receive.toml without the line is off, also one written before (add the
+line, or `areceive on`). It starts its transfer app at boot only while
+receiving is on (on an ESP32 the transfer app holds one more TLS
+connection, so it is not started on every member). The console's list
+never turns it on: the list is the console's key, the switch the owner's.
+On the row's page, "The list on its machines" says "not sent yet: its
+transfer app is not on the network (receiving may be off on that
+machine ...)" for a machine with receiving off (its transfer app is not
+running), and "..., but receiving is off there" when a machine with
+receiving off took the list anyway (its transfer app was running to send
+something).
 
 **Connections without certificates.** On a connection without
 certificates (a home router's `tcp/`, peer to peer, the browser build's

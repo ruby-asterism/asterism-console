@@ -8,6 +8,19 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: nothing (no migration, no change to nginx or `.env`).
+
+- A member machine with receiving off (Family mruby T7: `enabled` in its
+  receive.toml, the Receiving app or the shell's `areceive`) shows on the
+  row's page, "The list on its machines": a machine whose transfer app is
+  not on the network says "not sent yet: its transfer app is not on the
+  network (receiving may be off on that machine; ...)", and one that took
+  the list while receiving is off says "..., but receiving is off there"
+  (the machine's answer to `policy_set` carries `receiving`; the bridge
+  keeps it on the row). docs/files.md, "Receiving on the machine".
+
 ## 0.3.16
 
 What an update needs: one migration (four columns on the members' rows;

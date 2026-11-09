@@ -75,9 +75,11 @@ module RelayHelper
     lines = peer.speaks_for.map do |node|
       d = got[node]
       text = if d.nil?
-        "not sent yet (it is sent when the machine is on the network)"
+        "not sent yet: its transfer app is not on the network (receiving may be off on that machine; " \
+          "it is sent when the app appears)"
       elsif d["digest"] == digest
-        "has this list (since #{when_text(Time.iso8601(d['at']))})"
+        "has this list (since #{when_text(Time.iso8601(d['at']))})" +
+          (d["receiving"] == false ? ", but receiving is off there: it takes nothing until it is turned on" : "")
       elsif d["error"].present?
         "not delivered: #{d['error']}" + (d["at"] ? " (has an older list)" : "")
       else

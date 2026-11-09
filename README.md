@@ -78,7 +78,8 @@ calls the methods that Asterism nodes expose.
   `console`, and answers at `console/transfer/inbox`. Who takes part is two
   marks of each row in Admin > Members: "Receives files from the console"
   (the page can send to its nodes; the machine must also let the console
-  in, its `receive.toml`, `[file] from = ["console"]`) and "May send files
+  in, its `receive.toml`, `[file] from = ["console"]`, with receiving on,
+  `enabled = true`) and "May send files
   to the console"; the router's lines for both come from the marks on
   apply.
 

@@ -16,7 +16,10 @@ require "set"
 # into the row (receivers_delivered) and says a change in the log.
 #
 # A machine refuses the list over a connection without certificates (its
-# router is not tls/): the row then shows the machine's reason.
+# router is not tls/): the row then shows the machine's reason. A machine
+# whose receiving is off (enabled in its receive.toml) keeps the list but
+# takes nothing: it says so in its answer ("receiving" => false), and its
+# transfer app is usually not running at all (then the list waits).
 module Bridge
   class Receivers
     AGAIN_EVERY = 600
@@ -116,7 +119,11 @@ module Bridge
       before = all[node] || {}
       now = Time.current.utc.iso8601
       all[node] = if ok
-        { "digest" => digest, "at" => now }
+        got = { "digest" => digest, "at" => now }
+        # a Family mruby machine says whether it receives at all (its
+        # receive.toml's enabled, T7); the list is kept there either way
+        got["receiving"] = answer["receiving"] if answer.is_a?(Hash) && [ true, false ].include?(answer["receiving"])
+        got
       else
         before.except("error", "tried_at").merge("error" => error, "tried_at" => now)
       end

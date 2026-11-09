@@ -76,7 +76,7 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_select "textarea#receive_files_from_more", "linux-*"
     get relay_peer_path(peer)
     assert_select "#receivers code", "linux-*"
-    assert_select "#receivers-delivered", /not sent yet/
+    assert_select "#receivers-delivered", /not sent yet: its transfer app is not on the network \(receiving may be off/
     get relay_peers_path
     assert_select "td", "takes from members"
     patch relay_peer_path(peer), params: { relay_peer: { receive_files_from_more: "bad name" } }

@@ -1062,7 +1062,8 @@ From 0.3.12 to 0.3.13 (Files: send to the machines, receive from them, a record)
   to the console, and `asterism/${node}/transfer` with
   `asterism/${node}/transfer/**` (rw) for a machine the console sends to.
   A machine also lets the console in with `[file] from = ["console"]` in
-  its `/home/asterism/receive.toml`.
+  its `/home/asterism/receive.toml` (and, from the Family mruby release
+  after 3.0.0, `enabled = true` there: receiving is off without it).
 - Going back to 0.3.12 is restoring the backup the update made (it prints
   the command); the transfer record is lost with it.
 

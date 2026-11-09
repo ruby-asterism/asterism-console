@@ -9,11 +9,14 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
     RelayPeer.delete_all
     @calls = []
     @fail = nil
+    @receiving = nil
     @said = []
     @r = Bridge::Receivers.new(say: ->(t) { @said << t }, call: lambda { |node, payload|
       @calls << [ node, payload ]
       raise Asterism::RemoteError.new("ArgumentError", @fail, "raised") if @fail
-      { "ok" => true, "written" => true, "at" => payload["at"] }
+      answer = { "ok" => true, "written" => true, "at" => payload["at"] }
+      answer["receiving"] = @receiving unless @receiving.nil?
+      answer
     }).start
   end
 
@@ -72,5 +75,21 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
     RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client", receive_files_from_more: "x", enabled: false)
     sync(%w[fmruby-aaaaaa/transfer], 1.0)
     assert_empty @calls
+  end
+
+  test "a machine whose receiving is off (T7): the list is kept, the row says it is off" do
+    p = RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client", receive_files_from_more: "fmruby-bbbbbb")
+    @receiving = false
+    sync(%w[fmruby-aaaaaa/transfer], 1.0)
+    d = p.reload.delivered["fmruby-aaaaaa"]
+    assert_equal p.receivers_digest, d["digest"]
+    assert_equal false, d["receiving"]
+    helper = Object.new.extend(RelayHelper, ActionView::Helpers::TagHelper, ActionView::Helpers::OutputSafetyHelper)
+    def helper.when_text(_t) = "now"
+    assert_match(/receiving is off there/, helper.receivers_delivery(p).to_s)
+    @receiving = true
+    sync(%w[fmruby-aaaaaa/transfer], 1.0 + Bridge::Receivers::AGAIN_EVERY)
+    assert_equal true, p.reload.delivered["fmruby-aaaaaa"]["receiving"]
+    assert_no_match(/receiving is off/, helper.receivers_delivery(p).to_s)
   end
 end
