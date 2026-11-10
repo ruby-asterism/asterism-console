@@ -10,8 +10,8 @@
 <section class="card" id="handle">
   <h2>Handle</h2>
   <p>A short name for you on the network: a browser page you open from the console joins it as
-    <code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>, which every node sees (a second page at the same time
-    adds <code>_2</code> and so on). Lower case letters, digits and single hyphens, <%= User::HANDLE_MIN %> to
+    <code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>, which every node sees (a page you open later takes the name
+    over from one open before it). Lower case letters, digits and single hyphens, <%= User::HANDLE_MIN %> to
     <%= User::HANDLE_MAX %> characters, starting with a letter; nobody else may have it.</p>
   <% if @user.handle.blank? %>
     <p><strong>You have no handle yet.</strong> Choose one to launch Web Studio.</p>
@@ -61,7 +61,33 @@
       <%= f.text_field :code, placeholder: "123456", required: true, inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6, autocomplete: "one-time-code", "aria-label": "Code" %>
       <%= f.submit "Confirm" %>
     <% end %>
-  <% else %>
+  <% end %>
+  <% if @user.otp_enabled? %>
+    <h3 id="browsers">Browsers that skip the code</h3>
+    <% if @browsers.empty? %>
+      <p class="hint">None. On the code page, "Remember this browser for <%= (RememberedBrowser::LIFETIME / 1.day).round %> days"
+        lets a browser sign in with the password alone until then.</p>
+    <% else %>
+      <p class="hint">These sign in with the password alone until the date shown. A new password, or turning two-factor
+        sign-in off or on again, forgets them all.</p>
+      <table class="list">
+        <thead><tr><th>Remembered</th><th>Until</th><th>Last used</th><th>Browser</th><th></th></tr></thead>
+        <tbody>
+          <% @browsers.each do |b| %>
+            <tr>
+              <td><%= l(b.created_at, format: :short) %><% if b == @this_browser %> <span class="badge ok">this browser</span><% end %></td>
+              <td><%= l(b.expires_at, format: :short) %></td>
+              <td><%= b.last_used_at ? l(b.last_used_at, format: :short) : "not yet" %></td>
+              <td><code class="wrap"><%= b.user_agent.presence || "?" %></code></td>
+              <td><%= button_to "Forget", forget_browser_account_path(b), method: :delete %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+      <%= button_to "Forget them all", forget_browsers_account_path, method: :delete %>
+    <% end %>
+  <% end %>
+  <% if !@user.otp_enabled? && @user.otp_secret.blank? %>
     <p>Off. Turn it on to ask for a code from an authenticator app after the password.</p>
     <%= button_to "Turn on", start_otp_account_path %>
   <% end %>

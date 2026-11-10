@@ -6,9 +6,9 @@
      (<code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>), made on this server: the browser never has it.
      After an apply, the door connects the user's own page (the one the console names after the handle) with it, so the
      cloud router sees that page as a subject of its own: it writes and calls as its own name only, and may send and
-     receive files with the members and browsers chosen below. A second page of the same user, a page opened before the
-     apply and a page without a pass from this console go on through the shared connection of every browser, where the
-     router cannot tell them apart and no file goes.</p>
+     receive files with the members and browsers chosen below. A page the user opens later takes the name over: the earlier
+     page goes on through the shared connection of every browser, as does a page opened before the apply and a page without
+     a pass from this console; there the router cannot tell them apart and no file goes.</p>
   <% if @users.empty? %>
     <p class="hint">No user has a handle yet.</p>
   <% else %>

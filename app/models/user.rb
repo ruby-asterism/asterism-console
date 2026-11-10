@@ -20,6 +20,9 @@
 # TOTP (a second factor) is optional per user: the user turns it on from
 # the account page (the secret is shown once, to type into an authenticator
 # app) and confirms it with a code. A code is accepted once (otp_last_step).
+# A browser may skip the code for 30 days (RememberedBrowser, T8c); a new
+# password or any change to TOTP (a new secret, turned on or off) forgets
+# every such browser.
 class User < ApplicationRecord
   OTP_ISSUER = "Asterism Console".freeze
   # Codes one step (30 s) old or ahead are still taken (clock drift).
@@ -33,6 +36,7 @@ class User < ApplicationRecord
 
   has_secure_password
   has_many :sessions, dependent: :destroy
+  has_many :remembered_browsers, dependent: :delete_all
   has_many :bridge_requests, dependent: :nullify
   has_many :browser_passes, dependent: :destroy
   has_many :revoked_passes, class_name: "BrowserPass", foreign_key: :revoked_by_id, dependent: :nullify
@@ -54,6 +58,8 @@ class User < ApplicationRecord
 
   before_update :release_old_handle, if: -> { will_save_change_to_handle? && handle_in_database.present? }
   before_destroy { ReleasedHandle.release!(handle, id) if handle.present? }
+  after_update :forget_browsers, if: -> { saved_change_to_password_digest? || saved_change_to_otp_secret? ||
+                                          saved_change_to_otp_enabled_at? }
   # Its browser's certificate goes with it (T8).
   after_destroy_commit { Relay::BrowserCerts.forget!(Relay::BrowserNode.base(self)) if handle.present? }
 
@@ -105,6 +111,11 @@ class User < ApplicationRecord
 
   def disable_otp!
     update!(otp_secret: nil, otp_enabled_at: nil, otp_last_step: nil)
+  end
+
+  private def forget_browsers
+    n = remembered_browsers.delete_all
+    Rails.logger.info("account: #{log_name}: forgot #{n} remembered browser(s) (password or TOTP changed)") if n.positive?
   end
 
   private def handle_not_held

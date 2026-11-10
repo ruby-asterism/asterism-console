@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_200000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -296,6 +296,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_100000) do
     t.index ["handle"], name: "index_released_handles_on_handle"
   end
 
+  create_table "remembered_browsers", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.string "token_digest", null: false
+    t.string "user_agent"
+    t.string "created_ip"
+    t.datetime "expires_at", null: false
+    t.datetime "last_used_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["token_digest"], name: "index_remembered_browsers_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_remembered_browsers_on_user_id"
+  end
+
   create_table "room_invites", force: :cascade do |t|
     t.string "name", null: false
     t.string "token_digest", null: false
@@ -440,6 +453,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_100000) do
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "relay_peer_roles", "relay_peers"
   add_foreign_key "relay_peer_roles", "relay_roles"
+  add_foreign_key "remembered_browsers", "users"
   add_foreign_key "room_invites", "users", column: "created_by_id"
   add_foreign_key "room_invites", "users", column: "revoked_by_id"
   add_foreign_key "rooms", "room_invites"

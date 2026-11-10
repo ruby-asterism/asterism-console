@@ -9,6 +9,25 @@ class AccountsController < ApplicationController
     # While a secret waits for its confirming code the page shows it (and
     # its QR code): keep it out of the browser's and any proxy's cache.
     response.headers["Cache-Control"] = "no-store" if @user.otp_secret.present? && !@user.otp_enabled?
+    @browsers = @user.remembered_browsers.live.order(created_at: :desc)
+    @this_browser = RememberedBrowser.find_for(@user, cookies.signed[RememberedBrowser::COOKIE])
+  end
+
+  # The browsers that skip the TOTP code (T8c): one, or all of them.
+  def forget_browser
+    row = current_user.remembered_browsers.find_by(id: params[:id])
+    return redirect_to account_path(anchor: "browsers"), alert: "No such browser." unless row
+    row.destroy!
+    Rails.logger.info("account: #{current_user.log_name} forgot remembered browser #{row.id}")
+    redirect_to account_path(anchor: "browsers"), status: :see_other,
+                                                  notice: "Forgotten: that browser asks for the code again."
+  end
+
+  def forget_browsers
+    n = current_user.remembered_browsers.delete_all
+    Rails.logger.info("account: #{current_user.log_name} forgot #{n} remembered browser(s)")
+    redirect_to account_path(anchor: "browsers"), status: :see_other,
+                                                  notice: "Forgotten: every browser asks for the code again."
   end
 
   def update_password

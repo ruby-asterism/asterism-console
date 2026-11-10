@@ -4,6 +4,8 @@
   <%= form_with url: verify_otp_session_path, class: "stack" do |form| %>
     <label>The 6-digit code from your authenticator app
       <%= form.text_field :code, required: true, autofocus: true, autocomplete: "one-time-code", inputmode: "numeric", pattern: "[0-9]{6}", maxlength: 6 %></label>
+    <label class="check"><%= form.check_box :remember, {}, "1", "0" %>
+      Remember this browser for <%= (RememberedBrowser::LIFETIME / 1.day).round %> days (no code here; the password is still asked)</label>
     <%= form.submit "Continue" %>
   <% end %>
   <p><%= link_to "Start again", new_session_path %></p>

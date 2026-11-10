@@ -1,6 +1,10 @@
 # Signing in: email address and password, then (for a user who turned it
 # on) a TOTP code. The user waiting for a code is kept in the Rails session
 # for OTP_WAIT only; nothing is shown or callable before the code.
+#
+# The code page may remember the browser for 30 days (T8c,
+# RememberedBrowser): then a good password from that browser signs in
+# without the code. The password is asked every time, as before.
 class SessionsController < ApplicationController
   OTP_WAIT = 5.minutes
 
@@ -24,7 +28,11 @@ class SessionsController < ApplicationController
     unless user
       return redirect_to new_session_path, alert: "Try another email address or password."
     end
-    if user.otp_enabled?
+    if user.otp_enabled? && (kept = RememberedBrowser.find_for(user, cookies.signed[RememberedBrowser::COOKIE]))
+      kept.update_columns(last_used_at: Time.current)
+      Rails.logger.info("session: #{user.log_name} signed in without the code (remembered browser #{kept.id})")
+      sign_in(user)
+    elsif user.otp_enabled?
       session[:otp_user_id] = user.id
       session[:otp_until] = OTP_WAIT.from_now.to_i
       redirect_to otp_session_path
@@ -42,6 +50,7 @@ class SessionsController < ApplicationController
     user = pending_user
     return redirect_to new_session_path, alert: "Sign in again." unless user
     if user.verify_otp(params[:code])
+      remember_browser(user) if params[:remember] == "1"
       sign_in(user)
     else
       redirect_to otp_session_path, alert: "That code did not match."
@@ -58,6 +67,14 @@ class SessionsController < ApplicationController
   def pending_user
     return nil unless session[:otp_user_id] && session[:otp_until].to_i > Time.current.to_i
     User.find_by(id: session[:otp_user_id])
+  end
+
+  # The cookie and the row (only the SHA-256 of the cookie's value).
+  def remember_browser(user)
+    row, token = RememberedBrowser.remember!(user, user_agent: request.user_agent, ip: request.remote_ip)
+    cookies.signed[RememberedBrowser::COOKIE] = { value: token, httponly: true, same_site: :lax,
+                                                  expires: row.expires_at, secure: request.ssl? || Rails.env.production? }
+    Rails.logger.info("session: #{user.log_name} remembers browser #{row.id} until #{row.expires_at.utc.iso8601}")
   end
 
   def sign_in(user)

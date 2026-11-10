@@ -9,15 +9,14 @@ class Relay::BrowserNodeTest < ActiveSupport::TestCase
     assert_equal "wasm-pat", Relay::BrowserNode.base(user("pat"), prefix: "wasm-")
     assert_equal "web-pat", Relay::BrowserNode.base(user("pat"), prefix: "web-")
     assert_nil Relay::BrowserNode.base(user(nil))
-    assert_raises(ArgumentError) { Relay::BrowserNode.pick(user(nil), seen: Set.new, prefix: "wasm-") }
+    assert_raises(ArgumentError) { Relay::BrowserNode.pick(user(nil), prefix: "wasm-") }
   end
 
-  test "a second page gets the next free slot" do
+  # T8c: a page opened later takes the name over (the door), so the console
+  # never hands out _2 and the like.
+  test "every page gets the user's own name" do
     a = user("alice", 3)
-    pick = ->(seen) { Relay::BrowserNode.pick(a, seen: seen.to_set, prefix: "wasm-") }
-    assert_equal "wasm-alice", pick.([])
-    assert_equal "wasm-alice_2", pick.(%w[wasm-alice])
-    assert_equal "wasm-alice_3", pick.(%w[wasm-alice wasm-alice_2])
-    assert_match(/\Awasm-alice_[0-9a-f]{3}\z/, pick.([ "wasm-alice", *(2..9).map { "wasm-alice_#{_1}" } ]))
+    assert_equal "wasm-alice", Relay::BrowserNode.pick(a, prefix: "wasm-")
+    assert_equal "wasm-alice", Relay::BrowserNode.pick(a, prefix: "wasm-")
   end
 end

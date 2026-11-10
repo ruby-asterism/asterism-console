@@ -9,6 +9,8 @@ Rails.application.routes.draw do
     post :otp, action: :start_otp, as: :start_otp
     post :otp_confirm, action: :confirm_otp
     delete :otp, action: :disable_otp, as: :disable_otp
+    delete "browsers/:id", action: :forget_browser, as: :forget_browser
+    delete :browsers, action: :forget_browsers, as: :forget_browsers
   end
 
   root "console#show"

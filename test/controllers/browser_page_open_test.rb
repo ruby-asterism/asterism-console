@@ -70,7 +70,7 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       refute_includes io.string, token
       refute_includes io.string, "user@example.com", "the log names the user by id and handle"
       post open_browser_passes_path, params: { app: "" }
-      assert_includes page_url, "zenoh_node=wasm-pat_2", "the first page has not connected yet: the next name"
+      assert_includes page_url, "zenoh_node=wasm-pat&", "T8c: a page opened later takes the user's own name too"
       post open_browser_passes_path, params: { app: "/etc/passwd" }
       assert_response :unprocessable_content, "only the Studio apps"
       sign_out
@@ -122,9 +122,9 @@ class BrowserPageOpenTest < ActionDispatch::IntegrationTest
       assert_includes link, "&zenoh_node=wasm-pat&app="
       assert_select "code.node", "wasm-pat"
       assert_equal "wasm-pat", BrowserPass.sole.node
-      assert_select "code", "wasm-pat_2", "the pass waits to be used: the next one gets the next name"
+      assert_select "code", { text: "wasm-pat_2", count: 0 }, "T8c: no slots, the next page takes the name over"
       post open_browser_passes_path, params: { app: "" }
-      assert_includes page_url, "zenoh_node=wasm-pat_2&"
+      assert_includes page_url, "zenoh_node=wasm-pat&"
     end
   end
 

@@ -1176,6 +1176,22 @@ the router tells apart"):
 - Going back is restoring the backup the update made (it prints the
   command) and removing the lines from nginx (harmless if left).
 
+From 0.3.18 to the next version (T8c):
+
+- `./update.sh <version>`. One migration: a new table, `remembered_browsers`
+  (browsers that skip the TOTP code; the SHA-256 of the cookie only). No
+  change to nginx, `.env` or the roles.
+- Every page a user opens from the console is `wasm-<handle>` from now on;
+  one opened later takes the name and the certificate over from one open
+  before it, which goes on through the shared connection (its Network line
+  says it was taken over). The door's log says `pass N (opened later) takes
+  it over from pass M`. Links made before the update with a `_2` name go
+  through the shared connection, as before.
+- The code page has "Remember this browser for 30 days" (off by default);
+  the account page lists the browsers remembered and forgets them.
+- Going back is restoring the backup the update made (it prints the
+  command).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

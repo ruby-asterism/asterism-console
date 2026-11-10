@@ -160,9 +160,10 @@ name, `wasm-<handle>`) takes part like a member's machine:
 - **Receiving** needs the page's switch as on a machine (`enabled = true`:
   the Receiving app, or `areceive on` in its Shell), kept in the browser's
   storage with `/home`.
-- **The shared connection** (a second page, a page before the apply, an
-  older link) cannot send or receive: the router refuses it every transfer
-  key.
+- **The shared connection** (a page another page opened later has taken
+  the name over from, T8c; a page before the apply; an older link) cannot
+  send or receive: the router refuses it every transfer key. To send from a
+  tab, open it again from the console: the newest page has the name.
 - Not done: the T4b marks for browsers (the console's Files page sending to
   a browser, a browser's `asend console`).
 

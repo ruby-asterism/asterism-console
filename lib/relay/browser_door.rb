@@ -5,19 +5,24 @@
 # the console's key in the browsers' store, Relay::BrowserCerts.door_word,
 # so a header the browser sent itself is worth nothing):
 #
-#   node=wasm-alice; pass=12; notice=1; until=<Unix s>; mac=<HMAC-SHA256>
+#   node=wasm-alice; pass=12; opened=<Unix ms>; notice=1; until=<Unix s>; mac=<HMAC-SHA256>
 #
 # The page goes to zenohd's mutual-TLS port with the user's certificate
 # (browsers/wasm-alice.pem) when
 #
-# - the word is the console's and names a node (the user's own browser node:
-#   a second page of the same user, wasm-alice_2, or a pass for a handle
-#   given up names none),
+# - the word is the console's and names a node (the user's own browser node;
+#   an older link's wasm-alice_2 or a pass for a handle given up names none),
 # - the router's configuration lets the node in (browsers/browsers.json,
 #   written on apply) and its files are here, and
-# - no other page (another pass) is connected as that node now: a page's
-#   own sessions and reconnections come with its pass and take the node
-#   again.
+# - no page opened later (another pass, by the time the console saw it first:
+#   "opened") has the node (T8c). A page opened later takes the node over: the
+#   door closes the earlier page's connections with the certificate, and when
+#   that page connects again (zenoh-pico does by itself) it goes through the
+#   shared ws/ and is told so (taken_over in its notice). A page's own
+#   sessions and reconnections come with its pass and take the node again.
+#   The door remembers the latest page per node (not its connections only),
+#   so an earlier page that connects again while the later one is away does
+#   not take the name back.
 #
 # Otherwise it goes on to zenohd's ws/ as before (bin/ws_door's relay), the
 # shared subject of every browser without a certificate.
@@ -29,6 +34,7 @@
 #
 #   {"door": {"verified": true, "node": "wasm-alice"}}
 #   {"door": {"verified": false, "why": "..."}}
+#   {"door": {"verified": false, "why": "...", "taken_over": true}}  (T8c)
 #
 # An older page is sent no Text (it would take it for a batch).
 require "socket"
@@ -43,7 +49,13 @@ module Relay
     include WsFrames
 
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11".freeze
-    WORD = /\Anode=([A-Za-z0-9._-]{0,63}); pass=(\d{1,18}); notice=([01]); until=(\d{1,12}); mac=(\h{64})\z/
+    WORD = /\Anode=([A-Za-z0-9._-]{0,63}); pass=(\d{1,18}); opened=(\d{1,15}); notice=([01]); until=(\d{1,12}); mac=(\h{64})\z/
+    # The start of the reason an earlier page is given (its notice says
+    # taken_over, the page says so on its Network line).
+    TAKEN = "a page opened later from the console took over".freeze
+    # The close code the earlier page's WebSockets get (4000-4999: the
+    # application's; the page connects again as after any close).
+    TAKEN_CODE = 4409
     CHECK_SECONDS = 2.0
 
     # One page's connection with a certificate.
@@ -69,7 +81,7 @@ module Relay
       @max_message = max_message
       @log = log
       @lock = Mutex.new
-      @holders = {} # node => { pass:, n: }
+      @holders = {} # node => { pass:, opened:, conns: [] }: the latest page per node
       @contexts = {}
       @nodes = [ nil, [] ]
       @key = [ nil, nil ]
@@ -84,32 +96,38 @@ module Relay
       m = WORD.match(text) or return nil
       key = door_key or return nil
       signed = text.sub(/; mac=\h{64}\z/, "")
-      return nil unless OpenSSL.fixed_length_secure_compare(OpenSSL::HMAC.hexdigest("SHA256", key, signed), m[5])
-      { node: m[1], pass: m[2], notice: m[3] == "1", until: m[4].to_i }
+      return nil unless OpenSSL.fixed_length_secure_compare(OpenSSL::HMAC.hexdigest("SHA256", key, signed), m[6])
+      { node: m[1], pass: m[2], opened: m[3].to_i, notice: m[4] == "1", until: m[5].to_i }
     end
 
     # Why this page goes to the shared ws/ (a String), or nil: it may take
-    # its node with the certificate. Takes the node for its pass when nil
-    # (give it back with #release).
+    # its node with the certificate. The node stays its pass's until a page
+    # opened later claims it; that page takes it over and the holder's
+    # connections are closed.
     def claim(w)
-      return "no certificate for this page (the console names none: a second page, or no handle)" if w[:node].empty?
+      return "no certificate for this page (the console names none: an older link, or no handle)" if w[:node].empty?
       return "#{w[:node]} is not in the router's configuration yet (apply)" unless applied?(w[:node])
       return "no certificate for #{w[:node]} at the door" unless files?(w[:node])
+      gone = nil
       @lock.synchronize do
         h = @holders[w[:node]]
-        return "another page is connected as #{w[:node]} now" if h && h[:n].positive? && h[:pass] != w[:pass]
-        h = @holders[w[:node]] = { pass: w[:pass], n: 0 } if h.nil? || h[:pass] != w[:pass]
-        h[:n] += 1
+        if h && h[:pass] != w[:pass]
+          return "#{TAKEN} #{w[:node]}" unless later?(w, h)
+          gone = h
+        end
+        @holders[w[:node]] = { pass: w[:pass], opened: w[:opened], conns: [] } if h.nil? || gone
       end
+      take_over(w, gone) if gone
       nil
     end
 
-    def release(node)
-      @lock.synchronize do
-        h = @holders[node] or return
-        h[:n] -= 1
-        @holders.delete(node) if h[:n] <= 0
-      end
+    # Whether the reason is that a later page has the node.
+    def self.taken_over?(why) = why.to_s.start_with?(TAKEN)
+
+    # The holder of node now: [pass, its open connections with the
+    # certificate], for the tests.
+    def holder(node)
+      @lock.synchronize { (h = @holders[node]) && [ h[:pass], h[:conns].size ] }
     end
 
     # The connection to zenohd's tls/ with node's certificate, or nil.
@@ -133,15 +151,19 @@ module Relay
       key = head[/^Sec-WebSocket-Key:\s*(\S+)/i, 1] or raise IOError, "no Sec-WebSocket-Key"
       accept = Base64.strict_encode64(Digest::SHA1.digest(key + WS_GUID))
       conn = Conn.new(client: client, tls: tls, node: w[:node], pass: w[:pass], wlock: Mutex.new)
+      return "#{TAKEN} #{w[:node]} before this one started" unless attach(conn)
       client.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" \
                    "Sec-WebSocket-Accept: #{accept}\r\n\r\n")
       ws_write(client, 0x1, self.class.notice(true, node: w[:node]), conn.wlock) if w[:notice]
       [ client, tls.to_io ].each { _1.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) rescue nil }
       pump(conn, limit)
+    ensure
+      detach(conn) if conn
     end
 
     def self.notice(verified, node: nil, why: nil)
-      JSON.generate({ "door" => { "verified" => verified, "node" => node, "why" => why }.compact })
+      taken = verified || !taken_over?(why) ? nil : true
+      JSON.generate({ "door" => { "verified" => verified, "node" => node, "why" => why, "taken_over" => taken }.compact })
     end
 
     # A Text frame from the door (unmasked), for the shared path too.
@@ -153,6 +175,41 @@ module Relay
     end
 
     private
+
+    # [opened, pass] orders the pages: the one the console saw first later
+    # wins (the pass breaks a tie).
+    def later?(w, h) = ([ w[:opened], w[:pass].to_i ] <=> [ h[:opened], h[:pass].to_i ]).positive?
+
+    # A connection #serve made, kept with its holder so a later page can
+    # close it. False when a later page took the node in between.
+    def attach(conn)
+      @lock.synchronize do
+        h = @holders[conn.node]
+        return false unless h && h[:pass] == conn.pass
+        h[:conns] << conn
+      end
+      true
+    end
+
+    def detach(conn)
+      @lock.synchronize { @holders[conn.node]&.[](:conns)&.delete(conn) }
+    end
+
+    # The earlier page's connections with the certificate end (a close
+    # frame with TAKEN_CODE, then the sockets); it connects again by
+    # itself and goes to the shared ws/ (#claim).
+    def take_over(w, gone)
+      conns = @lock.synchronize { gone[:conns].dup }
+      @log.call("browsers: #{w[:node]}: pass #{w[:pass]} (opened later) takes it over from pass #{gone[:pass]}; " \
+                "closing its #{conns.size} connection(s) with the certificate")
+      conns.each do |c|
+        ws_write(c.client, 0x8, [ TAKEN_CODE ].pack("n") + "taken over by a page opened later", c.wlock)
+      rescue IOError, SystemCallError, OpenSSL::SSL::SSLError
+        nil
+      ensure
+        c.close
+      end
+    end
 
     def split_hostport(s)
       host, _, port = s.rpartition(":")

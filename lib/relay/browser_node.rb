@@ -5,44 +5,28 @@
 # without showing any part of the email address. A user without a handle
 # has no browser node: the console asks for one first.
 #
-# Handles are unique and never contain "_", so the slots below cannot make
-# another user's name. A second page of the same user at the same time: the
-# first of <base>, <base>_2 ... <base>_9 that is neither on the graph now
-# nor named by a pass that is still waiting to be used or was used in the
-# last JUST_USED seconds (a page that is connecting, or connecting again
-# after the router restarted, is not on the graph); all taken,
-# <base>_<3 random hex>.
-#
-# The router checks only the user's own name (<base>, T8): the door
-# connects the page that has it with the user's certificate
-# (Relay::BrowserCerts, Relay::BrowserDoor) once an apply has let that in;
-# the slots (_2 ...) and pages before the apply come through the shared ws/
-# connection, where the name is what the console hands the page.
-require "securerandom"
-
+# Every page gets the user's own name (T8c; before, a second page at the
+# same time got <base>_2 ... <base>_9 and came through the shared
+# connection). The router checks that name (T8): the door connects the page
+# that has it with the user's certificate (Relay::BrowserCerts,
+# Relay::BrowserDoor) once an apply has let that in, and a page opened later
+# takes it over from an earlier one, which goes on through the shared ws/
+# connection (and says so). Pages before the apply come through ws/ too,
+# where the name is what the console hands the page. Older links that still
+# carry a <base>_2 name are not the user's own name: the door names none for
+# them (BrowserPassesController#browser_header).
 module Relay
   module BrowserNode
-    JUST_USED = 30.seconds
-    SLOTS = 9
-
     module_function
 
-    # The user's own base name (without the slot), or nil without a handle.
+    # The user's own base name, or nil without a handle.
     def base(user, prefix: Settings.browser_node_prefix)
       user.handle.present? ? "#{prefix}#{user.handle}" : nil
     end
 
-    # The name for a new page: the base, or the next free slot.
-    def pick(user, seen: Presence.seen(GraphState.current.graph), at: Time.current, **opts)
-      b = base(user, **opts) or raise ArgumentError, "#{user.log_name} has no handle"
-      taken = seen.to_set | recent_names(at)
-      ([ b ] + (2..SLOTS).map { "#{b}_#{_1}" }).find { !taken.include?(_1) } || "#{b}_#{SecureRandom.hex(2)[0, 3]}"
-    end
-
-    def recent_names(at)
-      waiting = BrowserPass.live(at).where.not(node: nil).pluck(:node)
-      just = BrowserPass.where.not(node: nil).where(last_used_at: (at - JUST_USED)..).pluck(:node)
-      (waiting + just).to_set
+    # The name for a new page: always the user's own (T8c).
+    def pick(user, **opts)
+      base(user, **opts) or raise ArgumentError, "#{user.log_name} has no handle"
     end
   end
 end

@@ -461,7 +461,12 @@ even on a LAN. What it does, and what it assumes:
   without it reaches only the account page).** On the account page,
   "Turn on" shows a secret (and its `otpauth://` URI) to add to an
   authenticator app; a code confirms it. From then on signing in asks for a
-  code after the password. Each code is taken once (the `rotp` gem).
+  code after the password. Each code is taken once (the `rotp` gem). The
+  code page may remember the browser for 30 days (a signed, httponly cookie;
+  the server keeps its SHA-256, the user and the user agent): that browser
+  then signs in with the password alone. The account page lists the
+  remembered browsers and forgets one or all; a new password or a change
+  to TOTP forgets them all.
 - **Call permissions.** The page can read an object's methods and call one
   only when a row under "Call permissions" allows the object's path
   (`<node>/<app>/<object>`) and the method; `*` matches any run of

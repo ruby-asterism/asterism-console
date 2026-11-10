@@ -7,7 +7,8 @@
         you choose. Every node on the network sees it. <%= link_to "Choose your handle", account_path(anchor: "handle") %> first.</p>
     <% else %>
       <p>Opens <code><%= BrowserPage.origin %></code> in a new tab, connected to this console's router with a fresh
-        pass, as the node <code><%= @next_node %></code> (yours; a second page open at the same time gets the next name).</p>
+        pass, as the node <code><%= @next_node %></code> (yours). A page you open later takes this name over from one open
+        before it: the earlier page goes on through the shared connection, without files, and says so.</p>
       <%= form_with url: open_browser_passes_path, method: :post, data: { turbo: false }, html: { target: "_blank" } do |f| %>
         <label>Start <%= f.select :app, BrowserPage.apps %></label>
         <%= f.submit "Launch Web Studio" %>

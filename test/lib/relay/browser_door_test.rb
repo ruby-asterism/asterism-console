@@ -9,7 +9,7 @@ require "open3"
 # (as nginx hands it on, with the console's word) and two stand-ins: zenohd's
 # mutual-TLS listener (which names the certificate it got) and its ws/
 # listener (plain bytes). Which way a page goes, the console's signature,
-# one page per name, the notice and the framing.
+# the page opened last has the name (T8c), the notice and the framing.
 class Relay::BrowserDoorTest < ActiveSupport::TestCase
   parallelize(workers: 1)
 
@@ -138,8 +138,9 @@ class Relay::BrowserDoorTest < ActiveSupport::TestCase
     assert yield, "waited #{seconds} s; the door's log:\n#{@log}"
   end
 
-  def word(node, pass: 7, notice: true)
-    Relay::BrowserCerts.door_word(node: node, pass: pass, notice: notice, until_at: Time.now + 3600, env: @env)
+  def word(node, pass: 7, notice: true, opened: Time.at(1_800_000_000 + pass))
+    Relay::BrowserCerts.door_word(node: node, pass: pass, opened: opened, notice: notice, until_at: Time.now + 3600,
+                                  env: @env)
   end
 
   # A page as nginx hands it on: [socket, status].
@@ -212,23 +213,61 @@ class Relay::BrowserDoorTest < ActiveSupport::TestCase
     assert @tls.names.empty?
   end
 
-  test "one page per name: another pass is shared while the first is connected; the same pass takes it again" do
+  # T8c: the page opened later has the name; the earlier one is closed,
+  # comes back through the shared ws/ and is told it was taken over.
+  test "a page opened later takes the name over: the earlier page's connections close and it comes back shared" do
     a1, = page(word("wasm-alice", pass: 1))
     assert_equal "wasm-alice", @tls.names.pop(timeout: 3)
     read_frame(a1)
-    b, = page(word("wasm-alice", pass: 2))
-    _, text = read_frame(b)
-    assert_match(/another page is connected as wasm-alice/, JSON.parse(text)["door"]["why"])
     a2, = page(word("wasm-alice", pass: 1))
     assert_equal "wasm-alice", @tls.names.pop(timeout: 3), "the first page's second session"
-    _, text = read_frame(a2)
-    assert JSON.parse(text)["door"]["verified"]
-    [ a1, a2 ].each(&:close)
-    wait_for { @log.scan(/closed after/).size >= 2 }
-    c, = page(word("wasm-alice", pass: 2))
-    assert_equal "wasm-alice", @tls.names.pop(timeout: 3), "free again once the first page has gone"
-    _, text = read_frame(c)
-    assert JSON.parse(text)["door"]["verified"]
+    assert JSON.parse(read_frame(a2)[1])["door"]["verified"]
+    read_frame(a1) # InitAck
+    read_frame(a2)
+    b, = page(word("wasm-alice", pass: 2))
+    assert_equal "wasm-alice", @tls.names.pop(timeout: 3), "the later page with the certificate"
+    _, text = read_frame(b)
+    assert_equal({ "verified" => true, "node" => "wasm-alice" }, JSON.parse(text)["door"])
+    assert_equal 0x2, read_frame(b)[0], "its InitAck"
+    [ a1, a2 ].each do |s|
+      op, data = read_frame(s)
+      assert_equal 0x8, op, "a close frame"
+      assert_equal 4409, data.unpack1("n")
+      assert_nil s.wait_readable(3) && s.read(1), "then the door closes it"
+    end
+    wait_for { @log.include?("pass 2 (opened later) takes it over from pass 1; closing its 2 connection(s)") }
+    again, = page(word("wasm-alice", pass: 1))
+    assert @ws.heads.pop(timeout: 3), "the earlier page connects again through the shared ws/"
+    _, text = read_frame(again)
+    got = JSON.parse(text)["door"]
+    assert_equal false, got["verified"]
+    assert_equal true, got["taken_over"]
+    assert_match(/a page opened later from the console took over wasm-alice/, got["why"])
+    send_binary(b, "still")
+    assert_equal [ 0x2, "still" ], read_frame(b), "the later page goes on"
+    assert @tls.names.empty?
+  end
+
+  test "the earlier page does not take the name back while the later one is away" do
+    b, = page(word("wasm-alice", pass: 2))
+    assert_equal "wasm-alice", @tls.names.pop(timeout: 3)
+    b.close
+    wait_for { @log.include?("closed after") }
+    a, = page(word("wasm-alice", pass: 1))
+    assert @ws.heads.pop(timeout: 3), "pass 1 was opened before pass 2"
+    assert JSON.parse(read_frame(a)[1])["door"]["taken_over"]
+    b2, = page(word("wasm-alice", pass: 2))
+    assert_equal "wasm-alice", @tls.names.pop(timeout: 3), "the later page connects again with its certificate"
+    assert JSON.parse(read_frame(b2)[1])["door"]["verified"]
+  end
+
+  test "opened, not the pass's number, orders the pages (a link made first and opened later wins)" do
+    late, = page(word("wasm-alice", pass: 3, opened: Time.at(1_800_000_100)))
+    assert_equal "wasm-alice", @tls.names.pop(timeout: 3)
+    read_frame(late)
+    newer_pass, = page(word("wasm-alice", pass: 4, opened: Time.at(1_800_000_050)))
+    assert @ws.heads.pop(timeout: 3)
+    assert JSON.parse(read_frame(newer_pass)[1])["door"]["taken_over"]
   end
 
   test "an older page (no notice asked) gets no Text on either way" do

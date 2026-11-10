@@ -47,8 +47,9 @@
 # (X-Asterism-Browser, signed with the console's key in the browsers' store);
 # the user's own page goes to zenohd's mutual-TLS port with the user's
 # certificate (browsers/wasm-<handle>.pem) when the router's configuration
-# lets it in and no other page is connected as it now, the others to ws/ as
-# before. A page that asks (the browser build from T8 on) is told which, in a
+# lets it in; a page opened later takes the name over from an earlier one
+# (T8c: the earlier page's connections are closed and it comes back through
+# ws/, told so); the others to ws/ as before. A page that asks (the browser build from T8 on) is told which, in a
 # Text message before anything of Zenoh.
 #
 #   WS_DOOR_BROWSERS_DIR      /rooms/browsers (the console writes it: Relay::BrowserCerts;
@@ -101,15 +102,10 @@ def serve(n, client)
     if (tls = BROWSERS.connect(word[:node]))
       log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}, as #{word[:node]} with its certificate " \
           "(pass #{word[:pass]}), for #{limit.round} s")
-      begin
-        reason = BROWSERS.serve(client, head, tls, word, limit)
-      ensure
-        BROWSERS.release(word[:node])
-      end
+      reason = BROWSERS.serve(client, head, tls, word, limit)
       secs = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)
       return log("##{n} closed after #{secs} s (#{reason})")
     end
-    BROWSERS.release(word[:node])
     why = "zenohd's mutual-TLS port did not take #{word[:node]}'s certificate"
   end
   begin

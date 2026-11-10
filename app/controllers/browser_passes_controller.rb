@@ -88,17 +88,18 @@ class BrowserPassesController < ApplicationController
   # What the door needs to connect the page with its user's certificate
   # (T8, X-Asterism-Browser, handed on by the web server like
   # X-Asterism-Until): the node, when it is the user's own browser node
-  # (wasm-<handle>, not a second page's wasm-<handle>_2 nor a handle given
+  # (wasm-<handle>, not an older link's wasm-<handle>_2 nor a handle given
   # up); the pass, which tells the pages apart (a page connects again with
-  # its own); and whether the page reads the door's notice. The door
-  # decides the rest (a certificate the router lets in, the name not taken
-  # by another page now).
+  # its own); when the pass was first used (the page opened last has the
+  # name, T8c); and whether the page reads the door's notice. The door
+  # decides the rest (a certificate the router lets in, no page opened
+  # later).
   # The word is signed (Relay::BrowserCerts.door_word): the door never takes
   # a node from a header the browser could have sent itself.
   private def browser_header(pass, notice, until_at)
     base = Relay::BrowserNode.base(pass.user)
     node = pass.node.present? && pass.node == base ? pass.node : ""
-    Relay::BrowserCerts.door_word(node: node, pass: pass.id, notice: notice, until_at: until_at)
+    Relay::BrowserCerts.door_word(node: node, pass: pass.id, opened: pass.used_at, notice: notice, until_at: until_at)
   rescue SystemCallError => e
     Rails.logger.warn("pass: #{pass.id}: no word for the door (#{e.class}: #{e.message})")
     nil

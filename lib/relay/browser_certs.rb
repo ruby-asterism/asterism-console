@@ -73,8 +73,11 @@ module Relay
     # The console's word to the door for a page (T8): "node=...; pass=...;
     # notice=0|1; until=...; mac=..." (HMAC-SHA256 of the part before mac
     # with door_key). Relay::BrowserDoor.verify reads it.
-    def door_word(node:, pass:, notice:, until_at:, env: ENV)
-      text = "node=#{node}; pass=#{pass}; notice=#{notice ? 1 : 0}; until=#{until_at.to_i}"
+    # opened: when the console first let the pass's page in (BrowserPass#used_at);
+    # the door gives the node to the page opened last (T8c).
+    def door_word(node:, pass:, notice:, until_at:, opened: nil, env: ENV)
+      ms = ((opened || Time.at(0)).to_r * 1000).to_i
+      text = "node=#{node}; pass=#{pass}; opened=#{ms}; notice=#{notice ? 1 : 0}; until=#{until_at.to_i}"
       "#{text}; mac=#{OpenSSL::HMAC.hexdigest('SHA256', door_key(env), text)}"
     end
 

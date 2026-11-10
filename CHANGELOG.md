@@ -8,6 +8,28 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: one migration (a new table, `remembered_browsers`;
+going back needs the update's backup). Nothing in nginx, `.env` or the
+roles. The door and the console must be the same version (the door's word
+has one more field; an older door sends every page through the shared
+connection).
+
+- A page opened later takes the name over (T8c, docs/g1_5.md "Browsers the
+  router tells apart"): every page a user opens from the console is
+  `wasm-<handle>` (no more `_2`); the door gives the name and the
+  certificate to the page opened last and closes the earlier page's
+  connections with it. That page connects again through the shared
+  connection, without files, and its notice says it was taken over
+  (`taken_over`), which Family mruby's browser build shows on its Network
+  line.
+- Remembering a browser for the TOTP code (T8c): the code page has
+  "Remember this browser for 30 days" (off by default). A browser
+  remembered signs in with the password alone (asked every time, as
+  before) until then; the account page lists such browsers and forgets one
+  or all. A new password or any change to TOTP forgets them all.
+
 ## 0.3.18
 
 What an update needs: one migration (four columns on `users`; going back
