@@ -1,0 +1,19 @@
+<% name = Relay::BrowserNode.base(@user) %>
+<% content_for(:title, "#{name} - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2><%= name %> <span class="hint">a user's browser</span></h2>
+  <% if @user.errors.any? %><p class="error"><%= @user.errors.full_messages.to_sentence %></p><% end %>
+  <%= form_with model: @user, scope: :user, url: relay_browser_path(@user), method: :patch, class: "grid-form" do |f| %>
+    <fieldset class="wide files receivers">
+      <legend>Receives files from (the page with the user's certificate keeps the list in its
+        <code>/home/asterism/receive.toml</code>; the console sends it there)</legend>
+      <%= render "relay/peers/receivers_fields", owner: @user, param: "user" %>
+      <p class="hint">Each node chosen may call this browser's inbox
+        (<code>asterism/<%= name %>/transfer/inbox/call/&lt;sender&gt;</code>, made on Apply), and the page takes what it
+        sends when receiving is on there (the Receiving app, or <code>areceive on</code> in its Shell). The page takes the
+        list, and receives, only while the door connects it with the user's certificate.</p>
+    </fieldset>
+    <div class="wide"><%= f.submit "Save" %> <%= link_to "Back", relay_browsers_path %></div>
+  <% end %>
+</section>

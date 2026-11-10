@@ -1,6 +1,8 @@
 ENV["RAILS_ENV"] ||= "test"
 ENV["ASTERISM_RECORDINGS_DIR"] ||= File.expand_path("../tmp/test-recordings", __dir__)
 ENV["ASTERISM_TRANSFERS_DIR"] ||= File.expand_path("../tmp/test-transfers", __dir__)
+# The rooms' and browsers' store (the door's files, T8's door key) away from storage/.
+ENV["ASTERISM_ROOMS_DIR"] ||= File.expand_path("../tmp/test-rooms", __dir__)
 require_relative "../config/environment"
 require "rails/test_help"
 require_relative "test_helpers/session_test_helper"
@@ -14,6 +16,7 @@ module ActiveSupport
     parallelize_setup do |worker|
       ENV["ASTERISM_RECORDINGS_DIR"] = Rails.root.join("tmp/test-recordings-#{worker}").to_s
       ENV["ASTERISM_TRANSFERS_DIR"] = Rails.root.join("tmp/test-transfers-#{worker}").to_s
+      ENV["ASTERISM_ROOMS_DIR"] = Rails.root.join("tmp/test-rooms-#{worker}").to_s
     end
 
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.

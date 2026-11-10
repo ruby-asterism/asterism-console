@@ -25,6 +25,19 @@
   <% if @user.handle.present? %>
     <p class="hint">Changing it: pages open now keep the old name until they close. The old name stays reserved for you for
       <%= (User::HANDLE_HOLD / 1.day).round %> days (nobody else can take it meanwhile).</p>
+    <% bname = Relay::BrowserNode.base(@user) %>
+    <% binfo = Relay::BrowserCerts.info(bname) %>
+    <p id="browser-certificate">Your page's name checked by the router:
+      <% if binfo.nil? || binfo[2] <= Time.now %>
+        <span class="badge warn">no certificate yet</span> (an admin makes it: Members &gt; Browsers)
+      <% elsif Relay::BrowserCerts.applied?(bname) %>
+        <span class="badge ok">yes</span> your first page joins as <code><%= bname %></code> with a certificate of yours that
+        stays on the server: the router lets it write and call as that name only, and it may send and receive files
+        with whom an admin chose
+      <% else %>
+        <span class="badge warn">waiting to apply</span> the certificate for <code><%= bname %></code> is made; the router
+        takes it at an admin's next apply. Until then your pages join through the shared connection of every browser
+      <% end %></p>
   <% end %>
 </section>
 

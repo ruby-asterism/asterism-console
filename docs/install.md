@@ -1143,6 +1143,39 @@ From 0.3.16 to 0.3.17 (a machine with receiving off, docs/files.md):
   owner turns it on (the Receiving app, or the shell's `areceive on`).
 - Going back to 0.3.16 needs nothing but `./update.sh 0.3.16`.
 
+Unreleased (browsers the router tells apart, T8, docs/g1_5.md "Browsers
+the router tells apart"):
+
+- **nginx**: `asterism-router.conf`'s `location = /` has two more lines,
+  `auth_request_set $asterism_browser $upstream_http_x_asterism_browser;`
+  and `proxy_set_header X-Asterism-Browser $asterism_browser;` (as in
+  `nginx/asterism-router.conf`); `nginx -t`, reload. Caddy: `copy_headers
+  X-Asterism-Until X-Asterism-Browser`. Without them every page goes on
+  through the shared connection as before (the door is told nothing). The
+  console signs the word (a key of its own in the `rooms` volume,
+  `browsers/door.key`), so a header a browser sends itself counts for
+  nothing even before nginx has the lines.
+- `./update.sh <version>`. One migration: four columns on `users` (the same
+  lists as a member row's, empty). The compose file's door has
+  `WS_DOOR_BROWSERS_DIR` (the default is the same, `/rooms/browsers`). No
+  change to `.env` or the roles.
+- The update's setup makes a certificate for every user with a handle
+  (`rooms/browsers/wasm-<handle>.pem`, the key beside it, 365 days, renewed
+  like the seats') and writes the router's configuration with them, which
+  the update's restart puts in force: each user's first page is then told
+  apart by the router (its roles as before, its writes and calls under its
+  own name only). Admin > Members > Browsers lists them; a user who chooses
+  a handle later waits for an admin's apply ("waiting to apply" there and
+  on the account page).
+- The shared connection (a second page, a page before the apply, an older
+  link) is refused every transfer key (`asterism/*/transfer/**`): a role
+  that gave browsers those keys no longer does for it.
+- Check: the door's log says "as wasm-<handle> with its certificate" for a
+  user's page; the page's Network panel says the router checked its name
+  (a browser build from this version on).
+- Going back is restoring the backup the update made (it prints the
+  command) and removing the lines from nginx (harmless if left).
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

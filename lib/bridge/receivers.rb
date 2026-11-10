@@ -15,6 +15,10 @@ require "set"
 # does not answer waits TIMEOUT); the main loop writes what each node got
 # into the row (receivers_delivered) and says a change in the log.
 #
+# A user's browser with a certificate (T8, User's lists, its node
+# wasm-<handle>) is sent its list the same way: the browser build takes it
+# when the door connected the page with the user's certificate.
+#
 # A machine refuses the list over a connection without certificates (its
 # router is not tls/): the row then shows the machine's reason. A machine
 # whose receiving is off (enabled in its receive.toml) keeps the list but
@@ -62,9 +66,9 @@ module Bridge
       @present = present
       return if @read_at && now - @read_at < READ_EVERY && appeared.empty?
       @read_at = now
-      RelayPeer.managed.each do |row|
+      (RelayPeer.managed.to_a + User.managed.to_a).each do |row|
         digest = row.receivers_digest
-        row.speaks_for.each do |node|
+        row.receiver_nodes.each do |node|
           next unless present.include?(node) && !@pending.include?(node)
           st = @last[node]
           due = st.nil? || st[:digest] != digest || appeared.include?(node) ||
@@ -72,7 +76,7 @@ module Bridge
           next unless due
           @pending << node
           @last[node] = { digest: digest, at: now, ok: false }
-          @jobs << [ row.id, node, row.receivers_payload, digest ]
+          @jobs << [ [ row.class.name, row.id ], node, row.receivers_payload, digest ]
         end
       end
     rescue ActiveRecord::ActiveRecordError => e
@@ -113,8 +117,10 @@ module Bridge
       end
     end
 
+    # row_id: [class name, id] (a member row, or a user for its browser).
     def record(row_id, node, digest, ok, answer, error)
-      row = RelayPeer.find_by(id: row_id) or return
+      kind, id = row_id
+      row = { "RelayPeer" => RelayPeer, "User" => User }.fetch(kind).find_by(id: id) or return
       all = row.delivered
       before = all[node] || {}
       now = Time.current.utc.iso8601
@@ -131,7 +137,8 @@ module Bridge
       if ok
         written = answer.is_a?(Hash) && answer["written"]
         if written || before["digest"] != digest || before["error"]
-          @say.call("bridge: receivers: #{node} has the list of #{row.name}#{written ? ' (written there)' : ''}")
+          whose = row.is_a?(User) ? "its user" : row.name
+          @say.call("bridge: receivers: #{node} has the list of #{whose}#{written ? ' (written there)' : ''}")
         end
       elsif before["error"] != error
         @say.call("bridge: receivers: #{node}: not delivered: #{error}")

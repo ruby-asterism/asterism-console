@@ -35,10 +35,12 @@
 #      (room-NN-s01 .. room-NN-s16 for each of the ASTERISM_ROOM_SLOTS
 #      slots, ASTERISM_ROOM_SEATS; in the rooms' store, not the registry),
 #      and the signer's key that signs the rooms' keys
-#   8. the cloud router's configuration from the registry (cloud.json5); a
+#   8. the browsers (T8, docs/g1_5.md): a certificate for each user with a
+#      handle (wasm-<handle>, in the rooms' store), for the door
+#   9. the cloud router's configuration from the registry (cloud.json5); a
 #      router starting later starts on it
-#   9. the door's file (rooms.json), which says which slots have seats in
-#      that configuration
+#  10. the door's files (rooms.json, which says which slots have seats in
+#      that configuration; browsers/browsers.json, which browsers it lets in)
 #
 # Then: docker compose up -d, TLS in front, and sign in (docs/install.md).
 # Updating a server: deploy/vps/update.sh (it takes a backup first). It runs
@@ -199,6 +201,26 @@ def ensure_rooms(ca_pem)
   end
 rescue Relay::SignerClient::Error => e
   fail!("the signer: #{e.message}")
+end
+
+# The users' browsers' certificates (T8, Relay::BrowserCerts): one per user
+# with a handle, made or renewed here like the seats'; the files of handles
+# given up are removed.
+def ensure_browsers(ca_pem)
+  step "Browsers (a certificate per user with a handle, for the door)"
+  n = 0
+  Relay::BrowserCerts.ensure!(ca_pem) do |name, what|
+    n += 1
+    done "#{name}: #{what}" unless what == "in place"
+  end
+  done "#{n} user(s) with a handle, in #{Relay::BrowserCerts.dir} (the door reads them; the router lets them in " \
+       "with the configuration written below or the next apply)"
+end
+
+def write_browsers_file
+  step "The browsers' file (for the door)"
+  nodes = Relay::BrowserCerts.write_door_file!
+  done "wrote #{Relay::BrowserCerts.door_file}: #{nodes.size} browser(s) the router's configuration lets in"
 end
 
 def write_rooms_file
@@ -368,8 +390,10 @@ when "setup"
   ensure_admin
   ensure_identities(ca_pem)
   ensure_rooms(ca_pem)
+  ensure_browsers(ca_pem)
   router = write_router_config(update: update)
   write_rooms_file
+  write_browsers_file
   if update
     say "\nDone. update.sh restarts the stack next."
     say(router == "written-not-restarted" ? "The cloud router still runs its previous configuration: Apply once (Admin > Members)." :

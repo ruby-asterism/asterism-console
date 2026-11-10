@@ -82,12 +82,14 @@ router.example.org:7443 {
 	route @ws {
 		# The console answers 204 (open) or 401; it reads the pass from the
 		# original URI (X-Forwarded-Uri) and says until when (X-Asterism-Until,
-		# handed on to the door, which closes the connection then).
+		# handed on to the door, which closes the connection then) and whose
+		# page it is (X-Asterism-Browser, T8: the door connects the user's own
+		# page with the user's certificate).
 		forward_auth 127.0.0.1:3000 {
 			uri /passes/check
 			header_up Host asterism.example.org
 			header_up X-Forwarded-Proto https
-			copy_headers X-Asterism-Until
+			copy_headers X-Asterism-Until X-Asterism-Browser
 		}
 		uri query -pass
 		uri query -page

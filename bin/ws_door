@@ -42,6 +42,20 @@
 #   WS_DOOR_ROOM_MAX_MESSAGE  65535 bytes (one WebSocket message, one Zenoh batch)
 #   WS_DOOR_STATUS_LISTEN     0.0.0.0:7453 (GET /status: the counts, for the console; unset: none)
 #
+# Browsers the router tells apart (T8, lib/relay/browser_door.rb, docs/g1_5.md):
+# the console's answer to the pass check says whose page it is
+# (X-Asterism-Browser, signed with the console's key in the browsers' store);
+# the user's own page goes to zenohd's mutual-TLS port with the user's
+# certificate (browsers/wasm-<handle>.pem) when the router's configuration
+# lets it in and no other page is connected as it now, the others to ws/ as
+# before. A page that asks (the browser build from T8 on) is told which, in a
+# Text message before anything of Zenoh.
+#
+#   WS_DOOR_BROWSERS_DIR      /rooms/browsers (the console writes it: Relay::BrowserCerts;
+#                             "-": every page to ws/)
+#   WS_DOOR_BROWSER_UPSTREAM  WS_DOOR_ROOM_UPSTREAM, else zenohd:7448 (zenohd's mutual-TLS listener)
+#   WS_DOOR_BROWSER_TLS_NAME  WS_DOOR_ROOM_TLS_NAME, else the upstream's host
+#
 # Seats (0.3.0, docs/rooms.md "Seats"): POST /room/seat on the same listener
 # gives a page a seat, and the room's WebSocket connects with the seat's
 # certificate (room-<slot>-s<seat>).
@@ -81,21 +95,53 @@ def serve(n, client)
   query = target.include?("?") ? (target.include?("pass=") ? " WITH A QUERY CARRYING pass=" : " with a query") : ""
   from = head[/^X-Forwarded-For:\s*([^\r\n]+)/i, 1] || "?"
   limit = lifetime(head)
+  word = BROWSERS&.word(head)
+  why = word ? BROWSERS.claim(word) : nil
+  if word && why.nil?
+    if (tls = BROWSERS.connect(word[:node]))
+      log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}, as #{word[:node]} with its certificate " \
+          "(pass #{word[:pass]}), for #{limit.round} s")
+      begin
+        reason = BROWSERS.serve(client, head, tls, word, limit)
+      ensure
+        BROWSERS.release(word[:node])
+      end
+      secs = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)
+      return log("##{n} closed after #{secs} s (#{reason})")
+    end
+    BROWSERS.release(word[:node])
+    why = "zenohd's mutual-TLS port did not take #{word[:node]}'s certificate"
+  end
   begin
     upstream = TCPSocket.new(*split_hostport(UPSTREAM))
   rescue SystemCallError, SocketError => e
     unavailable(client)
     return log("##{n} from #{from}: zenohd is not there (#{e.class}); answered 503")
   end
-  upstream.write(head)
-  log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}, for #{limit.round} s")
-  reason = relay(client, upstream, t0, limit)
+  upstream.write(head.gsub(/^X-Asterism-Browser:[^\r\n]*\r\n/i, ""))
+  shared = word ? " (shared: #{why})" : ""
+  log("##{n} open from #{from}: #{line.split(' ')[0]} #{path}#{query}, for #{limit.round} s#{shared}")
+  answered = word && word[:notice] ? tell_shared(client, upstream, why) : false
+  reason = relay(client, upstream, t0, limit, answered: answered)
   secs = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0).round(1)
   log("##{n} closed after #{secs} s (#{reason})")
 rescue StandardError => e
   log("##{n} #{e.class}: #{e.message}")
 ensure
   [ client, upstream ].each { |s| s&.close rescue nil }
+end
+
+# A page that reads the door's notice (T8) on the shared ws/: zenohd's
+# answer to the upgrade goes on as it is, then the notice (a Text frame from
+# the door) before zenohd's first batch. Returns whether zenohd answered.
+def tell_shared(client, upstream, why)
+  answer = read_head(upstream)
+  client.write(answer)
+  return false unless answer.start_with?("HTTP/1.1 101")
+  client.write(Relay::BrowserDoor.text_frame(Relay::BrowserDoor.notice(false, why: why)))
+  true
+rescue EOFError, IOError, SystemCallError
+  false
 end
 
 # This connection's lifetime in seconds: MAX_SECONDS, or less when the pass
@@ -113,9 +159,9 @@ rescue IOError, SystemCallError
   nil
 end
 
-def relay(a, b, t0, limit = MAX_SECONDS)
+def relay(a, b, t0, limit = MAX_SECONDS, answered: false)
   peer = { a => b, b => a }
-  answered = false # zenohd has sent something (its 101 first)
+  # answered: zenohd has sent something (its 101 first)
   loop do
     left = limit - (Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0)
     return "lifetime #{limit.round} s reached" if left <= 0
@@ -152,8 +198,19 @@ if ENV["WS_DOOR_ROOM_LISTEN"].to_s != ""
   ).start
 end
 
+BROWSERS_DIR = ENV.fetch("WS_DOOR_BROWSERS_DIR", "/rooms/browsers")
+BROWSERS = if BROWSERS_DIR == "-"
+  nil
+else
+  require_relative "../lib/relay/browser_door"
+  upstream = ENV["WS_DOOR_BROWSER_UPSTREAM"].to_s.empty? ? ENV.fetch("WS_DOOR_ROOM_UPSTREAM", "zenohd:7448") : ENV["WS_DOOR_BROWSER_UPSTREAM"]
+  name = [ ENV["WS_DOOR_BROWSER_TLS_NAME"], ENV["WS_DOOR_ROOM_TLS_NAME"] ].find { _1.to_s != "" }
+  Relay::BrowserDoor.new(upstream: upstream, tls_name: name, dir: BROWSERS_DIR, log: ->(m) { log(m) })
+end
+
 server = TCPServer.new(*split_hostport(LISTEN))
-log("listening on #{LISTEN}, to #{UPSTREAM}, lifetime #{MAX_SECONDS.round} s")
+log("listening on #{LISTEN}, to #{UPSTREAM}, lifetime #{MAX_SECONDS.round} s; " +
+    (BROWSERS ? "browsers with a certificate (#{BROWSERS_DIR}) to #{BROWSERS.upstream}" : "every browser to ws/"))
 n = 0
 loop do
   client = server.accept

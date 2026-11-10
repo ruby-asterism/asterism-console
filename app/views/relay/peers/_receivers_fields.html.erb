@@ -1,0 +1,19 @@
+<%# The lists of whom a receiver takes files from (T6; T8 for a user's browser):
+    owner (a RelayPeer or a User), param (the form's name). %>
+<% choices = RelayPeer.sender_choices(except: owner) %>
+<% { "file" => [ :receive_files_from, "Files (to /home/inbox)" ],
+     "checkpoint" => [ :receive_checkpoints_from, "Apps moved here (checkpoint)" ] }.each do |kind, (column, title)| %>
+  <% chosen = owner.receivers(kind) %>
+  <div class="receive-kind" data-kind="<%= kind %>">
+    <strong><%= title %></strong>
+    <% if choices.empty? %><p class="hint">No other members yet.</p><% end %>
+    <% choices.each do |label, node| %>
+      <label class="check"><%= check_box_tag "#{param}[#{column}_picked][]", node, chosen.include?(node),
+                                             id: "#{column}_#{node.parameterize(separator: '_')}" %> <%= label %></label>
+    <% end %>
+    <%= hidden_field_tag "#{param}[#{column}_picked][]", "", id: nil %>
+    <label>Patterns and other nodes (one per line: <code>fmruby-*</code>, <code>*</code> for every member)
+      <%= text_area_tag "#{param}[#{column}_more]", (chosen - choices.map(&:last)).join("\n"), rows: 2,
+                        id: "#{column}_more" %></label>
+  </div>
+<% end %>

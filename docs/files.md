@@ -1,4 +1,4 @@
-# Files: sending to the machines, receiving from them (T4, T4b, T6)
+# Files: sending to the machines, receiving from them (T4, T4b, T6, T8)
 
 The console sends a file from the browser to a machine, receives the files
 the machines send to it, and records both. The carrying is Asterism's
@@ -134,6 +134,38 @@ The marks above stay: "Receives files from the console" is the console's
 key for sending; the machine's key is its receive.toml, by hand (`[file]
 from = ["console"]`) or by choosing `console` in the row's list.
 
+## Browsers (T8)
+
+A user's browser page that the door connects with the user's certificate
+(docs/g1_5.md, "Browsers the router tells apart": the router checks its
+name, `wasm-<handle>`) takes part like a member's machine:
+
+- **Choosing**: the "Receives files from" lists of a member row offer the
+  browsers with a certificate (`wasm-alice (a browser)`), and patterns
+  (`wasm-*`, `*`) match them too. A browser has the same two lists, on
+  Admin > Members > Browsers, Edit (the members, the console and the other
+  browsers to choose from; its own name left out).
+- **The ACL** (on apply): as for the rows (above), with the browser as a
+  row of its own: a sender's ask line and its answer
+  (`asterism/<receiver>/transfer/inbox/call/wasm-alice`) are in the
+  browser's second subject (on `tls`, beside its calls), a receiving
+  browser's transfer keys (`asterism/wasm-alice/transfer`, `.../transfer/**`)
+  in its first, once its lists were ever chosen.
+- **The list**: the bridge sends a browser its lists like a machine's
+  (`Bridge::Receivers`; the user's `receivers_delivered`, shown on the
+  Browsers page). Family mruby's browser build takes it when the door told
+  the page it is connected with the certificate (the page writes the
+  checked name to `/tmp/.asterism_door`; its transfer app compares it with
+  its node), else refuses it as over any connection without certificates.
+- **Receiving** needs the page's switch as on a machine (`enabled = true`:
+  the Receiving app, or `areceive on` in its Shell), kept in the browser's
+  storage with `/home`.
+- **The shared connection** (a second page, a page before the apply, an
+  older link) cannot send or receive: the router refuses it every transfer
+  key.
+- Not done: the T4b marks for browsers (the console's Files page sending to
+  a browser, a browser's `asend console`).
+
 ## How it is built
 
 - `Asterism::Transfer::FileInbox` and `Asterism::Transfer::Endpoint`
@@ -157,10 +189,11 @@ from = ["console"]`) or by choosing `console` in the row's list.
   (`RelayPeer.file_senders`, `.file_receivers`), the ACL lines in
   `Relay::CloudConfig#file_rules`.
 - `Bridge::Receivers` (`lib/bridge/receivers.rb`): the lists to the
-  machines, one call at a time on a thread of its own (10 s per call).
-  `RelayPeer#receivers`, `#receivers_payload`, `.managed`,
-  `.sender_choices`; the ACL lines in `Relay::CloudConfig#file_lines`
-  (`sender_keys`).
+  machines (and to the browsers, T8), one call at a time on a thread of its
+  own (10 s per call). `ReceiverLists` (`RelayPeer` and `User`:
+  `#receivers`, `#receivers_payload`), `.managed`,
+  `RelayPeer.sender_choices`; the ACL lines in
+  `Relay::CloudConfig#file_lines` and `#browser_cert_rules` (`sender_keys`).
 - `ASTERISM_TRANSFERS=0` leaves the bridge's side out (no inbox, nothing
   sent, no lists).
 

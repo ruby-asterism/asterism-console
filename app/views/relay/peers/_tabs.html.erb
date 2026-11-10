@@ -1,4 +1,4 @@
-<%# The Members pages' tabs (Registry, Roles). Applying is not a tab: while the
+<%# The Members pages' tabs (Registry, Roles, Browsers). Applying is not a tab: while the
     registry differs from the cloud router's file, a banner leads to the
     confirmation page (relay/applies/new), which links the history. The apply
     pages pass banner: false. The whole of it is #relay-tabs, which a page
@@ -8,6 +8,7 @@
 <nav class="tabs" aria-label="Members">
   <%= nav_link "Registry", relay_peers_path, under: relay_peers_path %>
   <%= nav_link "Roles", relay_roles_path, under: relay_roles_path %>
+  <%= nav_link "Browsers", relay_browsers_path, under: relay_browsers_path %>
   <% if banner && !relay_unapplied? %>
     <span class="tabs-aside hint">The cloud router runs this registry.</span>
   <% end %>

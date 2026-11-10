@@ -140,7 +140,7 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
       ENV["ASTERISM_RELAY_GENERATED_DIR"] = dir
       sign_in_as(users(:admin))
       get relay_peers_path
-      assert_select ".tabs a", 2
+      assert_select ".tabs a", 3 # Registry, Roles, Browsers (T8)
       assert_select ".tabs a.current", "Registry"
       assert_select ".tabs a[href=?]", new_relay_apply_path, 0
       assert_select ".apply-banner", /Changes not yet applied to the cloud router/

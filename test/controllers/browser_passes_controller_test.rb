@@ -217,4 +217,27 @@ class BrowserPassesControllerTest < ActionDispatch::IntegrationTest
   ensure
     old.each { ENV[_1] = _2 }
   end
+
+  test "the check tells the door whose page it is (T8), signed with the console's key" do
+    token = make_pass
+    sign_out
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}&page=#{PAGE_A}&door=1",
+                                              "X-Forwarded-For" => "198.51.100.7" }
+    assert_response :no_content
+    pass = BrowserPass.sole
+    word = response.headers["X-Asterism-Browser"]
+    assert_match(/\Anode=wasm-pat; pass=#{pass.id}; notice=1; until=\d+; mac=\h{64}\z/, word)
+    door = Relay::BrowserDoor.new(upstream: "zenohd:7448", dir: Relay::BrowserCerts.dir)
+    assert_equal({ node: "wasm-pat", pass: pass.id.to_s, notice: true, until: pass.reload.open_until.to_i },
+                 door.word("X-Asterism-Browser: #{word}\r\n"))
+    assert_nil door.word("X-Asterism-Browser: #{word.sub('wasm-pat', 'wasm-pal')}\r\n"), "another node: the signature fails"
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}&page=#{PAGE_A}" }
+    assert_match(/notice=0/, response.headers["X-Asterism-Browser"], "a page that does not read the notice")
+    pass.update_column(:node, "wasm-pat_2")
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}&page=#{PAGE_A}&door=1" }
+    assert_match(/\Anode=; /, response.headers["X-Asterism-Browser"], "a second page of the user: no node")
+    get check_browser_passes_path, headers: { "X-Original-URI" => "/?pass=#{token}&page=#{PAGE_B}" }
+    assert_response :unauthorized
+    assert_nil response.headers["X-Asterism-Browser"]
+  end
 end

@@ -49,30 +49,8 @@ class RelayPeer < ApplicationRecord
   validate :keys_are_key_expressions
   validate :names_and_addresses
   validate :nodes_are_node_ids
-  validate :receivers_are_names
 
-  # The kinds a machine receives and their columns.
-  RECEIVE_KINDS = { "file" => :receive_files_from, "checkpoint" => :receive_checkpoints_from }.freeze
-  # A node ID or a pattern of them (* any run of letters), as the machines
-  # match it (FmrbReceiveConf): letters, digits, . _ - and *.
-  RECEIVER = /\A[A-Za-z0-9._\-*]{1,64}\z/
-  RECEIVERS_MAX = 64
-
-  # The form's choices (Edit): the nodes ticked and the other lines
-  # (patterns, nodes not in the list), per kind. Setting either sets the
-  # kind's column.
-  RECEIVE_KINDS.each do |kind, column|
-    define_method(:"#{column}_picked=") do |list|
-      (@receive_form ||= {})[kind] ||= {}
-      @receive_form[kind][:picked] = Array(list).map(&:to_s).map(&:strip).reject(&:empty?)
-    end
-    define_method(:"#{column}_more=") do |text|
-      (@receive_form ||= {})[kind] ||= {}
-      @receive_form[kind][:more] = self.class.lines(text)
-    end
-  end
-  before_validation :take_receive_form
-  before_save :mark_receivers_changed
+  include ReceiverLists
 
   def self.lines(text)
     text.to_s.lines.map(&:strip).reject(&:empty?)
@@ -111,48 +89,24 @@ class RelayPeer < ApplicationRecord
     node_list.presence || [ name ]
   end
 
-  # The senders its machines receive a kind from (node IDs and patterns).
-  def receivers(kind)
-    self.class.lines(self[RECEIVE_KINDS.fetch(kind.to_s)])
-  end
+  def receiver_nodes = speaks_for
 
-  def receives_any?
-    RECEIVE_KINDS.keys.any? { receivers(_1).any? }
-  end
-
-  # Its lists were ever chosen (its nodes are sent them, and keep their
-  # transfer keys in the ACL).
-  def managed_receivers?
-    receivers_changed_at.present?
-  end
-
-  # What the bridge sends its nodes (their transfer app's policy_set).
-  def receivers_payload
-    { "file" => receivers("file"), "checkpoint" => receivers("checkpoint"),
-      "at" => receivers_changed_at&.utc&.iso8601 }
-  end
-
-  def receivers_digest
-    Digest::SHA256.hexdigest(JSON.generate(receivers_payload))[0, 16]
-  end
-
-  # {node => {"digest", "at" (delivered), "error", "tried_at"}}.
-  def delivered
-    JSON.parse(receivers_delivered.presence || "{}")
-  rescue JSON::ParserError
-    {}
-  end
-
-  # The nodes that may be chosen as senders (Edit): every row's nodes and
-  # the console's, as [label, node]; a client row's own node left out (a
-  # home router's nodes may send to each other).
+  # The nodes that may be chosen as senders (Edit): every row's nodes, the
+  # browsers with a certificate of their user's (T8, wasm-<handle>,
+  # Relay::BrowserCerts) and the console's, as [label, node]; the
+  # receiver's own node left out (a client row's, a user's browser; a home
+  # router's nodes may send to each other).
   def self.sender_choices(except: nil)
     console = ENV.fetch("ASTERISM_CONSOLE_NODE", "console")
-    own = except && except.node_list.empty? ? [ except.name ] : []
+    own = if except.is_a?(User) then except.receiver_nodes
+    elsif except && except.node_list.empty? then [ except.name ]
+    else []
+    end
     rows = order(:name).to_a
     list = rows.flat_map do |r|
       r.speaks_for.map { |n| [ r.display_name.present? && n == r.name ? "#{r.display_name} (#{n})" : n, n ] }
     end
+    Relay::BrowserCerts.names.each { list << [ "#{_1} (a browser)", _1 ] }
     list << [ "#{console} (the console)", console ] unless list.any? { _1[1] == console }
     list.reject { own.include?(_1[1]) }.uniq { _1[1] }.sort_by { _1[1] }
   end
@@ -168,7 +122,7 @@ class RelayPeer < ApplicationRecord
       "admin_space" => admin_space?, "in_acl" => in_acl?,
       "roles" => roles.map(&:name), "nodes" => node_list,
       "files_to_console" => files_to_console?, "files_from_console" => files_from_console?,
-      "receives" => RECEIVE_KINDS.keys.to_h { [ _1, receivers(_1) ] },
+      "receives" => receives_config,
       "receivers_managed" => managed_receivers? }
   end
 
@@ -199,31 +153,6 @@ class RelayPeer < ApplicationRecord
   end
 
   private
-
-  def take_receive_form
-    return unless @receive_form
-    @receive_form.each do |kind, f|
-      list = (Array(f[:picked]) + Array(f[:more])).uniq
-      self[RECEIVE_KINDS[kind]] = list.empty? ? nil : list.join("\n")
-    end
-    @receive_form = nil
-  end
-
-  def mark_receivers_changed
-    changed = RECEIVE_KINDS.values.any? do |c|
-      will_save_change_to_attribute?(c) && self.class.lines(attribute_in_database(c)) != self.class.lines(self[c])
-    end
-    self.receivers_changed_at = Time.current if changed
-  end
-
-  def receivers_are_names
-    RECEIVE_KINDS.each_value do |column|
-      list = self.class.lines(self[column])
-      bad = list.reject { RECEIVER.match?(_1) }
-      errors.add(column, "has lines that are not node IDs or patterns: #{bad.join(' ')}") if bad.any?
-      errors.add(column, "has more than #{RECEIVERS_MAX} lines") if list.size > RECEIVERS_MAX
-    end
-  end
 
   def keys_are_key_expressions
     { rw_keys: rw_list, ro_keys: ro_list }.each do |attr, keys|

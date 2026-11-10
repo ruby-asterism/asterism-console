@@ -72,7 +72,7 @@ module RelayHelper
   def receivers_delivery(peer)
     got = peer.delivered
     digest = peer.receivers_digest
-    lines = peer.speaks_for.map do |node|
+    lines = peer.receiver_nodes.map do |node|
       d = got[node]
       text = if d.nil?
         "not sent yet: its transfer app is not on the network (receiving may be off on that machine; " \

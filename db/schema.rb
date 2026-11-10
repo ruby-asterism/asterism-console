@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_09_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_10_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -407,6 +407,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_09_150000) do
     t.datetime "otp_enabled_at"
     t.integer "otp_last_step"
     t.string "handle"
+    t.text "receive_files_from"
+    t.text "receive_checkpoints_from"
+    t.datetime "receivers_changed_at"
+    t.text "receivers_delivered"
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
     t.index ["handle"], name: "index_users_on_handle", unique: true
   end

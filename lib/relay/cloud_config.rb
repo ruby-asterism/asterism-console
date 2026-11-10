@@ -104,6 +104,21 @@
 # inbox, and the console's call that brings the lists; kept when the lists
 # are emptied, so that the empty list still reaches it).
 #
+# Browsers the router tells apart (T8, docs/g1_5.md; settings
+# "browser_certs" => [{"name" => "wasm-alice", "receives" => {...},
+# "receivers_managed" => bool}], Relay::BrowserCerts): a user's browser
+# page that the door connects with the user's certificate (its common name
+# is the page's node ID, wasm-<handle>) is a subject of its own, like a
+# seat: the roles marked for browsers with ${node} its own name, no call
+# under another name (a deny on asterism/*/*/*/call/** in the subject of
+# the common name alone; the calls its roles allow, under its own name, in
+# a second subject with link_protocols tls), and the transfer keys like a
+# member's (its lists: the senders' ask lines, its inbox's rw; as a sender
+# in others' lists, its ask lines in the second subject). A registry row
+# with such a name is left out: the name is the browser's. The shared ws/
+# subject (the pages without a certificate) is refused every transfer key
+# (asterism/*/transfer and below): files only with a verified name.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -177,8 +192,15 @@ module Relay
       # tables (room/*/asterism/<host>$*).
       "room_hosts" => [],
       # The bridge's Asterism node ID (the console's inbox for files, T4b).
-      "console_node" => "console"
+      "console_node" => "console",
+      # The users' browsers with a certificate (T8): [{"name", "receives",
+      # "receivers_managed"}] (or names alone).
+      "browser_certs" => []
     }.freeze
+    # The transfer keys (T8): refused to the shared ws/ subject.
+    TRANSFER_KEYS = [ "asterism/*/transfer", "asterism/*/transfer/**" ].freeze
+    # Every Asterism call, whoever the caller.
+    ALL_CALLS = "asterism/*/*/*/call/**".freeze
 
     attr_reader :peers, :settings, :roles
 
@@ -191,8 +213,11 @@ module Relay
       @settings = DEFAULTS.merge(settings.transform_keys(&:to_s))
       @roles = roles.map { _1.transform_keys(&:to_s) }.to_h { [ _1["name"], _1 ] }
       seats = seat_certificates.to_set { _1[2] }
+      @browsers = Array(@settings["browser_certs"]).map { _1.is_a?(Hash) ? _1.transform_keys(&:to_s) : { "name" => _1.to_s } }
+                                                   .uniq { _1["name"] }.sort_by { _1["name"] }
+      taken = seats | @browsers.to_set { _1["name"] }
       @peers = peers.map { _1.transform_keys(&:to_s) }
-                    .select { _1["in_acl"] && _1["name"] != @settings["name"] && !seats.include?(_1["name"]) }
+                    .select { _1["in_acl"] && _1["name"] != @settings["name"] && !taken.include?(_1["name"]) }
                     .sort_by { _1["name"] }
       @sends = sender_keys
     end
@@ -311,10 +336,13 @@ module Relay
         policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
       end
       seat_certificates.each { seat_rules(*_1, rules, subjects, policies, shared) }
+      @browsers.each { browser_cert_rules(_1, rules, subjects, policies, shared) }
       if @settings["browsers"]
-        names = @roles.values.select { _1["for_browsers"] }.map { _1["name"] }
-        mine = role_rules(rules, shared, "browsers", names, [ @settings["browser_nodes"] ])
+        mine = role_rules(rules, shared, "browsers", browser_role_names, [ @settings["browser_nodes"] ])
         unless mine.empty?
+          rules << { "id" => "browsers__no_transfer", "messages" => ALL, "flows" => %w[egress ingress],
+                     "permission" => "deny", "key_exprs" => TRANSFER_KEYS }
+          mine << "browsers__no_transfer"
           subjects << { "id" => "browsers", "link_protocols" => [ "ws" ] }
           policies << { "id" => "browsers", "rules" => mine, "subjects" => [ "browsers" ] }
         end
@@ -394,6 +422,60 @@ module Relay
       policies << { "id" => "#{id}_calls", "rules" => [ "#{id}_call" ], "subjects" => [ "#{id}_calls" ] }
     end
 
+    def browser_role_names = @roles.values.select { _1["for_browsers"] }.map { _1["name"] }
+
+    # A user's browser with a certificate (T8): its roles with ${node} its
+    # own name and no call under another name (subject id), the calls its
+    # roles allow and its sends, as itself (subject id_calls, tls). See the
+    # top of this file.
+    def browser_cert_rules(b, rules, subjects, policies, shared)
+      name = b["name"]
+      id = "browser__#{self.class.ident(name)}"
+      mine = role_rules(rules, shared, id, browser_role_names, [ name ])
+      rules << { "id" => "#{id}__no_calls", "messages" => %w[query], "flows" => %w[ingress], "permission" => "deny",
+                 "key_exprs" => [ ALL_CALLS ] }
+      mine << "#{id}__no_calls"
+      if b["receivers_managed"]
+        mine.concat(section_rules(rules, "#{id}__receives_files", "rw", transfer_keys([ name ])))
+      end
+      subjects << { "id" => id, "cert_common_names" => [ name ] }
+      policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
+      calls = browser_calls(name)
+      mine = []
+      unless calls.empty?
+        rules << { "id" => "#{id}__calls", "messages" => %w[query], "flows" => %w[ingress], "permission" => "allow",
+                   "key_exprs" => calls }
+        mine << "#{id}__calls"
+      end
+      sends = Array(@sends[name])
+      mine.concat(section_rules(rules, "#{id}__sends_files", "ask", sends)) unless sends.empty?
+      return if mine.empty?
+      subjects << { "id" => "#{id}_calls", "cert_common_names" => [ name ], "link_protocols" => [ "tls" ] }
+      policies << { "id" => "#{id}_calls", "rules" => mine, "subjects" => [ "#{id}_calls" ] }
+    end
+
+    # The calls the browsers' roles let a page make (their ask lines that
+    # are calls), with the caller made the page's own name.
+    def browser_calls(name)
+      @roles.values.select { _1["for_browsers"] }.flat_map do |role|
+        self.class.expand(Array(role.dig("templates", "ask")), [ name ]).filter_map do |key|
+          base = key[%r{\A(.*/call)/[^/]+\z}, 1] or next
+          "#{base}/#{name}"
+        end
+      end.uniq.sort
+    end
+
+    # The rules of one file section (FILE_SECTION_RULES) under prefix:
+    # pushed onto rules; returns their ids.
+    def section_rules(rules, prefix, section, keys)
+      FILE_SECTION_RULES[section].map do |rsuffix, messages, flows|
+        rule_id = "#{prefix}_#{rsuffix}"
+        rules << { "id" => rule_id, "messages" => messages, "flows" => flows, "permission" => "allow",
+                   "key_exprs" => keys }
+        rule_id
+      end
+    end
+
     # A game host in the rooms (when there are seats): the rules
     # (pushed onto rules) and their ids.
     def room_host_rules(rules, id, name)
@@ -445,14 +527,17 @@ module Relay
     # senders' names (T6). A node is not its own sender.
     def sender_keys
       out = Hash.new { |h, k| h[k] = [] }
-      @peers.each do |r|
-        entries = Hash(r["receives"]).values.flatten.map(&:to_s).uniq
+      # [name, nodes, receives]: the rows, and the browsers with a
+      # certificate (T8), which send and receive like a row of their own.
+      parties = @peers.map { [ _1["name"], nodes_of(_1), _1["receives"] ] } +
+                @browsers.map { [ _1["name"], [ _1["name"] ], _1["receives"] ] }
+      parties.each do |_, receivers, receives|
+        entries = Hash(receives).values.flatten.map(&:to_s).uniq
         next if entries.empty?
-        receivers = nodes_of(r)
-        @peers.each do |sp|
-          nodes_of(sp).each do |sn|
+        parties.each do |sname, snodes, _|
+          snodes.each do |sn|
             next unless entries.any? { self.class.receiver_match?(_1, sn) }
-            receivers.each { |rn| out[sp["name"]] << "asterism/#{rn}/transfer/inbox/call/#{sn}" unless rn == sn }
+            receivers.each { |rn| out[sname] << "asterism/#{rn}/transfer/inbox/call/#{sn}" unless rn == sn }
           end
         end
       end

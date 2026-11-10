@@ -13,8 +13,11 @@
 # after the router restarted, is not on the graph); all taken,
 # <base>_<3 random hex>.
 #
-# The router does not check any of this (it cannot tell browsers apart,
-# docs/g1_5.md): the name is what the console hands the page.
+# The router checks only the user's own name (<base>, T8): the door
+# connects the page that has it with the user's certificate
+# (Relay::BrowserCerts, Relay::BrowserDoor) once an apply has let that in;
+# the slots (_2 ...) and pages before the apply come through the shared ws/
+# connection, where the name is what the console hands the page.
 require "securerandom"
 
 module Relay

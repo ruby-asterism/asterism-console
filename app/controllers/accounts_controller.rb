@@ -30,6 +30,9 @@ class AccountsController < ApplicationController
     old = @user.handle
     if @user.update(handle: params[:handle].to_s)
       Rails.logger.info("account: user #{@user.id} handle #{old.inspect} -> #{@user.handle.inspect}")
+      # Its browser's certificate (T8): the old one goes, a new one is made;
+      # the router takes it at the next apply.
+      Relay::BrowserCerts.handle_changed(@user, old) if old != @user.handle
       redirect_to account_path(anchor: "handle"), notice: "Handle set: your browser pages join as " \
                                                           "#{Relay::BrowserNode.base(@user)}."
     else

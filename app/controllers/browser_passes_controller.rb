@@ -72,19 +72,40 @@ class BrowserPassesController < ApplicationController
                        "#{Relay::Settings.browser_node_prefix}<handle>."
   end
 
-  # [pass, page key] from the headers the web server sets (nginx's
-  # auth_request: X-Original-URI; Caddy's forward_auth: X-Forwarded-Uri).
+  # [pass, page key, door notice] from the headers the web server sets
+  # (nginx's auth_request: X-Original-URI; Caddy's forward_auth:
+  # X-Forwarded-Uri). The notice ("door=1", T8) says the page reads the
+  # door's first Text message.
   private def pass_from_request
     uri = request.headers["X-Original-URI"].presence || request.headers["X-Forwarded-Uri"]
     query = URI.decode_www_form(URI.parse(uri.to_s).query.to_s).to_h
     [ request.headers["X-Asterism-Pass"].presence || query["pass"].to_s,
-      request.headers["X-Asterism-Page"].presence || query["page"] ]
+      request.headers["X-Asterism-Page"].presence || query["page"], query["door"] == "1" ]
   rescue URI::InvalidURIError, ArgumentError
-    [ "", nil ]
+    [ "", nil, false ]
+  end
+
+  # What the door needs to connect the page with its user's certificate
+  # (T8, X-Asterism-Browser, handed on by the web server like
+  # X-Asterism-Until): the node, when it is the user's own browser node
+  # (wasm-<handle>, not a second page's wasm-<handle>_2 nor a handle given
+  # up); the pass, which tells the pages apart (a page connects again with
+  # its own); and whether the page reads the door's notice. The door
+  # decides the rest (a certificate the router lets in, the name not taken
+  # by another page now).
+  # The word is signed (Relay::BrowserCerts.door_word): the door never takes
+  # a node from a header the browser could have sent itself.
+  private def browser_header(pass, notice, until_at)
+    base = Relay::BrowserNode.base(pass.user)
+    node = pass.node.present? && pass.node == base ? pass.node : ""
+    Relay::BrowserCerts.door_word(node: node, pass: pass.id, notice: notice, until_at: until_at)
+  rescue SystemCallError => e
+    Rails.logger.warn("pass: #{pass.id}: no word for the door (#{e.class}: #{e.message})")
+    nil
   end
 
   def check
-    token, page = pass_from_request
+    token, page, notice = pass_from_request
     ip = request.remote_ip
     pass = BrowserPass.find_by_token(token)
     first = pass&.live?
@@ -95,6 +116,8 @@ class BrowserPassesController < ApplicationController
                         "#{pass.open_until ? '' : ' (one connection: the page named no key)'}")
       until_at = pass.open_until || (Time.current + BrowserPass::LIFETIME)
       response.headers["X-Asterism-Until"] = until_at.to_i.to_s
+      word = browser_header(pass, notice, until_at)
+      response.headers["X-Asterism-Browser"] = word if word
       head :no_content
     else
       if pass

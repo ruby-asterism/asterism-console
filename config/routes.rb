@@ -108,6 +108,10 @@ Rails.application.routes.draw do
         end
       end
       resources :roles
+      # The users' browsers the router tells apart (T8).
+      resources :browsers, only: %i[index edit update] do
+        post :certify, on: :collection
+      end
       resources :applies, only: %i[index new create show] do
         patch :cancel, on: :member
       end

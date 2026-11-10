@@ -26,11 +26,13 @@ module Relay
       "(the ROS 2 nodes in the graph) may not come back until they restart."
     ].freeze
 
-    # The registry's rows and roles, and the rooms' seats (Relay::RoomCerts:
-    # the rooms' store, not the registry).
+    # The registry's rows and roles, the rooms' seats (Relay::RoomCerts:
+    # the rooms' store, not the registry) and the users' browsers with a
+    # certificate (T8, Relay::BrowserCerts).
     def self.config_for(peers = RelayPeer.includes(:certificates, :roles).to_a, roles = RelayRole.all.to_a,
-                        seats: RoomCerts.seats)
-      CloudConfig.new(peers.map(&:to_config), Settings.cloud_settings.merge("room_seats" => seats),
+                        seats: RoomCerts.seats, browsers: BrowserCerts.config_entries)
+      CloudConfig.new(peers.map(&:to_config),
+                      Settings.cloud_settings.merge("room_seats" => seats, "browser_certs" => browsers),
                       roles: roles.map(&:to_config))
     end
 
@@ -104,6 +106,7 @@ module Relay
       apply.update!(config_text: text, config_digest: @config.digest, plan_json: JSON.generate(plan))
       write(text)
       refresh_rooms_file(apply)
+      refresh_browsers_file(apply, text)
       state = @graph.call
       before_id = cloud_view(state.graph)[:id]
       out, ok = restart
@@ -131,6 +134,14 @@ module Relay
       RoomFiles.write! if File.exist?(RoomFiles.path)
     rescue StandardError => e
       apply.update!(output: [ apply.output, "rooms' file: #{e.class}: #{e.message}" ].compact.join("\n"))
+    end
+
+    # The door's list of the browsers the configuration lets in (T8,
+    # Relay::BrowserCerts): written again with it.
+    def refresh_browsers_file(apply, text)
+      BrowserCerts.write_door_file!(text)
+    rescue StandardError => e
+      apply.update!(output: [ apply.output, "browsers' file: #{e.class}: #{e.message}" ].compact.join("\n"))
     end
 
     def restart

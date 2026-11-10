@@ -12,6 +12,11 @@
 # for HANDLE_HOLD (ReleasedHandle): the network and its records still know
 # it as that person's for a while, so nobody else can take it at once.
 #
+# A user's browser may receive files (T8, docs/files.md): the lists of
+# ReceiverLists, for the page that comes through the door with the user's
+# certificate (Relay::BrowserCerts, made when the handle is chosen; a
+# handle given up takes its certificate's files with it).
+#
 # TOTP (a second factor) is optional per user: the user turns it on from
 # the account page (the secret is shown once, to type into an authenticator
 # app) and confirms it with a code. A code is accepted once (otp_last_step).
@@ -23,6 +28,8 @@ class User < ApplicationRecord
   HANDLE_MAX = 20
   HANDLE_FORMAT = /\A[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*\z/
   HANDLE_HOLD = ENV.fetch("ASTERISM_HANDLE_HOLD_DAYS", 30).to_i.days
+
+  include ReceiverLists
 
   has_secure_password
   has_many :sessions, dependent: :destroy
@@ -47,6 +54,19 @@ class User < ApplicationRecord
 
   before_update :release_old_handle, if: -> { will_save_change_to_handle? && handle_in_database.present? }
   before_destroy { ReleasedHandle.release!(handle, id) if handle.present? }
+  # Its browser's certificate goes with it (T8).
+  after_destroy_commit { Relay::BrowserCerts.forget!(Relay::BrowserNode.base(self)) if handle.present? }
+
+  # The node its browser receives at: wasm-<handle> (none without a handle).
+  def receiver_nodes
+    [ Relay::BrowserNode.base(self) ].compact
+  end
+
+  # The users whose browsers' lists were chosen and who have a handle, for
+  # the bridge (only those with a certificate are let in by the router).
+  def self.managed
+    where.not(handle: nil).where.not(receivers_changed_at: nil).order(:handle)
+  end
 
   # How the console's own log names the user (never the email address: the
   # log is about the network, where only the handle is known).

@@ -10,6 +10,7 @@
 #             ws/7449 (browsers)             none: the door only
 #   door      7451 (bin/ws_door)             127.0.0.1:${ROUTER_WS_PORT} (the web server, with a pass check);
 #             relays to zenohd ws/7449 and closes a connection after WS_DOOR_MAX_SECONDS
+#             (T8: a user's own page to zenohd tls/7448 with the user's certificate instead)
 #             7452 (the rooms, G2)           127.0.0.1:${ROOM_DOOR_PORT} (the web server's /room and /room/seat):
 #             checks a room's key, gives a page a seat (0.3.0), then mutual TLS to zenohd tls/7448 with
 #             the seat's certificate
@@ -78,6 +79,10 @@ services:
       # Seats (0.3.0): the door's own table (its own volume).
       WS_DOOR_SEATS_FILE: /seats/seats.json
       WS_DOOR_SEAT_IDLE: ${WS_DOOR_SEAT_IDLE:-1800}
+      # Browsers the router tells apart (T8): the users' certificates the
+      # console makes in the rooms' volume; a user's own page goes to
+      # zenohd tls/7448 with its user's certificate.
+      WS_DOOR_BROWSERS_DIR: /rooms/browsers
       RUBY_THREAD_VM_STACK_SIZE: "131072"
       MALLOC_ARENA_MAX: "2"
     volumes:
@@ -172,7 +177,8 @@ volumes:
   certs: {}        # the CA certificate and this server's own router / bridge keys
   signer_ca: {}    # the CA's private key: the signer's only (back it up off the server, docs/install.md)
   backups: {}      # the console's database backups (bin/asterism backup; copy them off the server too)
-  rooms: {}        # the rooms (G2): the door's file and the seats' certificates and keys (the rooms' store)
+  rooms: {}        # the rooms (G2): the door's file and the seats' certificates and keys (the rooms' store);
+                   # the users' browsers' certificates and keys (T8, browsers/)
   seats: {}        # the door's seats' table (0.3.0): which seat each page has (hashes of their secrets only)
 
 networks:

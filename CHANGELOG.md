@@ -8,6 +8,34 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: one migration (four columns on `users`; going back
+needs the update's backup) and two lines in nginx's `asterism-router.conf`
+(docs/install.md, "Unreleased"). The update's setup makes the users'
+browsers' certificates and restarts the router on them.
+
+- Browsers the router tells apart (T8, docs/g1_5.md "Browsers the router
+  tells apart"): each user with a handle has a certificate for its browser
+  node (`wasm-<handle>`), made on the server when the handle is chosen
+  (Admin > Members > Browsers makes the missing ones); the browser never
+  has it. The pass check tells the door whose page it is (a word signed
+  with the console's key), and the door connects the user's own page to
+  zenohd's mutual-TLS port with the certificate, as it does for a room's
+  seat: the router sees that page as a subject of its own, with the roles
+  marked for browsers (`${node}` its name), writes under its name and
+  calls under its name only. A second page, a page before the apply and an
+  older link go on through the shared ws/ connection. A page from Family
+  mruby's browser build that asks is told which (a Text message before
+  Zenoh's first batch), and its Network panel says so.
+- Files with verified browsers: the "Receives files from" lists offer the
+  browsers with a certificate, a browser has the same lists (Members >
+  Browsers, Edit), and the apply makes their ACL lines as for the members;
+  the bridge sends a browser its list. The shared connection is refused
+  every transfer key (`asterism/*/transfer/**`).
+- A user whose handle changes loses the old certificate at once; one that
+  waits for the apply says so on the account page.
+
 ## 0.3.17
 
 What an update needs: nothing (no migration, no change to nginx or `.env`).

@@ -92,4 +92,15 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
     assert_equal true, p.reload.delivered["fmruby-aaaaaa"]["receiving"]
     assert_no_match(/receiving is off/, helper.receivers_delivery(p).to_s)
   end
+
+  test "a user's browser with lists is sent them at its node (T8)" do
+    user = users(:user)
+    user.update!(receive_files_from_more: "fmruby-aaaaaa")
+    users(:admin).update!(receive_files_from_more: "x") # no handle: no browser node, never sent
+    sync(%w[wasm-pat/transfer wasm-pat_2/transfer], 10.0)
+    assert_equal [ [ "wasm-pat", { "file" => [ "fmruby-aaaaaa" ], "checkpoint" => [], "at" => user.reload.receivers_changed_at.utc.iso8601 } ] ],
+                 @calls
+    assert_equal user.receivers_digest, user.reload.delivered.dig("wasm-pat", "digest")
+    assert(@said.any? { _1.include?("wasm-pat has the list of its user (written there)") })
+  end
 end

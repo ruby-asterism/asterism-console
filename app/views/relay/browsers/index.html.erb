@@ -1,0 +1,40 @@
+<% content_for(:title, "Browsers - Asterism Console") %>
+<%= render "relay/peers/tabs" %>
+<section class="card">
+  <h2>Browsers the router tells apart</h2>
+  <p>Each user with a handle has a certificate for the node its browser pages join as
+     (<code><%= Relay::Settings.browser_node_prefix %>&lt;handle&gt;</code>), made on this server: the browser never has it.
+     After an apply, the door connects the user's own page (the one the console names after the handle) with it, so the
+     cloud router sees that page as a subject of its own: it writes and calls as its own name only, and may send and
+     receive files with the members and browsers chosen below. A second page of the same user, a page opened before the
+     apply and a page without a pass from this console go on through the shared connection of every browser, where the
+     router cannot tell them apart and no file goes.</p>
+  <% if @users.empty? %>
+    <p class="hint">No user has a handle yet.</p>
+  <% else %>
+    <table class="list">
+      <thead><tr><th>Node</th><th>Certificate until</th><th>Router's ACL</th><th>Receives files from</th>
+                 <th>Receives apps (checkpoint) from</th><th>Now</th><th></th></tr></thead>
+      <tbody>
+        <% @users.each do |u| %>
+          <% name = Relay::BrowserCerts.name_for(u) %>
+          <% info = Relay::BrowserCerts.info(name) %>
+          <% good = info && info[1] <= Time.now && info[2] > Time.now %>
+          <tr id="browser-<%= u.handle %>">
+            <td><code><%= name %></code></td>
+            <td><%= good ? when_text(info[2]) : tag.span("none", class: "badge warn") %></td>
+            <td><% if good && Relay::BrowserCerts.applied?(name, @config) %><span class="badge ok">in the ACL</span>
+                <% elsif good %><span class="badge warn">waiting to apply</span>
+                <% else %><span class="hint">-</span><% end %></td>
+            <td><%= receivers_text(u, "file") %></td>
+            <td><%= receivers_text(u, "checkpoint") %>
+              <% if u.managed_receivers? %><br><span class="hint">on the page:</span> <%= receivers_delivery(u) %><% end %></td>
+            <td><%= @seen.include?(name) ? tag.span("connected", class: "badge ok") : tag.span("not here", class: "badge") %></td>
+            <td><%= link_to "Edit", edit_relay_browser_path(u) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+    <%= button_to "Make the missing certificates", certify_relay_browsers_path, class: "button" %>
+  <% end %>
+</section>
