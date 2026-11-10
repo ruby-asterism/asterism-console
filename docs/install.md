@@ -1133,6 +1133,16 @@ From 0.3.15 to 0.3.16 (who a machine receives files from, docs/files.md):
   the command); the lists are lost with it, and the machines keep the last
   list they wrote.
 
+From 0.3.16 to 0.3.17 (a machine with receiving off, docs/files.md):
+
+- `./update.sh 0.3.17`. No migration, no change to nginx, `.env` or the
+  roles.
+- A member machine with receiving off (its receive.toml without
+  `enabled = true`) shows so on its row's page, "The list on its machines".
+  Family mruby machines from this version on ship with receiving off; their
+  owner turns it on (the Receiving app, or the shell's `areceive on`).
+- Going back to 0.3.16 needs nothing but `./update.sh 0.3.16`.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

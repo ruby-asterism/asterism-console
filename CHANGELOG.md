@@ -8,7 +8,7 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased
+## 0.3.17
 
 What an update needs: nothing (no migration, no change to nginx or `.env`).
 
