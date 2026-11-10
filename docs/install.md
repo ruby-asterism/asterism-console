@@ -1176,9 +1176,9 @@ the router tells apart"):
 - Going back is restoring the backup the update made (it prints the
   command) and removing the lines from nginx (harmless if left).
 
-From 0.3.18 to the next version (T8c):
+From 0.3.18 to 0.3.19 (T8c):
 
-- `./update.sh <version>`. One migration: a new table, `remembered_browsers`
+- `./update.sh 0.3.19`. One migration: a new table, `remembered_browsers`
   (browsers that skip the TOTP code; the SHA-256 of the cookie only). No
   change to nginx, `.env` or the roles.
 - Every page a user opens from the console is `wasm-<handle>` from now on;
