@@ -1143,7 +1143,7 @@ From 0.3.16 to 0.3.17 (a machine with receiving off, docs/files.md):
   owner turns it on (the Receiving app, or the shell's `areceive on`).
 - Going back to 0.3.16 needs nothing but `./update.sh 0.3.16`.
 
-Unreleased (browsers the router tells apart, T8, docs/g1_5.md "Browsers
+From 0.3.17 to 0.3.18 (browsers the router tells apart, T8, docs/g1_5.md "Browsers
 the router tells apart"):
 
 - **nginx**: `asterism-router.conf`'s `location = /` has two more lines,
@@ -1155,7 +1155,7 @@ the router tells apart"):
   console signs the word (a key of its own in the `rooms` volume,
   `browsers/door.key`), so a header a browser sends itself counts for
   nothing even before nginx has the lines.
-- `./update.sh <version>`. One migration: four columns on `users` (the same
+- `./update.sh 0.3.18`. One migration: four columns on `users` (the same
   lists as a member row's, empty). The compose file's door has
   `WS_DOOR_BROWSERS_DIR` (the default is the same, `/rooms/browsers`). No
   change to `.env` or the roles.
