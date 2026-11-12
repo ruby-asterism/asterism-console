@@ -193,6 +193,10 @@ body.plain { min-height: 100vh; }
   display: block; width: 100%; margin-top: 4px; }
 .grid-form label.check { display: block; color: var(--text); }
 .grid-form label.check > input { margin: 0 6px 0 0; vertical-align: -2px; }
+/* A field the form does not use while another choice holds (the certificate
+   days of a row without an end): greyed and read-only. */
+.grid-form label.unused { opacity: 0.45; }
+.grid-form label.unused > input { cursor: not-allowed; }
 input[type=submit] {
   font: inherit; padding: 7px 16px; border: 1px solid var(--accent); border-radius: 6px;
   background: var(--accent); color: #fff; cursor: pointer;

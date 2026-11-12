@@ -206,6 +206,28 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_content
   end
 
+  test "no expiry greys the certificate days on the form; a row without an end shows no days" do
+    sign_in_as(users(:admin))
+    get new_relay_peer_path(kind: "client")
+    assert_select "form[data-controller~='cert-lifetime']", 1
+    assert_select "input[name='relay_peer[cert_days]'][data-cert-lifetime-target=days]", 1
+    assert_select "input[type=checkbox][name='relay_peer[cert_no_expiry]'][data-cert-lifetime-target=noExpiry]" \
+                  "[data-action='cert-lifetime#toggle']", 1
+    # The server alone (no script) still ignores the days of a row without an end.
+    post relay_peers_path, params: { relay_peer: PARAMS[:relay_peer].merge(cert_days: "37", cert_no_expiry: "1") }
+    peer = RelayPeer.find_by!(name: "w2bot")
+    assert_equal [ 37, true ], [ peer.cert_days, peer.cert_no_expiry? ]
+    get edit_relay_peer_path(peer)
+    assert_select "input[type=checkbox][name='relay_peer[cert_no_expiry]'][checked]", 1
+    get relay_peer_path(peer)
+    assert_select "dt", "Certificate lifetime"
+    assert_select "dd#cert-lifetime", /\Ano expiry/
+    assert_select "dd#cert-lifetime", { text: /37/, count: 0 }
+    peer.update!(cert_no_expiry: false)
+    get relay_peer_path(peer)
+    assert_select "dd#cert-lifetime", /\A37\s+days\z/
+  end
+
   test "bad names and keys are not saved" do
     sign_in_as(users(:admin))
     [ { name: "../x" }, { name: "ca" }, { rw_keys: "a b\n" }, { ro_keys: "x?y" }, { kind: "bridge" },

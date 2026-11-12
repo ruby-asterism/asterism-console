@@ -8,6 +8,16 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: nothing.
+
+- Members: on "Register a client" and a client row's Edit, ticking "No
+  expiry" greys the certificate days and makes them read-only; unticking
+  gives them back (without JavaScript the field stays as it is and the
+  days of such a row are ignored, as before). The row's page says
+  "Certificate lifetime": "no expiry" for such a row, without its days.
+
 ## 0.3.20
 
 What an update needs: one migration (a column on `relay_peers`; going back

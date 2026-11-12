@@ -1,16 +1,20 @@
 <% if peer.errors.any? %><p class="error"><%= peer.errors.full_messages.to_sentence %></p><% end %>
-<%= form_with model: peer, url: peer.persisted? ? relay_peer_path(peer) : relay_peers_path, class: "grid-form" do |f| %>
+<%= form_with model: peer, url: peer.persisted? ? relay_peer_path(peer) : relay_peers_path, class: "grid-form",
+              data: { controller: "cert-lifetime" } do |f| %>
   <label>Name (certificate CN = node ID)
     <%= f.text_field :name, required: true, disabled: peer.persisted?, pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]{0,62}" %></label>
   <label title="The pages and the graph show it before the name: Tab5 (<%= peer.name.presence || "name" %>)">Display name (optional)
     <%= f.text_field :display_name, maxlength: RelayPeer::DISPLAY_NAME_MAX, placeholder: "Tab5" %></label>
   <label>Kind <%= f.select :kind, RelayPeer::KINDS %></label>
-  <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
+  <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS,
+                                                        data: { cert_lifetime_target: "days" } %></label>
   <% if peer.kind == "client" %>
-    <label class="check wide"><%= f.check_box :cert_no_expiry %> No expiry: the certificates issued from now on never
-      end (notAfter 9999-12-31; the days above are not used). Nothing ends it: to stop this client, disable or remove
-      this row and apply, and the router's ACL leaves its name out (the router has no revocation list, so revoking
-      does the same, through the apply). Do not give its name to another row later.</label>
+    <label class="check wide"><%= f.check_box :cert_no_expiry,
+                                              data: { cert_lifetime_target: "noExpiry", action: "cert-lifetime#toggle" } %>
+      No expiry: the certificates issued from now on never end (notAfter 9999-12-31; the days above are not used,
+      and the field is greyed while this is ticked). Nothing ends it: to stop this client,
+      disable or remove this row and apply, and the router's ACL leaves its name out (the router has no revocation
+      list, so revoking does the same, through the apply). Do not give its name to another row later.</label>
   <% end %>
   <label class="check"><%= f.check_box :enabled %> Enabled</label>
   <% if peer.kind == "router" %>
