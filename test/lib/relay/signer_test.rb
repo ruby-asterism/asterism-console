@@ -2,6 +2,7 @@ require "test_helper"
 require "tmpdir"
 require "socket"
 require "rubygems/package"
+require_relative "../../test_helpers/dated_ca"
 
 # bin/signer as a real process (with a CA in a temporary directory) and the
 # console's side of it: Relay::SignerClient and Relay::Issuer.
@@ -181,5 +182,75 @@ class Relay::SignerTest < ActiveSupport::TestCase
       e = assert_raises(Relay::SignerClient::Error, bad.inspect) { @client.room_token(**args) }
       assert_match(/400/, e.message)
     end
+  end
+
+  def start_signer(dir)
+    port = self.class.free_port
+    pid = Process.spawn({ "SIGNER_TOKEN" => TOKEN }, Rails.root.join("bin/signer").to_s, "serve",
+                        "--ca-dir", dir, "--listen", "127.0.0.1:#{port}", out: File.join(@dir, "signer.log"))
+    50.times do
+      TCPSocket.new("127.0.0.1", port).close
+      break
+    rescue SystemCallError
+      sleep 0.1
+    end
+    [ pid, Relay::SignerClient.new("http://127.0.0.1:#{port}", TOKEN) ]
+  end
+
+  test "no expiry: the signer signs notAfter 9999-12-31 when asked, and logs it; days are not needed" do
+    _key, csr = Relay::CertAuthority.request("x")
+    ans = @client.sign(name: "fmruby-aaaaaa", csr: csr, days: 0, no_expiry: true)
+    cert = OpenSSL::X509::Certificate.new(ans["certificate"])
+    assert_equal [ Relay::CertAuthority::NO_EXPIRY, "9999-12-31T23:59:59Z" ], [ cert.not_after, ans["not_after"] ]
+    log = JSON.parse(File.readlines(File.join(@ca_dir, "issued.log")).last)
+    assert_equal "9999-12-31T23:59:59Z", log["not_after"]
+    assert Relay::CertAuthority.no_expiry?(OpenSSL::X509::Certificate.new(@client.ca_pem).not_after), "a new CA has no end"
+    assert_equal false, @client.no_expiry_ca["changed"], "nothing to do on a CA without an end"
+    e = assert_raises(Relay::SignerClient::Error) { @client.sign(name: "x", csr: csr, days: 0) }
+    assert_match(/days/, e.message)
+  end
+
+  test "POST /ca/no-expiry: a CA certificate with an end is made again without one, once; what it signed still verifies" do
+    dir = File.join(@dir, "dated", "ca")
+    Relay::CertAuthority.create(dir)
+    old = DatedCa.make!(dir)
+    pid, client = start_signer(dir)
+    key, csr = Relay::CertAuthority.request("x")
+    before = OpenSSL::X509::Certificate.new(client.sign(name: "fmruby-aaaaaa", csr: csr, no_expiry: true)["certificate"])
+    assert_equal old.to_pem, client.ca_pem
+    ans = client.no_expiry_ca
+    assert_equal [ true, "9999-12-31T23:59:59Z", old.not_after.utc.iso8601 ], ans.values_at("changed", "not_after", "before_not_after")
+    assert_equal Relay::CertAuthority.fingerprint(old), ans["before_fingerprint"]
+    assert File.exist?(File.join(dir, ans["kept"]))
+    fresh = OpenSSL::X509::Certificate.new(client.ca_pem)
+    assert_equal [ ans["fingerprint"], old.subject.to_s ], [ Relay::CertAuthority.fingerprint(fresh), fresh.subject.to_s ]
+    store = OpenSSL::X509::Store.new
+    store.add_cert(fresh)
+    assert store.verify(before), "signed before, verifies under the new CA certificate"
+    after = OpenSSL::X509::Certificate.new(client.sign(name: "fmruby-bbbbbb", csr: csr, days: 5)["certificate"])
+    assert store.verify(after)
+    assert after.check_private_key(key)
+    again = client.no_expiry_ca
+    assert_equal [ false, ans["fingerprint"] ], again.values_at("changed", "fingerprint")
+    assert_match(/made the CA certificate .* again without an end/, File.read(File.join(@dir, "signer.log")))
+  ensure
+    Process.kill("TERM", pid) rescue nil
+    Process.wait(pid) rescue nil
+  end
+
+  test "a client row with no expiry gets a certificate without an end; one from a signer that ignores it is refused" do
+    peer = RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client", cert_days: 30, cert_no_expiry: true)
+    key = OpenSSL::PKey::EC.generate("prime256v1")
+    record, = Relay::Issuer.new(signer: @client).issue(peer, [ key.public_to_der ].pack("m0"))
+    assert Relay::CertAuthority.no_expiry?(record.reload.not_after)
+    assert_equal "valid", record.status
+    assert peer.reload.in_acl?
+    older = Object.new
+    real = @client
+    older.define_singleton_method(:ca_pem) { real.ca_pem }
+    older.define_singleton_method(:sign) { |no_expiry: false, **how| real.sign(**how) } # a signer before 0.3.20
+    e = assert_raises(Relay::Issuer::Error) { Relay::Issuer.new(signer: older).issue(peer, [ key.public_to_der ].pack("m0")) }
+    assert_match(/not one without an end/, e.message)
+    refute RelayPeer.new(name: "home-a", kind: "router", cert_days: 30, cert_no_expiry: true).valid?, "a client's only"
   end
 end

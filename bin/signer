@@ -17,8 +17,16 @@
 #   POST /init   {"name": "Asterism Relay CA"}: makes a CA when there is none
 #                (the console's first setup, bin/asterism setup); 409 when one
 #                is there. -> {"subject", "not_after", "fingerprint"}
+#   POST /ca/no-expiry   makes the CA certificate again without an end
+#                (notAfter 99991231235959Z), with the same key, subject and
+#                extensions, when it has an end; what it signed before still
+#                validates. The one before stays in DIR as ca.pem.until-<date>.
+#                Idempotent (bin/asterism setup asks every time).
+#                -> {"changed": true|false, "not_after", "fingerprint"[, "before_not_after",
+#                    "before_fingerprint", "kept"]}
 #   POST /sign   {"name": "cruby", "csr": "<PEM>", "dns": [], "ips": [], "days": 90}
 #            or  {"name": "cruby", "spki": "<base64 DER>", ...}
+#                "no_expiry": true instead of "days": notAfter 99991231235959Z
 #                -> {"certificate": "<PEM>", "serial": "<hex>", "not_before", "not_after", "fingerprint"}
 #
 #   GET  /room-keys   the rooms' signing keys, public part only (G2):
@@ -156,12 +164,12 @@ module Signer
       reply(c, "201 Created", made)
     when [ "POST", "/room-token" ]
       room_token(c, dir, JSON.parse(body))
-    when [ "GET", "/ca" ], [ "POST", "/sign" ]
+    when [ "GET", "/ca" ], [ "POST", "/sign" ], [ "POST", "/ca/no-expiry" ]
       return reply(c, "404 Not Found", { "error" => "no CA yet (bin/asterism setup makes one)" }) unless ca
-      if path == "/ca"
-        reply(c, "200 OK", ca.cert.to_pem, "application/x-pem-file")
-      else
-        sign(c, ca, dir, JSON.parse(body))
+      case path
+      when "/ca" then reply(c, "200 OK", ca.cert.to_pem, "application/x-pem-file")
+      when "/ca/no-expiry" then no_expiry_ca(c, dir)
+      else sign(c, ca, dir, JSON.parse(body))
       end
     else
       reply(c, "404 Not Found", { "error" => "no such thing" })
@@ -183,6 +191,23 @@ module Signer
     return reply(c, "409 Conflict", { "error" => "there is a CA already" }) unless made
     reply(c, "201 Created", { "subject" => made.cert.subject.to_s, "not_after" => made.cert.not_after.utc.iso8601,
                               "fingerprint" => Relay::CertAuthority.fingerprint(made.cert) })
+  end
+
+  # POST /ca/no-expiry: the CA certificate without an end (once).
+  def no_expiry_ca(c, dir)
+    out = @lock.synchronize do
+      made = Relay::CertAuthority.no_expiry_ca!(dir)
+      next { "changed" => false } unless made
+      @ca, before, kept = made
+      log("made the CA certificate #{@ca.cert.subject} again without an end (notAfter " \
+          "#{@ca.cert.not_after.utc.iso8601}), the same key and subject; it ended " \
+          "#{before.not_after.utc.iso8601}, kept as #{File.basename(kept)}; " \
+          "fingerprint #{Relay::CertAuthority.fingerprint(before)} -> #{Relay::CertAuthority.fingerprint(@ca.cert)}")
+      { "changed" => true, "before_not_after" => before.not_after.utc.iso8601,
+        "before_fingerprint" => Relay::CertAuthority.fingerprint(before), "kept" => File.basename(kept) }
+    end
+    reply(c, "200 OK", out.merge("not_after" => @ca.cert.not_after.utc.iso8601,
+                                 "fingerprint" => Relay::CertAuthority.fingerprint(@ca.cert)))
   end
 
   # A bare ECDSA P-256 public key (base64 of SubjectPublicKeyInfo DER).
@@ -254,22 +279,24 @@ module Signer
   end
 
   def sign(c, ca, dir, req)
+    no_expiry = req["no_expiry"] == true
     days = Integer(req.fetch("days", 90))
-    raise ArgumentError, "days must be 1..#{MAX_DAYS}" unless days.between?(1, MAX_DAYS)
+    raise ArgumentError, "days must be 1..#{MAX_DAYS}" unless no_expiry || days.between?(1, MAX_DAYS)
     pub = if req.key?("spki")
       raise ArgumentError, "csr or spki, not both" if req.key?("csr")
       spki_key(req["spki"])
     else
       OpenSSL::X509::Request.new(req.fetch("csr"))
     end
-    cert = ca.sign(req.fetch("name"), pub, dns: req["dns"] || [], ips: req["ips"] || [], days: days)
+    cert = ca.sign(req.fetch("name"), pub, dns: req["dns"] || [], ips: req["ips"] || [], days: days,
+                                           no_expiry: no_expiry)
     out = { "certificate" => cert.to_pem, "serial" => cert.serial.to_s(16).downcase,
             "not_before" => cert.not_before.utc.iso8601, "not_after" => cert.not_after.utc.iso8601,
             "fingerprint" => Relay::CertAuthority.fingerprint(cert) }
     File.open(File.join(dir, "issued.log"), "a", 0o600) do |f|
       f.puts(JSON.generate(out.except("certificate").merge("name" => req["name"], "at" => Time.now.utc.iso8601)))
     end
-    log("signed #{req['name']} serial #{out['serial']} until #{out['not_after']}")
+    log("signed #{req['name']} serial #{out['serial']} #{no_expiry ? 'without an end' : "until #{out['not_after']}"}")
     reply(c, "200 OK", out)
   rescue KeyError => e
     raise ArgumentError, e.message

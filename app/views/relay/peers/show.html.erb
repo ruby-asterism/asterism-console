@@ -18,7 +18,8 @@
     <dt>Console sees</dt><dd><%= console_sees(@peer, long: true) %></dd>
     <dt>Enabled</dt><dd><%= @peer.enabled? ? "yes" : "no (left out of the ACL on the next apply)" %></dd>
     <dt>Certificate names</dt><dd><%= ([ @peer.name ] + @peer.dns_list + @peer.ip_list).join(", ") %></dd>
-    <dt>Certificate days</dt><dd><%= @peer.cert_days %></dd>
+    <dt>Certificate days</dt><dd><% if @peer.cert_no_expiry? %>no expiry <span class="hint">(its certificates
+      end 9999-12-31; disable or remove this row and apply to stop it)</span><% else %><%= @peer.cert_days %><% end %></dd>
   </dl>
   <% if current_user.admin? %>
     <p><%= link_to "Edit", edit_relay_peer_path(@peer) %></p>

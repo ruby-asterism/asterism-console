@@ -11,7 +11,7 @@
         <tr>
           <td><code><%= c.serial %></code></td>
           <td class="nowrap"><%= when_text(c.not_before) %></td>
-          <td class="nowrap"><%= when_text(c.not_after) %></td>
+          <td class="nowrap"><%= until_text(c.not_after) %></td>
           <td><span class="badge <%= c.status == 'valid' ? 'ok' : 'bad' %>"><%= c.status %></span>
             <% if c.revoked_at %><br><span class="hint"><%= when_text(c.revoked_at) %> by <%= c.revoked_by&.email_address %></span><% end %></td>
           <td><%= c.source == "imported" ? "imported" : c.issued_by&.email_address %></td>

@@ -59,7 +59,7 @@ export default class extends Controller {
       this.configTarget.value = ans.zenoh_config
       this.info = ans.info
       this.factsTarget.innerHTML = ""
-      for (const [k, v] of [["Serial", ans.serial], ["Until", ans.not_after], ["Fingerprint (SHA-256)", ans.fingerprint]]) {
+      for (const [k, v] of [["Serial", ans.serial], ["Until", String(ans.not_after).startsWith("9999-") ? "no expiry" : ans.not_after], ["Fingerprint (SHA-256)", ans.fingerprint]]) {
         const dt = document.createElement("dt"); dt.textContent = k
         const dd = document.createElement("dd"); dd.textContent = v
         this.factsTarget.append(dt, dd)

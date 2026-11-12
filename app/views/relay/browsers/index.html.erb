@@ -22,7 +22,7 @@
           <% good = info && info[1] <= Time.now && info[2] > Time.now %>
           <tr id="browser-<%= u.handle %>">
             <td><code><%= name %></code></td>
-            <td><%= good ? when_text(info[2]) : tag.span("none", class: "badge warn") %></td>
+            <td><%= good ? until_text(info[2]) : tag.span("none", class: "badge warn") %></td>
             <td><% if good && Relay::BrowserCerts.applied?(name, @config) %><span class="badge ok">in the ACL</span>
                 <% elsif good %><span class="badge warn">waiting to apply</span>
                 <% else %><span class="hint">-</span><% end %></td>

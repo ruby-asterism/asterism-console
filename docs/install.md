@@ -513,9 +513,12 @@ certificate, or with one from another CA, is refused.
 Two kinds of data need a copy, and they are handled differently:
 
 - **The CA** (its key, only in the `signer_ca` volume): made once by the
-  first setup and never changed afterwards. Take one encrypted copy off the
-  server right after the first setup (below). Updates do not touch it, so
-  there is nothing to back up again before an update.
+  first setup; its key never changes afterwards. Take one encrypted copy off
+  the server right after the first setup (below). Updates do not touch the
+  key, so there is nothing to back up again before an update. (The update to
+  0.3.20 makes the CA's certificate again without an end, once, with the
+  same key: a copy taken before holds the certificate before, which works
+  as well; take a new copy when convenient.)
 - **The console's databases** (users, the registry, the ledger, the call
   log; a few hundred KB) in the `storage` volume. They change all the time
   and are backed up **automatically, every day**, by the `backup` service,
@@ -1191,6 +1194,58 @@ From 0.3.18 to 0.3.19 (T8c):
   the account page lists the browsers remembered and forgets them.
 - Going back is restoring the backup the update made (it prints the
   command).
+
+From 0.3.19 to the next version (certificates without an end):
+
+- `./update.sh <version>`. One migration: a column on `relay_peers`
+  (`cert_no_expiry`, off for every row: nothing is issued differently
+  until an admin chooses). No change to nginx, `.env` or the roles.
+- **The CA certificate.** The update's setup asks the signer to make the
+  CA's certificate again without an end (notAfter `99991231235959Z`), once:
+  the same key, the same subject and extensions (the subject key identifier
+  with them), the same start, a new serial. Every certificate the CA signed
+  before keeps validating under it, and the clients that hold the
+  certificate before (in their `.tar`) still trust the router as before.
+  The setup says so ("made the CA certificate again without an end", with
+  the fingerprints before and after), and so does the signer's log; the
+  certificate before stays in the signer's volume as
+  `ca/ca.pem.until-<its end>`. The setup also writes the new one where the
+  router and the bridge read it (the `certs` volume; the update's restart
+  takes it). A CA made by 0.3.20's first setup has no end from the start.
+  A CA certificate that already has none is left as it is (every later
+  setup says "without an end").
+- **No expiry, per client.** Admin > Members, a client's row (Register a
+  client, or Edit): "No expiry" (off by default; the certificate days stay
+  as they were). The certificates issued for that row from then on end
+  9999-12-31 (RFC 5280's "no well-defined expiration date"), and the lists
+  (the members, the row's certificates) say "no expiry". Certificates issued
+  before keep their end; issue one again for a row that should have none.
+  The browsers' and the rooms' seats' certificates keep their lifetimes.
+  **Stopping such a client** is disabling or removing its row and applying:
+  the router's ACL leaves its name out, and the router lets that
+  certificate do nothing (it may still open a TLS connection; zenohd 1.10.1
+  has no revocation list). Revoking it in the ledger does the same through
+  the apply. Do not give its name to another row later: the certificate
+  would have that row's rights.
+- Boards with the CA certificate from before (it ends ten years after the
+  CA's first setup) check the router with it until then; Mbed TLS (the
+  ESP32 boards, the native build) refuses a CA certificate past its end, so
+  before that date give them the new `ca.pem` (any certificate issued after
+  the update comes with it in its `.tar`).
+- Check: the setup's "CA (in the signer)" lines say "without an end";
+  `docker compose exec signer ls /ca/ca` lists `ca.pem.until-<date>`.
+- Going back to 0.3.19 is restoring the backup the update made (it prints
+  the command); the CA certificate stays without an end, which 0.3.19 runs
+  with as it is (its lists show the date 9999-12-31). To put the
+  certificate before back as well:
+  `docker compose exec signer cp /ca/ca/ca.pem.until-<date> /ca/ca/ca.pem`,
+  `docker compose restart signer`, and `docker compose run --rm console
+  bin/asterism setup` (with `ASTERISM_CA_NO_EXPIRY=off` in `.env` while
+  the console is this version or later; it writes the certificate to the
+  router's volume), then `docker compose restart zenohd door console bridge`.
+  Certificates issued without an end in between keep validating until the
+  CA certificate before ends (zenohd does not check the end of the CA it
+  trusts; Mbed TLS does).
 
 ## 21. When something is wrong
 

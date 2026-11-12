@@ -6,6 +6,12 @@
     <%= f.text_field :display_name, maxlength: RelayPeer::DISPLAY_NAME_MAX, placeholder: "Tab5" %></label>
   <label>Kind <%= f.select :kind, RelayPeer::KINDS %></label>
   <label>Certificate days <%= f.number_field :cert_days, min: 1, max: Relay::CertAuthority::LEAF_DAYS %></label>
+  <% if peer.kind == "client" %>
+    <label class="check wide"><%= f.check_box :cert_no_expiry %> No expiry: the certificates issued from now on never
+      end (notAfter 9999-12-31; the days above are not used). Nothing ends it: to stop this client, disable or remove
+      this row and apply, and the router's ACL leaves its name out (the router has no revocation list, so revoking
+      does the same, through the apply). Do not give its name to another row later.</label>
+  <% end %>
   <label class="check"><%= f.check_box :enabled %> Enabled</label>
   <% if peer.kind == "router" %>
     <label class="check wide"><%= f.check_box :admin_space %> Console can see behind this router: the cloud router passes the

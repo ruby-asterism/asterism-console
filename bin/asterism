@@ -23,7 +23,10 @@
 #   1. checks the settings (.env): the secrets, the names, the enrollment
 #   2. the databases (db:prepare: made, or migrated)
 #   3. the CA: asks the signer to make one when it has none (the CA's key
-#      stays in the signer's volume; back it up, docs/install.md)
+#      stays in the signer's volume; back it up, docs/install.md), and,
+#      when its certificate has an end (a CA made before 0.3.20), to make
+#      that certificate again without one: the same key and subject, so
+#      what it signed keeps validating (ASTERISM_CA_NO_EXPIRY=off leaves it)
 #   4. the example role "match" (when there is no role at all)
 #   5. the first admin, when there is none: ADMIN_EMAIL and CONSOLE_PASSWORD
 #      from the environment, else asked for on the terminal
@@ -52,7 +55,7 @@ require "optparse"
 
 ROOT = File.expand_path("..", __dir__)
 Dir.chdir(ROOT)
-USAGE_LINES = 1..46
+USAGE_LINES = 1..51
 
 def say(text) = puts(text)
 def step(text) = puts("\n== #{text}")
@@ -131,11 +134,31 @@ def ensure_ca
 end
 
 def ca_ready(client)
+  ca_no_expiry(client)
   pem = client.ca_pem
   cert = OpenSSL::X509::Certificate.new(pem)
-  done "the signer has its CA: #{cert.subject} until #{cert.not_after.utc.to_date}"
+  ends = Relay::CertAuthority.no_expiry?(cert.not_after) ? "without an end" : "until #{cert.not_after.utc.to_date}"
+  done "the signer has its CA: #{cert.subject} #{ends}"
   done "fingerprint (SHA-256) #{Relay::CertAuthority.fingerprint(cert)}"
   pem
+end
+
+# The CA certificate without an end (0.3.20), so that it never cuts off the
+# clients' certificates without one: the signer makes it again with the
+# same key and subject when it has an end; nothing when it has none.
+def ca_no_expiry(client)
+  if ENV["ASTERISM_CA_NO_EXPIRY"].to_s.strip.downcase == "off"
+    done "the CA certificate is left as it is (ASTERISM_CA_NO_EXPIRY=off)"
+    return
+  end
+  ans = client.no_expiry_ca
+  return unless ans["changed"]
+  done "made the CA certificate again without an end (the same key and subject; what it signed keeps validating)"
+  done "it ended #{ans['before_not_after']} (fingerprint #{ans['before_fingerprint']}); " \
+       "that one is kept in the signer's volume as #{ans['kept']}"
+rescue Relay::SignerClient::Error => e
+  raise unless e.message.include?("said 404")
+  done "the signer is older than this console: its CA certificate is left as it is (the next setup asks again)"
 end
 
 def ensure_roles
@@ -168,6 +191,11 @@ def ensure_identities(ca_pem)
   host = ENV["ASTERISM_RELAY_PUBLIC_ENDPOINT"].to_s[%r{\Atls/(.+):\d+\z}, 1]
   dns = [ "zenohd", host, *ENV["ASTERISM_RELAY_EXTRA_DNS"].to_s.split(",").map(&:strip) ].compact.reject(&:empty?).uniq
   ips = ENV["ASTERISM_RELAY_EXTRA_IPS"].to_s.split(",").map(&:strip).reject(&:empty?)
+  ca_file = File.join(out, "ca.pem")
+  if File.exist?(ca_file) && File.read(ca_file) != ca_pem
+    Relay::CertAuthority.write(ca_file, ca_pem, 0o644)
+    done "wrote the signer's CA certificate to #{ca_file} (the router and the bridge read it when they start)"
+  end
   { router => { kind: "router", dns: dns, ips: ips },
     "console" => { kind: "client", rw: [ "asterism/**" ], admin_space: true } }.each do |name, how|
     why = Relay::LocalIdentity.stale?(name: name, out: out, ca_pem: ca_pem, dns: how[:dns] || [])

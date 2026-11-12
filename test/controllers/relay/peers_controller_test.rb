@@ -186,6 +186,26 @@ class Relay::PeersControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "no expiry (0.3.20): a client's choice on the form, off by default; not for a router" do
+    sign_in_as(users(:admin))
+    get new_relay_peer_path(kind: "client")
+    assert_select "input[type=checkbox][name='relay_peer[cert_no_expiry]']:not([checked])", 1
+    assert_select "label", /disable or remove\s+this row and apply/
+    get new_relay_peer_path(kind: "router")
+    assert_select "input[name='relay_peer[cert_no_expiry]']", 0
+    post relay_peers_path, params: { relay_peer: PARAMS[:relay_peer].merge(cert_no_expiry: "1") }
+    peer = RelayPeer.find_by!(name: "w2bot")
+    assert peer.cert_no_expiry?
+    get relay_peer_path(peer)
+    assert_select "dd", /no expiry/
+    patch relay_peer_path(peer), params: { relay_peer: { cert_no_expiry: "0" } }
+    refute peer.reload.cert_no_expiry?
+    assert_no_difference("RelayPeer.count") do
+      post relay_peers_path, params: { relay_peer: PARAMS[:relay_peer].merge(name: "home-a", kind: "router", cert_no_expiry: "1") }
+    end
+    assert_response :unprocessable_content
+  end
+
   test "bad names and keys are not saved" do
     sign_in_as(users(:admin))
     [ { name: "../x" }, { name: "ca" }, { rw_keys: "a b\n" }, { ro_keys: "x?y" }, { kind: "bridge" },

@@ -13,6 +13,10 @@ class RelayHelperTest < ActionView::TestCase
       assert_equal "at 2026-10-14 21:30 JST", RelayApply.new(mode: "at", run_at: t).when_text
     end
     assert_equal "-", when_text(nil)
+    assert_equal '<span class="no-expiry">no expiry</span>', until_text(Time.utc(9999, 12, 31, 23, 59, 59))
+    Time.use_zone("Asia/Tokyo") { assert_match(/no expiry/, until_text(Time.utc(9999, 12, 31, 23, 59, 59).in_time_zone)) }
+    assert_equal "2026-10-14 12:30 UTC", until_text(t)
+    assert_equal "-", until_text(nil)
     assert_equal "not a time", iso_when("not a time")
   end
 

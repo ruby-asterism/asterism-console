@@ -8,6 +8,35 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: one migration (a column on `relay_peers`; going back
+needs the update's backup). Nothing in nginx, `.env` or the roles. The
+update's setup makes the CA's certificate again without an end, once
+(docs/install.md, "Updating from an earlier deployment").
+
+- Certificates without an end, per client: "Register a client" and a
+  client row's Edit have "No expiry" (off by default; the certificate days
+  stay the default). The certificates issued for such a row end
+  99991231235959Z (RFC 5280's "no well-defined expiration date",
+  GeneralizedTime); the members' list, the row's certificates and the
+  Browsers page say "no expiry" for such an end. Such a client is stopped
+  by disabling or removing its row and applying: the router's ACL leaves
+  its name out. Browsers' and rooms' seats' certificates keep their
+  lifetimes.
+- The CA certificate has no end: the signer makes it again with the same
+  key, subject and extensions (`POST /ca/no-expiry`), so the certificates
+  it signed keep validating; the update's setup asks for it once and says
+  so, the signer logs it and keeps the certificate before as
+  `ca.pem.until-<date>`. A new CA has no end from the start.
+  `ASTERISM_CA_NO_EXPIRY=off` (`.env`) leaves the CA certificate as it is.
+- Checked with zenohd 1.10.1 (rustls): a certificate without an end, signed
+  before or after the CA certificate was made again, connects with mutual
+  TLS and passes the ACL, also with the CA certificate before on either
+  side, and holds its link (`close_link_on_expiration`); one of another CA
+  is refused. Mbed TLS 3.6 (the ESP32 boards' and the native build's)
+  parses and verifies the year 9999 and completes the handshake with it.
+
 ## 0.3.19
 
 What an update needs: one migration (a new table, `remembered_browsers`;

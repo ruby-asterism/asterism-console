@@ -58,7 +58,9 @@ module Relay
       [ key, cert, ca.to_pem ]
     end
 
-    Unlisted = Struct.new(:name, :dns_list, :ip_list, :cert_days)
+    Unlisted = Struct.new(:name, :dns_list, :ip_list, :cert_days) do
+      def cert_no_expiry? = false
+    end
 
     # A bare ECDSA P-256 public key from SubjectPublicKeyInfo (DER, or
     # base64 of it). Anything else (another curve, RSA, a private key) is
@@ -139,16 +141,24 @@ module Relay
 
     private
 
+    # A row with "No expiry" asks for notAfter 99991231235959Z (and the
+    # answer is checked: a signer before 0.3.20 would sign for its days).
     def sign_and_check(peer, pub_or_csr)
+      how = { name: peer.name, dns: peer.dns_list, ips: peer.ip_list, days: peer.cert_days }
+      how[:no_expiry] = true if peer.cert_no_expiry?
       ans = if pub_or_csr.is_a?(OpenSSL::X509::Request)
-        @signer.sign(name: peer.name, csr: pub_or_csr, dns: peer.dns_list, ips: peer.ip_list, days: peer.cert_days)
+        @signer.sign(csr: pub_or_csr, **how)
       else
-        @signer.sign(name: peer.name, spki: pub_or_csr, dns: peer.dns_list, ips: peer.ip_list, days: peer.cert_days)
+        @signer.sign(spki: pub_or_csr, **how)
       end
       cert = OpenSSL::X509::Certificate.new(ans.fetch("certificate"))
       cn = cert.subject.to_a.find { _1[0] == "CN" }&.dig(1)
       raise Error, "the signer gave a certificate for #{cn.inspect}" unless cn == peer.name
       raise Error, "the certificate is not for the key given" unless yield(cert)
+      if peer.cert_no_expiry? && !CertAuthority.no_expiry?(cert.not_after)
+        raise Error, "the signer gave a certificate that ends #{cert.not_after.utc.to_date}, not one without an end " \
+                     "(a signer older than the console: restart it on the console's version)"
+      end
       ca = OpenSSL::X509::Certificate.new(@signer.ca_pem)
       store = OpenSSL::X509::Store.new
       store.add_cert(ca)

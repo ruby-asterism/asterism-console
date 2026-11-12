@@ -349,7 +349,9 @@ configuration from the registry and applies it.
 - **The signer** (`bin/signer`, plain Ruby) is the only process that holds
   the CA's private key. **The peer's key is made in the admin's browser**
   (Web Crypto, ECDSA P-256): the page sends the public key only, the signer
-  signs a certificate for the peer's name over it (at most 825 days) and
+  signs a certificate for the peer's name over it (at most 825 days, or
+  without an end for a client row with "No expiry": notAfter 9999-12-31,
+  stopped by disabling or removing the row and applying) and
   logs it in its own `issued.log`, Rails records the certificate in its
   ledger (serial, dates, fingerprint, who) and the page shows the private
   key, the certificate, the CA and an example configuration once, with Copy

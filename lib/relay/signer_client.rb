@@ -57,10 +57,13 @@ module Relay
     # this side) or spki (an OpenSSL::PKey public key, e.g. made in a
     # browser: only the public key travels). Returns the parsed answer with
     # "certificate" (PEM), "serial", "not_before", "not_after", "fingerprint".
-    def sign(name:, csr: nil, spki: nil, dns: [], ips: [], days: 90)
+    # no_expiry: notAfter 99991231235959Z instead of days (a signer before
+    # 0.3.20 ignores it and signs for days: Relay::Issuer checks).
+    def sign(name:, csr: nil, spki: nil, dns: [], ips: [], days: 90, no_expiry: false)
       raise ArgumentError, "csr: or spki:" unless csr.nil? ^ spki.nil?
       req = Net::HTTP::Post.new("/sign", "Content-Type" => "application/json")
       body = { "name" => name, "dns" => dns, "ips" => ips, "days" => days }
+      body["no_expiry"] = true if no_expiry
       if csr
         body["csr"] = csr.to_pem
       else
@@ -68,6 +71,15 @@ module Relay
       end
       req.body = JSON.generate(body)
       JSON.parse(request(req).body)
+    end
+
+    # Asks the signer to make its CA certificate again without an end (the
+    # same key and subject), when it has one. Returns {"changed" => bool,
+    # "not_after", "fingerprint", and when changed "before_not_after",
+    # "before_fingerprint", "kept"}. Error "said 404" from a signer before
+    # 0.3.20.
+    def no_expiry_ca
+      JSON.parse(request(Net::HTTP::Post.new("/ca/no-expiry", "Content-Type" => "application/json")).body)
     end
 
     # The rooms' signing keys (G2), public parts only:

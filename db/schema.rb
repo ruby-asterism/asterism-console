@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_10_200000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_12_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -271,6 +271,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_10_200000) do
     t.text "receive_checkpoints_from"
     t.datetime "receivers_changed_at"
     t.text "receivers_delivered"
+    t.boolean "cert_no_expiry", default: false, null: false
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 

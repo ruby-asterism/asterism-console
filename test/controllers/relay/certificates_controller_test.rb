@@ -13,9 +13,9 @@ class Relay::CertificatesControllerTest < ActionDispatch::IntegrationTest
 
     attr_reader :seen
 
-    def sign(name:, csr: nil, spki: nil, dns: [], ips: [], days: 90)
-      (@seen ||= []) << { name: name, csr: csr, spki: spki }
-      c = @ca.sign(name, csr || spki, dns: dns, ips: ips, days: days)
+    def sign(name:, csr: nil, spki: nil, dns: [], ips: [], days: 90, no_expiry: false)
+      (@seen ||= []) << { name: name, csr: csr, spki: spki, no_expiry: no_expiry }
+      c = @ca.sign(name, csr || spki, dns: dns, ips: ips, days: days, no_expiry: no_expiry)
       { "certificate" => c.to_pem, "serial" => c.serial.to_s(16) }
     end
   end
@@ -120,6 +120,26 @@ class Relay::CertificatesControllerTest < ActionDispatch::IntegrationTest
   ensure
     Rails.logger = old
     ActionController::Base.logger = old
+  end
+
+  test "no expiry (0.3.20): the certificate ends 9999-12-31 and the pages say \"no expiry\"" do
+    @peer.update!(cert_no_expiry: true)
+    post relay_peer_certificates_path(@peer), params: { spki: spki }, as: :json
+    assert_response :created
+    assert_equal "9999-12-31T23:59:59Z", response.parsed_body["not_after"]
+    assert Relay::Issuer.signer.seen.sole[:no_expiry]
+    rec = @peer.certificates.sole
+    assert_equal [ "valid", true ], [ rec.status, Relay::CertAuthority.no_expiry?(rec.not_after) ]
+    assert @peer.reload.in_acl?
+    get relay_peer_path(@peer)
+    assert_select "#peer-certs td .no-expiry", "no expiry"
+    assert_select "dd", /no expiry/
+    get relay_peers_path
+    assert_select "td .no-expiry", "no expiry"
+    @peer.update!(cert_no_expiry: false)
+    post relay_peer_certificates_path(@peer), params: { spki: spki(OpenSSL::PKey::EC.generate("prime256v1")) }, as: :json
+    assert_in_delta 10.days.from_now, @peer.reload.certificates.first.not_after, 120
+    refute Relay::Issuer.signer.seen.last[:no_expiry]
   end
 
   test "revoking takes the peer out of the next ACL" do

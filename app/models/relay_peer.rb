@@ -46,6 +46,10 @@ class RelayPeer < ApplicationRecord
   normalizes :display_name, with: ->(v) { v.to_s.gsub(/[[:cntrl:]]/, " ").squish.presence }
   validates :display_name, length: { maximum: DISPLAY_NAME_MAX }
   validates :cert_days, numericality: { only_integer: true, in: 1..Relay::CertAuthority::LEAF_DAYS }
+  # "No expiry" (0.3.20): its certificates end 9999-12-31 instead of after
+  # cert_days (a client's only). Such a certificate is stopped by disabling
+  # or removing the row and applying: the ACL then leaves its name out.
+  validates :cert_no_expiry, absence: { message: "is for a client only" }, unless: -> { kind == "client" }
   validate :keys_are_key_expressions
   validate :names_and_addresses
   validate :nodes_are_node_ids

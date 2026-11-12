@@ -16,6 +16,14 @@
 # (access_control subjects, cert_common_names). Keys are ECDSA P-256 in
 # PKCS#8 PEM (mode 0600). Certificates carry the extensions rustls (zenohd,
 # zenoh-c) wants: v3, subjectAltName, keyUsage and extendedKeyUsage.
+#
+# No expiry (0.3.20): a certificate may have notAfter 99991231235959Z, RFC
+# 5280's "no well-defined expiration date" (GeneralizedTime); a client row
+# chooses it (Members, "No expiry"). The CA certificate has it too, so it
+# never cuts such a certificate off: a CA made before has its certificate
+# made again with the same key, subject and extensions (no_expiry_ca!, the
+# signer's POST /ca/no-expiry, run by bin/asterism setup), and what it
+# signed before keeps validating.
 require "openssl"
 require "fileutils"
 require "securerandom"
@@ -23,8 +31,9 @@ require "ipaddr"
 
 module Relay
   class CertAuthority
-    CA_DAYS = 3650
     LEAF_DAYS = 825
+    # notAfter of a certificate without an end (RFC 5280, 4.1.2.5).
+    NO_EXPIRY = Time.utc(9999, 12, 31, 23, 59, 59).freeze
     NAME_RE = /\A[A-Za-z0-9][A-Za-z0-9._-]{0,62}\z/
 
     attr_reader :dir, :cert, :key
@@ -55,7 +64,7 @@ module Relay
       cert.subject = cert.issuer = OpenSSL::X509::Name.new([ [ "CN", common_name ] ])
       cert.public_key = key
       cert.not_before = Time.now - 60
-      cert.not_after = Time.now + CA_DAYS * 86_400
+      cert.not_after = NO_EXPIRY
       ef = OpenSSL::X509::ExtensionFactory.new(cert, cert)
       cert.add_extension(ef.create_extension("basicConstraints", "CA:TRUE,pathlen:0", true))
       cert.add_extension(ef.create_extension("keyUsage", "keyCertSign,cRLSign", true))
@@ -64,6 +73,43 @@ module Relay
       write(File.join(dir, "ca.key"), key.private_to_pem, 0o600)
       write(File.join(dir, "ca.pem"), cert.to_pem, 0o644)
       new(dir, cert, key)
+    end
+
+    # Whether time (a certificate's notAfter) is the one without an end.
+    def self.no_expiry?(time)
+      !time.nil? && time.getutc.year >= 9999
+    end
+
+    # Makes the CA certificate in dir again without an end, when it has one:
+    # the same key, subject, not_before and extensions (the subject key
+    # identifier with them), a new serial, notAfter NO_EXPIRY. Certificates
+    # it signed before validate under the new one (their issuer is the same
+    # name, their authority key identifier the same key ID). The one before
+    # is kept as ca.pem.until-<its end, YYYYMMDD> next to ca.pem (going
+    # back is putting it back). Returns nil when there was nothing to do,
+    # else [the new CertAuthority, the certificate before, the kept file].
+    def self.no_expiry_ca!(dir)
+      ca = load(dir)
+      return nil if no_expiry?(ca.cert.not_after)
+      old = ca.cert
+      raise ArgumentError, "the CA's key does not match its certificate" unless old.check_private_key(ca.key)
+      raise ArgumentError, "the CA's certificate is not self-signed" unless old.subject.to_der == old.issuer.to_der
+      cert = OpenSSL::X509::Certificate.new
+      cert.version = 2
+      cert.serial = serial
+      cert.subject = old.subject
+      cert.issuer = old.subject
+      cert.public_key = ca.key
+      cert.not_before = old.not_before
+      cert.not_after = NO_EXPIRY
+      old.extensions.each { cert.add_extension(_1) }
+      cert.sign(ca.key, OpenSSL::Digest.new("SHA256"))
+      kept = File.join(dir, "ca.pem.until-#{old.not_after.utc.strftime('%Y%m%d')}")
+      write(kept, old.to_pem, 0o644) unless File.exist?(kept)
+      tmp = File.join(dir, "ca.pem.new")
+      write(tmp, cert.to_pem, 0o644)
+      File.rename(tmp, File.join(dir, "ca.pem"))
+      [ new(dir, cert, ca.key), old, kept ]
     end
 
     def self.serial
@@ -94,9 +140,10 @@ module Relay
     # one (routers that listen); name itself is always a DNS name too.
     # Good for both server and client authentication (a router listens and
     # connects with the same certificate). Returns the certificate.
-    def issue(name, dns: [], ips: [], days: LEAF_DAYS)
+    # no_expiry: notAfter NO_EXPIRY instead of days.
+    def issue(name, dns: [], ips: [], days: LEAF_DAYS, no_expiry: false)
       key = OpenSSL::PKey::EC.generate("prime256v1")
-      cert = sign(name, key, dns: dns, ips: ips, days: days)
+      cert = sign(name, key, dns: dns, ips: ips, days: days, no_expiry: no_expiry)
       self.class.write(path(name, "key"), key.private_to_pem, 0o600)
       self.class.write(path(name, "pem"), cert.to_pem, 0o644)
       cert
@@ -105,9 +152,11 @@ module Relay
     # Signs a certificate for name over public_key (a key, or a CSR whose
     # signature is checked; only its public key is taken, the subject comes
     # from name). Nothing is written. Used by issue and by bin/signer.
-    def sign(name, public_key, dns: [], ips: [], days: LEAF_DAYS)
+    def sign(name, public_key, dns: [], ips: [], days: LEAF_DAYS, no_expiry: false)
       raise ArgumentError, "bad name: #{name.inspect}" unless NAME_RE.match?(name.to_s) && name != "ca"
-      raise ArgumentError, "bad days: #{days.inspect}" unless days.is_a?(Integer) && days.between?(1, LEAF_DAYS)
+      unless no_expiry || (days.is_a?(Integer) && days.between?(1, LEAF_DAYS))
+        raise ArgumentError, "bad days: #{days.inspect}"
+      end
       dns = Array(dns).map(&:to_s)
       ips = Array(ips).map(&:to_s)
       bad = dns.reject { NAME_RE.match?(_1) }
@@ -124,7 +173,7 @@ module Relay
       cert.issuer = @cert.subject
       cert.public_key = public_key
       cert.not_before = Time.now - 60
-      cert.not_after = Time.now + days * 86_400
+      cert.not_after = no_expiry ? NO_EXPIRY : Time.now + days * 86_400
       ef = OpenSSL::X509::ExtensionFactory.new(@cert, cert)
       san = ([ name ] + dns).uniq.map { "DNS:#{_1}" } + ips.map { "IP:#{_1}" }
       cert.add_extension(ef.create_extension("basicConstraints", "CA:FALSE", true))

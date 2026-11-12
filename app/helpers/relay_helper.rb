@@ -104,6 +104,12 @@ module RelayHelper
     t ? l(t.in_time_zone, format: "%Y-%m-%d %H:%M %Z") : "-"
   end
 
+  # A certificate's end: "no expiry" for one without (notAfter 9999-12-31,
+  # Relay::CertAuthority::NO_EXPIRY), else as when_text.
+  def until_text(t)
+    Relay::CertAuthority.no_expiry?(t) ? tag.span("no expiry", class: "no-expiry") : when_text(t)
+  end
+
   # The router watch's last automatic restart (Bridge::RouterWatch.status):
   # { at:, reason:, recent: (within a day) }, or nil when it never restarted.
   def router_watch_restart
