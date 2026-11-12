@@ -1195,9 +1195,9 @@ From 0.3.18 to 0.3.19 (T8c):
 - Going back is restoring the backup the update made (it prints the
   command).
 
-From 0.3.19 to the next version (certificates without an end):
+From 0.3.19 to 0.3.20 (certificates without an end):
 
-- `./update.sh <version>`. One migration: a column on `relay_peers`
+- `./update.sh 0.3.20`. One migration: a column on `relay_peers`
   (`cert_no_expiry`, off for every row: nothing is issued differently
   until an admin chooses). No change to nginx, `.env` or the roles.
 - **The CA certificate.** The update's setup asks the signer to make the
