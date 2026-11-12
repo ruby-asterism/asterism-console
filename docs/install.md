@@ -1247,6 +1247,11 @@ From 0.3.19 to 0.3.20 (certificates without an end):
   CA certificate before ends (zenohd does not check the end of the CA it
   trusts; Mbed TLS does).
 
+From 0.3.20 to 0.3.21 (the certificate days field is greyed while No expiry is checked):
+
+- `./update.sh 0.3.21`. No migration, no change to nginx, `.env` or the roles.
+- Going back to 0.3.20 needs nothing but `./update.sh 0.3.20`.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
