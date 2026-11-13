@@ -190,17 +190,21 @@ console's code is particular to it: two roles and a row.
                    asterism/${node}/*/@profile
                    asterism/${node}/*/@status
                    asterism/${node}/*/@pubs
-                   asterism/${node}/spectate
-                   asterism/${node}/spectate/**
+                   asterism/${node}/@shared/**
+                   asterism/${node}/room$*
+                   asterism/${node}/room$*/**
   Read             asterism/*/game
   Watch            asterism/**
   Browsers have this role: no
   ```
 
-  `asterism/${node}/spectate` and `asterism/${node}/spectate/**` let the
-  host put its tables' spectate views (asterism-games 0.18.0, "Spectate";
-  "Watching the tables from outside" below). A role made before them
-  works as before: the router drops those puts.
+  `asterism/${node}/@shared/**` lets the host put its tables' spectate
+  views on its node's shared place, and `asterism/${node}/room$*` and
+  `asterism/${node}/room$*/**` let a room's host be the application
+  `room<slot>` of the host's node that puts its room's views there
+  ("Watching the tables from outside" below; `$*` matches inside a chunk:
+  `room01`, `room02`, ...). A role made before them gets them on update
+  (docs/install.md); without them the router drops those puts.
 
   `asterism/${node}/*/@profile`, `asterism/${node}/*/@status` and
   `asterism/${node}/*/@pubs` let the host's application answer its own
@@ -278,94 +282,94 @@ profile's: `permanent tables (games)`, next to `games (room 01)` in a
 room's frame. (Before 0.3.3 the cloud router let no profile through to the
 console, and the node was `games`.)
 
-## Watching the tables from outside (asterism-games 0.18.0)
+## Watching the tables from outside
 
 A game host can put each table as a spectator sees it, with what the
-players do not see of each other (the four mahjong hands), on a key that
+players do not see of each other (the four mahjong hands), on keys that
 no player's role reads and no room reaches (asterism-games README,
-"Spectate"):
+"Spectate"). They are on the host node's shared place (Asterism wire
+protocol 2, asterism `docs/protocol.md` 17: data with no owner, apart from
+the applications' own places):
 
 ```
-asterism/<host>/spectate/<table>/state               a permanent table (asterism/games/spectate/mahjong1/state)
-asterism/<host>/spectate/room<slot>-<table>/state    a room's table (asterism/games/spectate/room01-mahjong1/state)
+asterism/<host>/@shared/spectate/<table>/state               a permanent table (asterism/games/@shared/spectate/mahjong1/state)
+asterism/<host>/@shared/spectate/room<slot>-<table>/state    a room's table (asterism/games/@shared/spectate/room01-mahjong1/state)
 ```
 
-The application chunk is `spectate`, not the host's `games`, so the
-players' role (`Read asterism/*/games/**`) does not match it. A room's
-host puts its tables' keys on a second connection of its own, with its
-own certificate and without the room's namespace: they are on the
-registered side, outside `room/<slot>/**`, and the seats' rules
-(`room/<slot>/**`, their own node, their calls) and the rooms' host rules
-(`room/*/asterism/<host>$*`) do not reach them. The host only puts what a
-spectator may know: never the wall, the ura dora, a member's node or
-token. It holds each view for the table's spectator delay (none by
-default) before it puts it. Nothing in the console's code is particular
-to it: two lines of a role and a role.
+The chunk `@shared` starts with `@`, so no `**` reaches it: the players'
+role (`Read asterism/*/games/**`) does not, and neither does a viewer's
+`asterism/**` (its role has the shared places' lines of their own,
+docs/g1_5.md). The host's application `games` declares the permanent
+tables' keys, and a room's host connects as the application
+`room<slot>` of the host's node (`room01`), with the host's own
+certificate and without the room's namespace, and declares its room's
+tables: they are on the registered side, outside `room/<slot>/**`, and the
+seats' rules (`room/<slot>/**`, their own node, their calls) and the
+rooms' host rules (`room/*/asterism/<host>$*`) do not reach them. Each
+value names its sender (`games/games`, `games/room01`), and a reader reads
+a key's type from that sender's declaration and definitions. The host only
+puts what a spectator may know: never the wall, the ura dora, a member's
+node or token. It holds each view for the table's spectator delay (none
+by default) before it puts it. Nothing in the console's code is particular
+to it: a few lines of a role and a role.
 
-With Asterism wire protocol 2 the host's `spectate` is an application of
-its own: a second connection of the host's node, beside `games`, with its
-liveliness token, its own profile (`asterism/<host>/spectate/@profile`),
-its status and its topics' declarations (`.../@status`, `.../@pubs`; the
-tables' state with its type). The graph draws it as an application in the
-host's node, its topics in the details. The host's role needs nothing
-more than the lines above: `asterism/${node}/*/@profile`, `@status` and
-`@pubs` cover `spectate` as they cover `games` (the update adds them to a
-role made before protocol 2, docs/install.md). The `spectator` role below
-reads that application's profile and declarations too (its `@profile` and
-`@pubs` lines: `asterism topic list` with a spectator's certificate shows
-the tables' state topics), as the console and a viewer do; the update adds
-them to a role that reads `.../spectate/**`.
+The console's graph draws the host's shared place as a place in the
+host's node (`@shared`, not an application), with a line from each
+application that declares keys there (`games`, `room01`), the names on
+the line; the place's details list each key with its senders and their
+types, and "Watch its values". A sender that leaves takes its
+declarations with it. A recording of `asterism/**` records the shared
+places too, a channel per key and sender (docs: README, "Recordings").
 
-- **The host's role**, `games-host`: the two lines `asterism/${node}/spectate`
-  and `asterism/${node}/spectate/**` in "Read and write" (section "A game
-  host's permanent tables" above). The rooms' host uses the same row, so
-  the same lines cover its rooms' tables.
+- **The host's role**, `games-host`: the lines `asterism/${node}/@shared/**`,
+  `asterism/${node}/room$*` and `asterism/${node}/room$*/**` in "Read and
+  write" (section "A game host's permanent tables" above). The rooms' host
+  uses the same row, so the same lines cover its rooms' tables. The
+  `@profile`, `@status` and `@pubs` lines there cover `room<slot>` as they
+  cover `games`.
 - **A role for those who watch**, `spectator` (Admin > Members > Roles,
   "New role"):
 
   ```
-  Read             asterism/*/spectate
-                   asterism/*/spectate/**
-                   asterism/*/spectate/@profile
-                   asterism/*/spectate/@pubs
-  Ask              asterism/*/spectate/@profile
+  Read             asterism/*/@shared/spectate/**
+                   asterism/*/games/@profile
+                   asterism/*/games/@pubs
+                   asterism/*/room$*/@profile
+                   asterism/*/room$*/@pubs
+  Ask              asterism/*/games/@profile
+                   asterism/*/room$*/@profile
   Watch            asterism/**
   Browsers have this role: no
   ```
 
   Give it to a row of its own (Register, kind `client`, a name for the
   person, e.g. `spectator-a`; "Issue a certificate", "Save all (.tar)"),
-  and Apply. Only the spectate keys reach it, and the host's application
-  `spectate` (its liveliness token, for the command line's watch; its
-  profile and topics' declarations, for `asterism topic list`); it
-  writes nothing and calls nothing. Leave "Browsers have this role" off:
-  every browser is one subject at the router (docs/g1_5.md, "Browsers"),
-  so a role for browsers would show every pass holder, players included,
-  the hands. Do not give it to a player's row either: the router cannot
-  tell a seat's player from a spectator of the same certificate.
-- **The viewer role** (docs/g1_5.md, "Looking only") reads `asterism/**`,
-  so the spectate keys reach it as they are, with the command line and
-  the MCP bridge; an AI assistant's read-only row with the same `read
-  asterism/**` too.
-- **Looking** (the asterism gem's command line, asterism 0.10.0):
-
-  ```
-  asterism object echo 'games/spectate/*' --credentials spectator-a.tar        # each put as it comes
-  asterism object echo games/spectate/mahjong1 --credentials spectator-a.tar -o json   # a JSON line each
-  asterism object get games/spectate/room01-mahjong1 --credentials viewer.tar  # the next one
-  ```
-
-  The MCP bridge (`asterism mcp --credentials viewer.tar`):
-  `asterism_values` with the pattern `games/spectate/*/state`. The bridge
-  subscribes to `asterism/**`, which the router refuses to a `spectator`
-  row (it may subscribe to the spectate keys only), so the bridge needs
-  the viewer role.
+  and Apply. Only the spectate keys reach it, and the declarations and
+  types of the applications that put them (their `@profile` and `@pubs`:
+  a shared key's type is read from its sender, `asterism topic info` and
+  `type_of`); it writes nothing and calls nothing, and gets nothing of the
+  network's shared place `asterism/@shared/**` (an outward role). Leave
+  "Browsers have this role" off: every browser is one subject at the
+  router (docs/g1_5.md, "Browsers"), so a role for browsers would show
+  every pass holder, players included, the hands. Do not give it to a
+  player's row either: the router cannot tell a seat's player from a
+  spectator of the same certificate. A `spectator` made before the shared
+  places (Read `asterism/*/spectate/**`) gets these lines in place of its
+  spectate lines on update (docs/install.md).
+- **The viewer role** (docs/g1_5.md, "Looking only") reads the nodes'
+  shared places (`asterism/*/@shared/**`), so the spectate keys reach it
+  as they are.
+- **Looking** (the asterism gem's command line): a subscription to
+  `*/@shared/spectate/**` (the commentary of asterism-games and the
+  browser build's spectating do that), `asterism topic info
+  games/@shared/spectate/mahjong1/state` for its senders and their types.
 
 What these roles keep closed (`test/lib/relay/spectate_roles_test.rb`): the
 players' rows, the browsers and every seat of every room neither receive
 nor subscribe to the spectate keys; only the host's row writes them; a
-`spectator` row reads them and nothing of the tables' calls, the players'
-keys or the rooms.
+`spectator` row reads them and the senders' declarations, and nothing of
+the tables' calls, the players' keys, the rooms or the network's shared
+place.
 
 ## Seats (0.3.0)
 

@@ -1259,10 +1259,11 @@ applications' own profiles, their topics and types; not released yet):
   protocol 2 too (the asterism gem and asterism-games of the same release,
   the boards' firmware): protocol 1 and 2 do not mix. The values still
   flow between them, but statuses and topics are not seen.
-- `./update.sh <version>`. Two migrations bring the roles to protocol 2
-  (`db/migrate/*_relay_role_app_profiles.rb` and
-  `*_relay_role_spectate_profiles.rb`); they add lines and remove none an
-  admin wrote:
+- `./update.sh <version>`. Three migrations bring the roles to protocol 2
+  (`db/migrate/*_relay_role_app_profiles.rb`,
+  `*_relay_role_spectate_profiles.rb` and `*_relay_role_shared_places.rb`,
+  in that order); they add lines and remove none an admin wrote, except a
+  spectator's old spectate lines (below):
   - the example role `match`: `asterism/${node}/*/@profile`,
     `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
     write" (its nodes' applications answer their own profiles and tell
@@ -1277,24 +1278,46 @@ applications' own profiles, their topics and types; not released yet):
     docs/rooms.md: the game host's `spectate` is an application of its own
     in protocol 2) gets `<prefix>/spectate/@profile` and
     `<prefix>/spectate/@pubs` in "Read" and `<prefix>/spectate/@profile` in
-    "Ask" (a spectator's `asterism topic list` shows the tables' topics).
+    "Ask" (a spectator's `asterism topic list` shows the tables' topics);
+  - the shared places (asterism `docs/protocol.md` 17: data with no owner
+    at `asterism/<node>/@shared/**` and `asterism/@shared/**`; the game
+    host's spectate keys moved to `asterism/<host>/@shared/spectate/...`,
+    put by its applications `games` and `room<slot>`, and the second
+    connection `spectate` is gone): the role `match` gets
+    `asterism/@shared/**` in "Read" (the members read the network's place;
+    writing it needs a role an admin makes); a "Read" line `asterism/**`
+    (the role `viewer`) gets `asterism/*/@shared/**` and
+    `asterism/@shared/**`; a "Read and write" line `<prefix>/spectate/**`
+    (the role `games-host`) gets `<prefix>/@shared/**`, `<prefix>/room$*`
+    and `<prefix>/room$*/**` (its node's place, the rooms' applications);
+    a "Read" line `<prefix>/spectate/**` (the role `spectator`) has its
+    spectate lines replaced by "Read" `<prefix>/@shared/spectate/**`,
+    `<prefix>/games/@profile`, `<prefix>/games/@pubs`,
+    `<prefix>/room$*/@profile`, `<prefix>/room$*/@pubs` and "Ask"
+    `<prefix>/games/@profile`, `<prefix>/room$*/@profile` (the values, and
+    the senders' declarations and types: a shared key's type is read from
+    its sender).
   The setup's output (`docker compose logs` of the update, the Databases
-  step) has a line `relay role <name> (protocol 2): ...` or
-  `relay role <name> (spectate's profile): ...` for each role it changed. A role of your own that lets its nodes' applications tell a
+  step) has a line `relay role <name> (protocol 2): ...`,
+  `relay role <name> (spectate's profile): ...` or
+  `relay role <name> (shared places): ...` for each role it changed. A role of your own that lets its nodes' applications tell a
   status or stream topics without any of these lines needs
   `asterism/${node}/*/@profile` and `asterism/${node}/*/@pubs` (and
   `asterism/${node}/*/@status`) by hand, then Apply.
 - The router's configuration gets the console's rules of protocol 2 (the
   query of `asterism/*/*/@profile`, the subscriptions to
-  `asterism/*/*/@status` and `asterism/*/*/@pubs`; no more query of
-  `@status`) with the roles' new lines: the update's setup writes it from
+  `asterism/*/*/@status` and `asterism/*/*/@pubs`, the subscription to
+  and the put on the shared places `asterism/*/@shared/**` and
+  `asterism/@shared/**` for recordings, watches and playbacks; no more
+  query of `@status`) with the roles' new lines: the update's setup writes it from
   the registry and restarts the router on it, as Apply does. No separate
   Apply is needed unless the setup says it could not restart the router.
 - **Check**: the details of the game host's app show its "Status" row
   again and a "Topics" row with the topics it streams.
 - Going back to 0.3.21: `./update.sh 0.3.21`. The added lines stay (they
   let through nothing protocol 1 uses); put the "Ask" line
-  `asterism/*/*/@status` back by hand where a role had it, then Apply.
+  `asterism/*/*/@status` back by hand where a role had it, and a
+  spectator's spectate lines (docs/rooms.md of that version), then Apply.
 
 ## 21. When something is wrong
 

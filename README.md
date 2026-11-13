@@ -26,6 +26,14 @@ calls the methods that Asterism nodes expose.
   (docs/g1b.md). Since asterism 0.7.0 (wire protocol 1, docs/x1.md) every
   application has a token of its own, so an app that exposes nothing is
   drawn too.
+- **Shared places** (Asterism wire protocol 2): the data with no owner, a
+  node's `asterism/<node>/@shared/...` and the network's
+  `asterism/@shared/...`, are places, not apps: a node's place in its
+  node's box, the network's on its own (`@shared (network)`), with a
+  dashed line from each app that declares keys there (the names on it).
+  The details list each key with its senders and their types (a shared
+  key's type is its sender's), and "Watch its values". A sender that
+  leaves takes its declarations with it.
 - **Rooms** (admins only, 0.2.1): each open room is an amber frame with its
   name, slot and end, holding the nodes in it (browser pages, `wasm-xxxxxx`)
   and their apps and objects, each joined to the router by its session. The
@@ -241,6 +249,15 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   says so). A playback puts an Asterism key's messages with their encoding
   and, for a protocol 2 recording, the recorded sequence number (and the
   sender's time for a topic that sent it).
+  A key of a shared place may have several senders, each with its own
+  sequence numbers: it gets a channel per key and sender, the same topic,
+  the sender in the metadata `asterism_from`, the schema and declaration
+  from that sender's own; the timeline shows "from <sender>", and a
+  playback puts it with that sender's attachment (`[seq, ms or nil,
+  "<node>/<app>"]`). A key expression `asterism/**` (or
+  `asterism/<node>/**`) records the shared places beside it
+  (`asterism/*/@shared/**` and `asterism/@shared/**`, which no `**`
+  reaches); a watch of such an expression too.
   `ros2 bag info file.mcap` lists all of it; `ros2 bag play` refuses a file
   whose channels are not all CDR, so "ROS 2 topics only" downloads the
   copy it plays.
