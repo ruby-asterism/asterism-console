@@ -171,9 +171,9 @@ node.
 ### The Asterism gems
 
 The console speaks Asterism wire protocol 2 (the applications' own
-profiles, their topics and types; asterism `docs/protocol.md`): it needs an
-asterism gem with protocol 2, which is not released yet (the checkout next
-to this repository has it), and talks only to nodes of that protocol.
+profiles, their topics and types; asterism `docs/protocol.md`): it needs
+asterism 0.14.0 or later (`~> 0.14`), and talks only to nodes of that
+protocol.
 Before it, it took asterism 0.8 (`~> 0.8`; wire protocol 1: nodes of 0.7.0
 and later, docs/x1.md). It takes asterism-zenoh 0.4.0 or
 later (the versions in `Gemfile.lock`); Files need asterism 0.12.0 and the
@@ -186,7 +186,7 @@ build it). To use the gems from rubygems.org instead, replace the two
 `path:` lines of the Gemfile with
 
 ```ruby
-gem "asterism", "~> 0.8", require: false   # asterism-zenoh comes with it
+gem "asterism", "~> 0.14", require: false   # asterism-zenoh comes with it
 ```
 
 and run `bundle install`. Installing asterism-zenoh compiles a C extension

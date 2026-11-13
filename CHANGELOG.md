@@ -8,6 +8,65 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.4.0
+
+What an update needs: **every node moves to Asterism wire protocol 2 with
+it** (the asterism gem 0.14.0, asterism-games 0.23.0, the boards'
+firmware, the browser build); five data migrations on the roles (they add
+lines; a spectator's old spectate lines are replaced); the update's setup
+writes the router's configuration and restarts the router. Going back to
+0.3.21 needs the update's backup (`./update.sh 0.3.21 --restore <it>`):
+the role migrations are one-way. Nothing in nginx or `.env`.
+docs/install.md, "From 0.3.21 to 0.4.0".
+
+- Asterism wire protocol 2 (asterism 0.14.0, the connection object): the
+  bridge reads the applications' own profiles (`@profile`, one get for
+  `status;pubs;types`), follows their `@status` and `@pubs` puts, and
+  forgets what an application declared when its token leaves. A node of
+  protocol 1 shows without its status and topics.
+- The graph: an application's details list the topics it streams with
+  their types; the shared places (`asterism/<node>/@shared/**`, the
+  network's `asterism/@shared/**`) are drawn as places with dashed lines
+  from the applications that declare keys there; an application of another
+  protocol (its token says so: `asterism/<node>/<app>/protocol/<n>`; a
+  token without the number is protocol 1) is drawn in a red box,
+  "<app> (protocol N)".
+- Recordings (MCAP) keep each value's encoding, sequence number, the
+  sender's time (publish_time; the router's time without it) and the
+  declared type as the channel's schema; a channel per sender's run
+  (`asterism_run`), a shared key a channel per key and sender
+  (`asterism_from`); the gaps in a sender's numbers count as lost.
+  Playbacks put the values back with their attachments. The Asterism log
+  line's `time` is read as ms since 1970.
+- The router's rules for the console's certificate: the query of
+  `asterism/*/*/@profile`, the subscriptions to `asterism/*/*/@status`,
+  `asterism/*/*/@pubs`, the shared places (subscription and put, for
+  recordings, watches and playbacks); no more query of `@status`.
+- Roles (data migrations, in this order; each says
+  `relay role <name> (...): ...` for a role it changed, and changes
+  nothing run again): `match` gets `asterism/${node}/*/@profile`,
+  `@status`, `@pubs` in "Read and write" and `asterism/@shared/**` in
+  "Read" (new consoles have them from the start); a "Read and write"
+  `<prefix>/*/@status` (games-host) gets `@profile` and `@pubs` beside it,
+  a "Read" one (viewer) `@pubs`; an "Ask" `<prefix>/*/@status` becomes
+  `@profile` (and "Read" gets it); a "Read" `asterism/**` (viewer) gets
+  both shared places; a "Read and write" `<prefix>/spectate/**`
+  (games-host) gets `<prefix>/@shared/**`, `<prefix>/room$*`,
+  `<prefix>/room$*/**`; a spectator's spectate lines become the spectate
+  keys on the host's shared place, the senders' `@profile` / `@pubs` and
+  the calls of their `spectate` object under its own name; a line that
+  names an application's key exactly (`asterism/*/game` of games-host) gets
+  `<line>/protocol/*`. Role lines may use Zenoh's `$*` (`room$*`).
+- The image can be built before an asterism release is out:
+  `ASTERISM_GEMS=git ASTERISM_REF=<commit>` (Gemfile, Dockerfile build
+  args, `docker-compose.build.yml`; docs/install.md "Building the image
+  yourself"). The published image takes asterism `~> 0.14` from
+  rubygems.org. The image keeps the lock its build resolved (`COPY . .`
+  no longer puts the checkout's back).
+- The console's inbox for files (`console/transfer`) puts the protocol 2
+  application token (asterism 0.14.0's `Asterism::Transfer::Endpoint`):
+  before, every protocol 2 program said it spoke protocol 1.
+
 ## 0.3.21
 
 What an update needs: nothing.

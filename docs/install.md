@@ -719,6 +719,42 @@ later `docker compose pull` does not replace it. The Asterism gems come
 from rubygems.org; asterism-zenoh compiles its C extension against the
 zenoh-c release it pins, downloaded while the image is built.
 
+Before an asterism release is published (an update tried on the server
+first), the image can take asterism from its git repository at a commit
+that is pushed there, and asterism-zenoh from rubygems.org:
+
+```
+ASTERISM_GEMS=git ASTERISM_REF=<commit> \
+  docker compose -f docker-compose.yml -f docker-compose.build.yml build console
+```
+
+from a checkout at the commit of the console to try, with `CONSOLE_IMAGE`
+set to a name of your own (`asterism-console-local`) and `CONSOLE_VERSION`
+to the version it will be (`0.4.0`) in `.env`. The image keeps the choice:
+the console reads the same Gemfile branch when it starts. `update.sh`
+cannot install such an image (it takes a tag and pulls): take a backup
+first (`docker compose exec console bin/asterism backup --label
+before-0.4.0`, and note its name: it is the way back), then
+`docker compose run --rm -T console bin/asterism setup --from-update` and
+`docker compose up -d` (or restart the systemd unit), as `update.sh`
+would (section 15). `update.sh` cannot go back from it either (it needs
+the running version's published image); by hand, with the older
+version's image:
+
+```
+docker compose stop console bridge backup
+# .env: CONSOLE_IMAGE back (or the line removed), CONSOLE_VERSION=<older>
+git checkout v<older>
+docker compose run --rm --no-deps -T console bin/asterism restore <that backup>
+docker compose run --rm -T console bin/asterism setup --from-update
+docker compose up -d
+```
+
+Once the release is published, put `CONSOLE_IMAGE` back (or remove the
+line) and `./update.sh 0.4.0`: the same version, so it checks out the tag,
+pulls the published image, takes another backup and runs the setup again
+(it changes nothing more).
+
 ## 19. Starting with the server
 
 Nothing is needed beyond Docker starting at boot (`sudo systemctl enable
@@ -1252,17 +1288,19 @@ From 0.3.20 to 0.3.21 (the certificate days field is greyed while No expiry is c
 - `./update.sh 0.3.21`. No migration, no change to nginx, `.env` or the roles.
 - Going back to 0.3.20 needs nothing but `./update.sh 0.3.20`.
 
-From 0.3.21 to the release after it (Asterism wire protocol 2: the
-applications' own profiles, their topics and types; not released yet):
+From 0.3.21 to 0.4.0 (Asterism wire protocol 2: the applications' own
+profiles, their topics and types):
 
 - Every node, the game host and the asterism command line must speak
-  protocol 2 too (the asterism gem and asterism-games of the same release,
-  the boards' firmware): protocol 1 and 2 do not mix. The values still
-  flow between them, but statuses and topics are not seen.
-- `./update.sh <version>`. Four migrations bring the roles to protocol 2
+  protocol 2 too (the asterism gem 0.14.0, asterism-games 0.23.0, the
+  boards' firmware, the browser build): protocol 1 and 2 do not mix. The
+  values still flow between them, but statuses and topics are not seen,
+  and a call between the two is refused (the error kind `protocol`).
+- `./update.sh 0.4.0`. Five migrations bring the roles to protocol 2
   (`db/migrate/*_relay_role_app_profiles.rb`,
-  `*_relay_role_spectate_profiles.rb`, `*_relay_role_shared_places.rb` and
-  `*_relay_role_spectate_calls.rb`, in that order); they add lines and remove none an admin wrote, except a
+  `*_relay_role_spectate_profiles.rb`, `*_relay_role_shared_places.rb`,
+  `*_relay_role_spectate_calls.rb` and `*_relay_role_app_token_protocol.rb`,
+  in that order); they add lines and remove none an admin wrote, except a
   spectator's old spectate lines (below):
   - the example role `match`: `asterism/${node}/*/@profile`,
     `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
@@ -1330,10 +1368,16 @@ applications' own profiles, their topics and types; not released yet):
   Apply is needed unless the setup says it could not restart the router.
 - **Check**: the details of the game host's app show its "Status" row
   again and a "Topics" row with the topics it streams.
-- Going back to 0.3.21: `./update.sh 0.3.21`. The added lines stay (they
-  let through nothing protocol 1 uses); put the "Ask" line
-  `asterism/*/*/@status` back by hand where a role had it, and a
-  spectator's spectate lines (docs/rooms.md of that version), then Apply.
+- Going back to 0.3.21: the migrations are one-way, so go back with the
+  backup the update took (its name is in the update's last lines, labelled
+  `before-0.4.0`): `./update.sh 0.3.21 --restore <that backup>` (section
+  16). The registry is then as it was before the update; what was changed
+  after it (a client registered, a certificate issued) is lost, so do it
+  again. Without the restore, `./update.sh 0.3.21` alone runs 0.3.21 on the
+  migrated registry: the added lines stay (they let through nothing
+  protocol 1 uses), and the "Ask" line `asterism/*/*/@status` and a
+  spectator's spectate lines (docs/rooms.md of that version) must be put
+  back by hand, then Apply.
 
 ## 21. When something is wrong
 
