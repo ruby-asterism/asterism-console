@@ -126,7 +126,7 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
   end
 
   test "the console answers at console/transfer/inbox and records what it receives" do
-    assert_equal [ "asterism/console/transfer", "asterism/console/transfer/inbox" ], @conn.tokens.map(&:key)
+    assert_equal [ "asterism/console/transfer/protocol/2", "asterism/console/transfer/inbox" ], @conn.tokens.map(&:key)
     s = machine_sends("fmruby-abcdef")
     assert s.ok?, s.reason
     assert_equal @bytes, File.binread(FileTransfer.inbox.join("photo.bin"))
