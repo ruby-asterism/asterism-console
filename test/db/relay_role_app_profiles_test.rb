@@ -1,5 +1,6 @@
 require "test_helper"
 require_relative "../test_helpers/acl_evaluator"
+require_relative "../test_helpers/spectate_connection"
 require Rails.root.join("db/migrate/20261113100000_relay_role_app_profiles").to_s
 
 # Roles made before Asterism wire protocol 2 brought to it on update: the
@@ -55,6 +56,20 @@ class RelayRoleAppProfilesTest < ActiveSupport::TestCase
       assert_equal t, again, name
       assert_empty notes, name
     end
+  end
+
+  test "games-host made before protocol 2: the host's spectate connection does all it does once updated" do
+    peers = [ { "name" => "games", "kind" => "client", "roles" => %w[games-host], "in_acl" => true } ]
+    acl = ->(rw, read) do
+      role = { "name" => "games-host", "for_browsers" => false,
+               "templates" => { "rw" => rw, "read" => read, "watch" => %w[asterism/**] } }
+      Relay::CloudConfig.new(peers, {}, roles: [ role ]).access_control
+    end
+    before = SpectateConnection.refused(acl.(HOST[0], HOST[1]))
+    assert_equal [ "asterism/games/spectate/@profile", "asterism/games/spectate/@pubs" ], before.map(&:last).uniq.sort,
+                 "protocol 1's lines miss only the application's profile and topics"
+    t, = fix("games-host", *HOST)
+    assert_empty SpectateConnection.refused(acl.(lines(t)[:rw], lines(t)[:read]))
   end
 
   test "on the database: the rows change, logged; the router lets the host and the viewer do protocol 2" do

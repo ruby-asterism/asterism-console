@@ -1,5 +1,6 @@
 require "test_helper"
 require_relative "../../test_helpers/acl_evaluator"
+require_relative "../../test_helpers/spectate_connection"
 
 # The game host's spectate keys (docs/rooms.md, "Watching the tables from
 # outside"; asterism-games 0.18.0): asterism/<host>/spectate/<table>/state,
@@ -87,6 +88,17 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
       assert reads?(s, "asterism/games/games/@pubs"), s
     end
     %w[player-a spectator-a].each { refute allowed?(_1, "query", "ingress", "asterism/games/games/@profile"), _1 }
+  end
+
+  test "the host's spectate connection, an application of its own (protocol 2), does all it does" do
+    assert_empty SpectateConnection.refused(acl)
+    %w[console admin-viewer].each do |s|
+      assert allowed?(s, "query", "ingress", "asterism/games/spectate/@profile"), s
+      assert allowed?(s, "reply", "egress", "asterism/games/spectate/@profile"), s
+      assert reads?(s, "asterism/games/spectate/@pubs"), s
+      assert reads?(s, "asterism/games/spectate/@status"), s
+    end
+    refute allowed?("games", "declare_queryable", "ingress", "asterism/other-host/spectate/@profile"), "its own node only"
   end
 
   test "a spectator and a viewer read them" do
