@@ -1327,6 +1327,8 @@ export default class extends Controller {
                   ).join("<br>") || "none", true],
                   ["Status", el.children().filter((a) => a.data("info")?.status).map((a) =>
                     `${this.link(a.id(), a.data("name"))}<br>${statusHtml(a.data("info").status)}`).join("<br>") || null, true],
+                  ["Topics", el.children().filter((a) => a.data("info")?.pubs).map((a) =>
+                    `${this.link(a.id(), a.data("name"))}<br>${pubsHtml(a.data("info").pubs)}`).join("<br>") || null, true],
                   ["Connection", this.connectionsHtml(info.connections, id), true])
         break
       case "others":
@@ -1349,6 +1351,8 @@ export default class extends Controller {
       case "a_app":
         rows.push(["Node", info.node],
                   ["Status", info.status ? statusHtml(info.status) : null, true],
+                  ["Topics", info.pubs ? pubsHtml(info.pubs) : null, true],
+                  ["Types", info.types ? typesHtml(info.types) : null, true],
                   ["Objects", el.children().map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
       case "a_object":
@@ -1818,14 +1822,32 @@ function roomLabel(n) {
   return `${d.name || "room"} · room ${d.slot}${d.expires_at ? ` · until ${dateTime(d.expires_at)}` : ""}`
 }
 
-// An application's status (0.3.4, asterism/<node>/<app>/@status: a map the
-// application tells about itself) for the details: a line per entry, a
-// map's entries as key=value, anything else as JSON.
+// An application's status (asterism/<node>/<app>/@profile?status and its puts
+// on .../@status: a map the application tells about itself) for the details:
+// a line per entry, a map's entries as key=value, anything else as JSON.
 function statusHtml(st) {
   const value = (v) => (v && typeof v === "object" && !Array.isArray(v))
     ? Object.entries(v).map(([k, x]) => `${esc(k)}=${esc(JSON.stringify(x))}`).join(" ")
     : esc(JSON.stringify(v))
   return Object.entries(st).map(([k, v]) => `<code>${esc(k)}</code> <span class="hint">${value(v)}</span>`).join("<br>")
+}
+
+// The topics an application streams (protocol 2, asterism/<node>/<app>/@pubs:
+// [{name, type, encoding, unit, desc, ts}], Bridge::Graph.topic_row) for the
+// details: a line per topic, its name and what its declaration says.
+function pubsHtml(pubs) {
+  return pubs.map((p) => {
+    const about = [p.type || "no type", p.unit, p.encoding, p.ts ? "sender's time" : null].filter((x) => x)
+    return `<code>${esc(p.name)}</code> <span class="hint">${esc(about.join(", "))}${p.desc ? ` - ${esc(p.desc)}` : ""}</span>`
+  }).join("<br>")
+}
+
+// An application's own types (protocol 2, @profile?types: {name => {f: [[field,
+// type], ...], d}}) for the details: a line per type, its fields.
+function typesHtml(types) {
+  return Object.entries(types).map(([name, d]) =>
+    `<code>${esc(name)}</code> <span class="hint">${esc((d.f || []).map((f) => `${f[0]}: ${f[1]}`).join(", "))}` +
+    `${d.d ? ` - ${esc(d.d)}` : ""}</span>`).join("<br>")
 }
 
 // A room's name for the details (its frame, or the slot when it is gone).

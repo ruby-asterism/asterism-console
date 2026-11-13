@@ -36,10 +36,12 @@
 #     <console>/transfer/inbox on the reading session, sends the pending
 #     rows on threads of their own; sends each member machine the list of
 #     who it receives files from (0.3.16, T6, Bridge::Receivers);
-#   - asks each Asterism application that appears for its status (0.3.4,
-#     Bridge::Statuses: asterism/<node>/<app>/@status) on the same worker
-#     and follows the puts on asterism/*/*/@status (the details of an app
-#     and of its node);
+#   - asks each Asterism application that appears for its own profile
+#     (protocol 2, Bridge::AppProfiles: asterism/<node>/<app>/@profile with
+#     status;pubs;types) on the same worker and follows the puts on
+#     asterism/*/*/@status and asterism/*/*/@pubs (the details of an app and
+#     of its node: its status, the topics it streams and their types; the
+#     recorder's schemas);
 #   - runs the commands typed in the Terminal (0.3.15, Bridge::Terminal,
 #     TerminalCommand rows): the asterism gem's command line on the object
 #     layer's connection, a thread each, the output to the page that typed
@@ -151,8 +153,8 @@ module Bridge
       @recorders = {} # recording id => { recorder:, subs: [Subscription] }
       @players = {} # playback id => Player
       @profiles = Profiles.new
-      @profile_queue = Queue.new # [node, notice or nil] or [:status, app] for the profile worker
-      @statuses = Statuses.new
+      @profile_queue = Queue.new # [node, notice or nil] or [:app, app] for the profile worker
+      @app_profiles = AppProfiles.new
       @watch = nil # Bridge::RouterWatch (run)
       @stop = false
     end
@@ -226,6 +228,7 @@ module Bridge
       follow("@ros2_lv/**", @ros_keys)
       @profile_sub = @z.subscribe("asterism/*/@profile") { |sample| profile_notice(sample) }
       @status_sub = @z.subscribe(STATUSES) { |sample| status_notice(sample) }
+      @pubs_sub = @z.subscribe(PUBS) { |sample| pubs_notice(sample) }
       @profile_worker = start_profile_worker
       start_transfers
       start_terminal
@@ -257,7 +260,7 @@ module Bridge
       @logs.clear
       @log_subs = {}
       @profiles.clear
-      @statuses.clear
+      @app_profiles.clear
       @profile_queue.clear
     end
 
@@ -316,7 +319,7 @@ module Bridge
         if now >= next_sync
           check_follows
           sync_profiles
-          sync_statuses
+          sync_app_profiles
           sync_watches
           sync_rates
           sync_plots
@@ -508,7 +511,7 @@ module Bridge
                     self_cert: self_cert, registry: @registry, peer_links: @peer_links,
                     cloud: Relay::Settings.cloud_name, names: @names, gateways: Gateways.configured,
                     profiles: @profiles.to_graph.merge(@node_id => @own_profile).compact,
-                    statuses: @statuses.to_graph,
+                    app_profiles: @app_profiles.to_graph,
                     icons: @profiles.icon_set, rooms: @room_keys.keys, room_info: @rooms,
                     room_hosts: room_hosts).to_h
       end
@@ -850,7 +853,7 @@ module Bridge
         loop do
           item = @profile_queue.pop
           break if item == :stop
-          item[0] == :status ? fetch_status(item[1]) : fetch_profile(*item)
+          item[0] == :app ? fetch_app_profile(item[1]) : fetch_profile(*item)
         rescue Asterism::Error, ActiveRecord::ActiveRecordError => e
           say "bridge: profile #{item&.first}: #{e.class}: #{e.message}"
         ensure
@@ -880,9 +883,10 @@ module Bridge
       say "bridge: profile #{node}: #{pr ? Profiles.summary(pr).map { |k, v| "#{k}=#{v}" }.join(' ') : 'none (no answer)'}"
     end
 
-    # --------------------------------------------------------------- statuses
+    # ----------------------------------------------------- applications' profiles
 
     STATUSES = "asterism/*/*/@status".freeze
+    PUBS = "asterism/*/*/@pubs".freeze
 
     # The Asterism applications here now ("node/app", from the tokens of
     # the apps and their objects), this console's own left out.
@@ -896,26 +900,40 @@ module Bridge
 
     # The applications that appeared are asked (once; again after they
     # leave and come back).
-    def sync_statuses
-      @statuses.due(asterism_apps).each { @profile_queue << [ :status, _1 ] }
+    def sync_app_profiles
+      @app_profiles.due(asterism_apps).each { @profile_queue << [ :app, _1 ] }
     end
 
     # A put on asterism/<node>/<app>/@status (the receiving thread).
     def status_notice(sample)
-      app, st = Statuses.parse(sample.key, sample.payload)
+      app, st = AppProfiles.parse_status(sample.key, sample.payload)
       return unless app && app != "#{@node_id}/#{@app}"
-      @lock.synchronize { @dirty = true } if @statuses.told(app, st)
+      @lock.synchronize { @dirty = true } if @app_profiles.told_status(app, st)
     end
 
-    # Asks an application for its status (the worker).
-    def fetch_status(app)
-      st = nil
-      @z.get("asterism/#{app}/@status", timeout: GET_TIMEOUT) do |r|
-        st ||= Statuses.check(MessagePack.unpack(r.payload.to_s)) unless r.error?
+    # A put on asterism/<node>/<app>/@pubs (the receiving thread). A type
+    # of its own that is not known yet: its profile is asked again.
+    def pubs_notice(sample)
+      app, pubs = AppProfiles.parse_pubs(sample.key, sample.payload)
+      return unless app && app != "#{@node_id}/#{@app}"
+      changed, missing = @app_profiles.told_pubs(app, pubs)
+      @lock.synchronize { @dirty = true } if changed
+      @profile_queue << [ :app, app ] if missing && @app_profiles.ask_again(app)
+    end
+
+    # Asks an application for its own profile: one get with the three
+    # parts (the worker). Through the reading session, not Asterism's
+    # status_of / pubs_of / types_of: that would be three gets.
+    def fetch_app_profile(app)
+      raw = nil
+      @z.get("asterism/#{app}/#{::Asterism::Profile::KEY}", params: AppProfiles::PARAMS, timeout: GET_TIMEOUT) do |r|
+        next if raw || r.error?
+        v = MessagePack.unpack(r.payload.to_s)
+        raw = v if v.is_a?(Hash)
       rescue StandardError
         nil
       end
-      @lock.synchronize { @dirty = true } if @statuses.answered(app, st)
+      @lock.synchronize { @dirty = true } if @app_profiles.answered(app, raw)
     end
 
     # Called on the receiving thread, so the database (Action Cable's
@@ -961,7 +979,7 @@ module Bridge
     def start_recording(r)
       sel = r.selection_value
       rec = Recorder.new(id: r.id, path: r.path, max_bytes: r.max_bytes, max_seconds: r.max_seconds,
-                         structure: sel["structure"]) { |tid| ros_qos(tid) }
+                         structure: sel["structure"], declarations: ->(key) { @app_profiles.topic(key) }) { |tid| ros_qos(tid) }
       rec.open
       subs = []
       sel["topics"].each do |tid|

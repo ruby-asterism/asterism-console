@@ -134,7 +134,7 @@ module Bridge
 
     def self.build(admin: {}, asterism: [], ros: [], self_node: nil, self_zids: [], own_links: {}, self_cert: nil,
                    registry: nil, peer_links: [], cloud: nil, names: [], gateways: [], profiles: {}, icons: nil,
-                   rooms: [], room_info: [], room_hosts: [], statuses: {})
+                   rooms: [], room_info: [], room_hosts: [], app_profiles: {})
       g = new
       g.cloud = cloud
       g.icons = icons
@@ -145,7 +145,7 @@ module Bridge
       g.add_peer_links(peer_links, self_zids.map { norm_zid(_1) })
       g.add_asterism(asterism, self_node)
       g.add_profiles(profiles)
-      g.add_statuses(statuses)
+      g.add_app_profiles(app_profiles)
       g.add_rooms(rooms, room_info, room_hosts)
       g.add_ros(ros)
       g.finish_ros
@@ -418,14 +418,33 @@ module Bridge
       end
     end
 
-    # The applications' statuses (0.3.4, Bridge::Statuses): data "status"
-    # on the Asterism apps that are here (shown in the details; nothing
-    # drawn changes).
-    def add_statuses(statuses)
-      (statuses || {}).each do |app, st|
+    # The applications' own profiles (protocol 2, Bridge::AppProfiles) on
+    # the Asterism apps that are here, shown in the details (nothing drawn
+    # changes): data "status" (the map it tells), "pubs" (the topics it
+    # streams, by name: [{"name", "type", "encoding", "unit", "desc", "ts"}],
+    # Graph.topic_row) and "types" (its own types' definitions).
+    def add_app_profiles(profiles)
+      (profiles || {}).each do |app, pr|
         n = @nodes["a_app:#{app}"]
-        n["data"]["status"] = st if n && st
+        next unless n && pr
+        n["data"]["status"] = pr["status"] if pr["status"]
+        n["data"]["pubs"] = pr["pubs"].sort.map { |name, d| self.class.topic_row(name, d) } if pr["pubs"]
+        n["data"]["types"] = pr["types"] if pr["types"]
       end
+    end
+
+    # A topic's declaration as the details show it: the built-in types and
+    # the encodings by name (docs/protocol.md 10 and 9 of the asterism gem).
+    # (Puma does not load the asterism gem: the encodings' names come from
+    # it when it is there, the bridge's case.)
+    def self.topic_row(name, decl)
+      t = decl["t"]
+      builtin = Bag::Channels::BUILTIN_TYPES
+      type = t.is_a?(Integer) ? (t.between?(1, builtin.size) ? builtin[t - 1] : "type #{t}") : t
+      e = decl["e"]
+      enc = e && ((defined?(::Asterism::Pubs) && ::Asterism::Pubs.encoding_name(e)) || "encoding #{e}")
+      { "name" => name, "type" => type, "encoding" => enc, "unit" => decl["u"], "desc" => decl["d"],
+        "ts" => decl["ts"] ? true : nil }.compact
     end
 
     def a_node(nid, self_node)

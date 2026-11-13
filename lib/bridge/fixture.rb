@@ -5,7 +5,7 @@
 #
 # The file holds the inputs of Bridge::Graph.build (admin, asterism, ros,
 # self_node, self_zids, own_links, self_cert, registry, peer_links, cloud,
-# names, rooms, room_info, room_hosts; cloud defaults to Relay::Settings.cloud_name, names to the
+# names, rooms, room_info, room_hosts, app_profiles; cloud defaults to Relay::Settings.cloud_name, names to the
 # database's machine names), so the page shows them through the current
 # graph code, and the topic rates as the bridge
 # would measure them ("rates", with "recorded_at" in ms: their times are
@@ -25,7 +25,7 @@ module Bridge
         own_links: inputs["own_links"] || {}, self_cert: inputs["self_cert"], registry: inputs["registry"],
         peer_links: inputs["peer_links"] || [], cloud: inputs["cloud"] || Relay::Settings.cloud_name,
         names: inputs["names"] || machine_names, rooms: inputs["rooms"] || [], room_info: inputs["room_info"] || [],
-        room_hosts: inputs["room_hosts"] || []
+        room_hosts: inputs["room_hosts"] || [], app_profiles: inputs["app_profiles"] || {}
       ).to_h
     end
 
