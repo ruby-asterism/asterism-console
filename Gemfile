@@ -58,7 +58,11 @@ group :test do
   gem "selenium-webdriver"
 end
 
-# Asterism 0.8.0 (wire protocol 1, X1; reconnects across a router restart, G1.5b; @status, the methods' texts in the meta): the local checkouts next to this repository.
+# Asterism with wire protocol 2 (the applications' own profiles, topics and
+# types; not released yet, so the local checkouts next to this repository):
+# the console talks only to nodes of that protocol. ASTERISM_GEMS=rubygems
+# below still names the last release (0.13, protocol 1) until one with
+# protocol 2 is out; raise it then.
 # Files (docs/files.md) need Asterism::Transfer::FileInbox and Endpoint
 # (0.12.0); the Terminal (docs/terminal.md) needs Asterism::CLI.new(net:)
 # (0.13.0; with an older one it says so and the rest runs).

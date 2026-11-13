@@ -158,8 +158,12 @@ node.
 
 ### The Asterism gems
 
-The console takes asterism 0.8 (`~> 0.8`; wire protocol 1: it talks
-only to nodes of 0.7.0 and later, docs/x1.md) and asterism-zenoh 0.4.0 or
+The console speaks Asterism wire protocol 2 (the applications' own
+profiles, their topics and types; asterism `docs/protocol.md`): it needs an
+asterism gem with protocol 2, which is not released yet (the checkout next
+to this repository has it), and talks only to nodes of that protocol.
+Before it, it took asterism 0.8 (`~> 0.8`; wire protocol 1: nodes of 0.7.0
+and later, docs/x1.md). It takes asterism-zenoh 0.4.0 or
 later (the versions in `Gemfile.lock`); Files need asterism 0.12.0 and the
 Terminal the version after it (its command line on a connection given,
 `Asterism::CLI.new(net:)`; with an older gem the Terminal says so and the
@@ -219,12 +223,24 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   512 MB and an hour each, `ASTERISM_RECORDINGS_MAX_BYTES` (4 GB) for all.
 - **The file**: one MCAP file. ROS 2 topics as rosbag2 writes them (CDR,
   schema `ros2msg` with the concatenated .msg definitions, the topic's QoS
-  and type hash in the channel), Asterism keys as MessagePack, the network
+  and type hash in the channel), Asterism keys as they came, the network
   structure as JSON on `/asterism/graph` (a snapshot, then the changes).
-  The Asterism channels say the wire protocol they were recorded with
-  (channel metadata `asterism_protocol`, "1"): a recording made before
-  asterism 0.7.0 (protocol 0) lists its channels, but its Asterism
-  channels are not read (the timeline says so).
+  An Asterism key's channel (wire protocol 2) has the values' encoding as
+  its message encoding (`msgpack` when they have none, `image/jpeg` for a
+  topic of pictures), the topic's declared type as its schema
+  (`asterism/vector3` for a built-in type; an application's own type by
+  its name, schema encoding `asterism/types`, with the JSON definitions of
+  it and the types its fields name; `asterism/msgpack` without a type) and
+  the declaration in the metadata `asterism_declaration`; a message's
+  sequence is the topic's sequence number, its publish time the sender's
+  time when the topic sends it, else the router's timestamp
+  (`lib/bag/channels.rb`). The Asterism channels say the wire protocol they
+  were recorded with (channel metadata `asterism_protocol`, "2"; "1" from
+  consoles before it): a recording made before asterism 0.7.0 (protocol 0)
+  lists its channels, but its Asterism channels are not read (the timeline
+  says so). A playback puts an Asterism key's messages with their encoding
+  and, for a protocol 2 recording, the recorded sequence number (and the
+  sender's time for a topic that sent it).
   `ros2 bag info file.mcap` lists all of it; `ros2 bag play` refuses a file
   whose channels are not all CDR, so "ROS 2 topics only" downloads the
   copy it plays.
