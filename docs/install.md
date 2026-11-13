@@ -1259,10 +1259,10 @@ applications' own profiles, their topics and types; not released yet):
   protocol 2 too (the asterism gem and asterism-games of the same release,
   the boards' firmware): protocol 1 and 2 do not mix. The values still
   flow between them, but statuses and topics are not seen.
-- `./update.sh <version>`. Three migrations bring the roles to protocol 2
+- `./update.sh <version>`. Four migrations bring the roles to protocol 2
   (`db/migrate/*_relay_role_app_profiles.rb`,
-  `*_relay_role_spectate_profiles.rb` and `*_relay_role_shared_places.rb`,
-  in that order); they add lines and remove none an admin wrote, except a
+  `*_relay_role_spectate_profiles.rb`, `*_relay_role_shared_places.rb` and
+  `*_relay_role_spectate_calls.rb`, in that order); they add lines and remove none an admin wrote, except a
   spectator's old spectate lines (below):
   - the example role `match`: `asterism/${node}/*/@profile`,
     `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
@@ -1296,7 +1296,13 @@ applications' own profiles, their topics and types; not released yet):
     `<prefix>/room$*/@profile`, `<prefix>/room$*/@pubs` and "Ask"
     `<prefix>/games/@profile`, `<prefix>/room$*/@profile` (the values, and
     the senders' declarations and types: a shared key's type is read from
-    its sender).
+    its sender);
+  - the spectate object (the game host's `games` and `room<slot>` expose
+    `spectate`, whose `state(table)` a spectator asks again after lost
+    values): a "Read" line `<prefix>/@shared/spectate/**` (the role
+    `spectator`) gets `<prefix>/games/spectate/call/${node}` and
+    `<prefix>/room$*/spectate/call/${node}` in "Read" and in "Ask" (it
+    calls that object only, under its own name).
   The setup's output (`docker compose logs` of the update, the Databases
   step) has a line `relay role <name> (protocol 2): ...`,
   `relay role <name> (spectate's profile): ...` or

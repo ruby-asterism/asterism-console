@@ -336,8 +336,12 @@ places too, a channel per key and sender (docs: README, "Recordings").
                    asterism/*/games/@pubs
                    asterism/*/room$*/@profile
                    asterism/*/room$*/@pubs
+                   asterism/*/games/spectate/call/${node}
+                   asterism/*/room$*/spectate/call/${node}
   Ask              asterism/*/games/@profile
                    asterism/*/room$*/@profile
+                   asterism/*/games/spectate/call/${node}
+                   asterism/*/room$*/spectate/call/${node}
   Watch            asterism/**
   Browsers have this role: no
   ```
@@ -347,7 +351,13 @@ places too, a channel per key and sender (docs: README, "Recordings").
   and Apply. Only the spectate keys reach it, and the declarations and
   types of the applications that put them (their `@profile` and `@pubs`:
   a shared key's type is read from its sender, `asterism topic info` and
-  `type_of`); it writes nothing and calls nothing, and gets nothing of the
+  `type_of`), and the one object they expose for it, `spectate`: its
+  `state(table)` gives a table's last spectate view (delayed as the
+  key's values are), which a reader asks again after it lost values or
+  saw a new run (`info.lost > 0`, `info.restarted?`); the call goes under
+  its own name (`.../spectate/call/${node}`) and the reply comes back
+  through the Read line. It writes nothing, calls no other object (a
+  table's, the lobby's) and reads no meta, and gets nothing of the
   network's shared place `asterism/@shared/**` (an outward role). Leave
   "Browsers have this role" off: every browser is one subject at the
   router (docs/g1_5.md, "Browsers"), so a role for browsers would show
@@ -355,7 +365,9 @@ places too, a channel per key and sender (docs: README, "Recordings").
   player's row either: the router cannot tell a seat's player from a
   spectator of the same certificate. A `spectator` made before the shared
   places (Read `asterism/*/spectate/**`) gets these lines in place of its
-  spectate lines on update (docs/install.md).
+  spectate lines on update, and one that reads
+  `asterism/*/@shared/spectate/**` gets the `spectate/call` lines
+  (docs/install.md).
 - **The viewer role** (docs/g1_5.md, "Looking only") reads the nodes'
   shared places (`asterism/*/@shared/**`), so the spectate keys reach it
   as they are.
@@ -367,9 +379,9 @@ places too, a channel per key and sender (docs: README, "Recordings").
 What these roles keep closed (`test/lib/relay/spectate_roles_test.rb`): the
 players' rows, the browsers and every seat of every room neither receive
 nor subscribe to the spectate keys; only the host's row writes them; a
-`spectator` row reads them and the senders' declarations, and nothing of
-the tables' calls, the players' keys, the rooms or the network's shared
-place.
+`spectator` row reads them and the senders' declarations, calls the
+senders' `spectate` object only, and nothing of the tables' calls, the
+players' keys, the rooms or the network's shared place.
 
 ## Seats (0.3.0)
 
