@@ -36,7 +36,8 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out], pol["zenohd_home"]
     assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
-                    console__app_profiles_out console__app_notices_in console__app_notices_out], pol["console"]
+                    console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
+                    console__shared_out], pol["console"]
     assert_equal %w[viewer_ro_in viewer_ro_out], pol["viewer"]
     refute pol.key?("idle")
   end
@@ -69,6 +70,26 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal %w[console], acl["policies"].select { (_1["rules"] & with).any? }.map { _1["id"] }
     refute acl["rules"].any? { _1["key_exprs"].include?("asterism/*/*/@status") && _1["messages"].include?("query") },
            "no query of @status any more"
+  end
+
+  test "the console follows the shared places (protocol 2), which its asterism/** does not reach; nobody else gets the rules" do
+    acl = config.access_control
+    node_key = "asterism/games/@shared/spectate/t1/state"
+    global_key = "asterism/@shared/lobby"
+    [ node_key, global_key, "asterism/*/@shared/**", "asterism/@shared/**" ].each do |key|
+      assert AclEvaluator.allowed?(acl, "console", "declare_subscriber", "ingress", key), key
+      assert AclEvaluator.allowed?(acl, "console", "put", "egress", key), key
+      assert AclEvaluator.allowed?(acl, "console", "put", "ingress", key), "#{key}: a playback puts it again"
+      %w[declare_queryable liveliness_token query].each do |m|
+        refute AclEvaluator.allowed?(acl, "console", m, "ingress", key), "#{m} #{key}: a place has no objects or profile"
+      end
+    end
+    %w[viewer zenohd-home].each do |who|
+      refute AclEvaluator.allowed?(acl, who, "put", "egress", node_key), "#{who}: asterism/** does not reach @shared"
+      refute AclEvaluator.allowed?(acl, who, "put", "egress", global_key), who
+    end
+    with = acl["rules"].select { (_1["key_exprs"] & Relay::CloudConfig::SHARED_PLACES).any? }.map { _1["id"] }
+    assert_equal %w[console__shared_in console__shared_out], with
   end
 
   test "the console reads the nodes' profiles (0.3.3), and nobody else gets that rule" do
@@ -324,8 +345,8 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     acl = Relay::CloudConfig.new(PEERS, ROOMS).access_control
     pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
-                    console__app_profiles_out console__app_notices_in console__app_notices_out console__rooms_in
-                    console__rooms_out], pol["console"]
+                    console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
+                    console__shared_out console__rooms_in console__rooms_out], pol["console"]
     allowed = []
     Relay::CloudConfig::ALL.each do |message|
       %w[ingress egress].each do |flow|

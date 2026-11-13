@@ -84,6 +84,15 @@
 # asterism/${node}/*/@status and asterism/${node}/*/@pubs (docs/rooms.md:
 # games-host).
 #
+# The shared places (asterism protocol 2: asterism/<node>/@shared/** and
+# asterism/@shared/**, data with no owner; @shared is verbatim, so the
+# console's asterism/** does not reach them): the console's certificate
+# gets from it the subscription and the put (a recording's playback puts
+# what it recorded there again), to it the puts. A node writes its own
+# place with a role line asterism/${node}/@shared/** (docs/rooms.md:
+# games-host); the network's place asterism/@shared/** is read by the
+# example role "match" and written only where an admin's role says so.
+#
 # Files with the console (0.3.14, T4b, docs/files.md): a row marked
 # files_to_console gets, for each node it speaks for, the ask line
 # asterism/<console node>/transfer/inbox/call/<node> (the console's inbox,
@@ -169,6 +178,10 @@ module Relay
     APP_NOTICES = [ "asterism/*/*/@status", "asterism/*/*/@pubs" ].freeze
     APP_NOTICES_IN = %w[declare_subscriber].freeze
     APP_NOTICES_OUT = %w[put].freeze
+    # The shared places the console follows (protocol 2, Bridge::Shared).
+    SHARED_PLACES = [ "asterism/*/@shared/**", "asterism/@shared/**" ].freeze
+    SHARED_IN = %w[declare_subscriber put].freeze
+    SHARED_OUT = %w[put].freeze
     # A seat's or a host's own writes in a room (0.3.0).
     OWN = %w[put delete declare_queryable liveliness_token reply].freeze
     ROOM_READ_IN = %w[declare_subscriber declare_liveliness_subscriber liveliness_query].freeze
@@ -383,13 +396,16 @@ module Relay
     end
 
     # The console's reading of the applications' own profiles (protocol 2:
-    # asterism/<node>/<app>/@profile, @status, @pubs): the rules and their ids.
+    # asterism/<node>/<app>/@profile, @status, @pubs) and of the shared
+    # places: the rules and their ids.
     def app_profile_rules(rules, id)
       list = [
         [ "app_profiles_in", APP_PROFILES_IN, %w[ingress], [ APP_PROFILES ] ],
         [ "app_profiles_out", APP_PROFILES_OUT, %w[egress], [ APP_PROFILES ] ],
         [ "app_notices_in", APP_NOTICES_IN, %w[ingress], APP_NOTICES ],
-        [ "app_notices_out", APP_NOTICES_OUT, %w[egress], APP_NOTICES ]
+        [ "app_notices_out", APP_NOTICES_OUT, %w[egress], APP_NOTICES ],
+        [ "shared_in", SHARED_IN, %w[ingress], SHARED_PLACES ],
+        [ "shared_out", SHARED_OUT, %w[egress], SHARED_PLACES ]
       ]
       list.map do |suffix, messages, flows, keys|
         rid = "#{id}__#{suffix}"
