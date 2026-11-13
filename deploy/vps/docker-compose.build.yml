@@ -14,3 +14,9 @@ services:
       dockerfile: deploy/vps/Dockerfile
       args:
         CONSOLE_VERSION: ${CONSOLE_VERSION:-0.1.0}
+        # Before an asterism release is published: ASTERISM_GEMS=git and
+        # ASTERISM_REF=<a commit of asterism's repository> in the
+        # environment of the build (docs/install.md, "Building the image
+        # yourself"). Unset: the gems of rubygems.org.
+        ASTERISM_GEMS: ${ASTERISM_GEMS:-rubygems}
+        ASTERISM_REF: ${ASTERISM_REF:-}

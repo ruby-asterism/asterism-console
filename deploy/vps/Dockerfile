@@ -7,9 +7,19 @@
 #
 # The Asterism gems come from rubygems.org (ASTERISM_GEMS=rubygems in the
 # Gemfile); asterism-zenoh compiles its C extension against the zenoh-c
-# release it pins, downloaded while the image is built.
+# release it pins, downloaded while the image is built. Before an asterism
+# release is published, --build-arg ASTERISM_GEMS=git --build-arg
+# ASTERISM_REF=<commit> takes asterism from its git repository at that
+# commit (ASTERISM_GIT: another URL; docs/install.md, "Building the image
+# yourself").
 ARG RUBY_VERSION=3.4.11
+ARG ASTERISM_GEMS=rubygems
+ARG ASTERISM_GIT=https://github.com/ruby-asterism/asterism.git
+ARG ASTERISM_REF=
 FROM ruby:${RUBY_VERSION}-slim AS build
+ARG ASTERISM_GEMS
+ARG ASTERISM_GIT
+ARG ASTERISM_REF
 
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential curl git libyaml-dev pkg-config unzip ca-certificates && \
@@ -18,19 +28,28 @@ RUN apt-get update -qq && \
 ENV RAILS_ENV=production \
     BUNDLE_WITHOUT=development:test \
     BUNDLE_PATH=/usr/local/bundle \
-    ASTERISM_GEMS=rubygems
+    ASTERISM_GEMS=${ASTERISM_GEMS} \
+    ASTERISM_GIT=${ASTERISM_GIT} \
+    ASTERISM_REF=${ASTERISM_REF}
 
 WORKDIR /app
 COPY Gemfile Gemfile.lock ./
+# The lock Bundler resolves here (the Gemfile's branch, a git source's
+# revision) is the image's: COPY . . below would put the checkout's back.
 RUN bundle install && \
+    cp Gemfile.lock /tmp/Gemfile.lock.image && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git
 
 COPY . .
-RUN SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile && bundle exec bootsnap precompile app/ lib/
+RUN cp /tmp/Gemfile.lock.image Gemfile.lock && \
+    SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile && bundle exec bootsnap precompile app/ lib/
 
 FROM ruby:${RUBY_VERSION}-slim
 
 ARG CONSOLE_VERSION=dev
+ARG ASTERISM_GEMS
+ARG ASTERISM_GIT
+ARG ASTERISM_REF
 LABEL org.opencontainers.image.title="asterism-console" \
       org.opencontainers.image.description="Asterism Console: the graph, the relay registry and the router's ACL of an Asterism network" \
       org.opencontainers.image.source="https://github.com/ruby-asterism/asterism-console" \
@@ -41,10 +60,14 @@ RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y libsqlite3-0 libyaml-0-2 ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+# The same Gemfile branch as the build stage: Bundler reads the Gemfile
+# again when the console starts.
 ENV RAILS_ENV=production \
     BUNDLE_WITHOUT=development:test \
     BUNDLE_PATH=/usr/local/bundle \
-    ASTERISM_GEMS=rubygems
+    ASTERISM_GEMS=${ASTERISM_GEMS} \
+    ASTERISM_GIT=${ASTERISM_GIT} \
+    ASTERISM_REF=${ASTERISM_REF}
 
 WORKDIR /app
 COPY --from=build /usr/local/bundle /usr/local/bundle

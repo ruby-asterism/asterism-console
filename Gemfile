@@ -58,23 +58,30 @@ group :test do
   gem "selenium-webdriver"
 end
 
-# Asterism with wire protocol 2 (the applications' own profiles, topics and
-# types; not released yet, so the local checkouts next to this repository):
-# the console talks only to nodes of that protocol. ASTERISM_GEMS=rubygems
-# below still names the last release (0.13, protocol 1) until one with
-# protocol 2 is out; raise it then.
+# Asterism with wire protocol 2 (0.14.0: the applications' own profiles,
+# topics and types): the console talks only to nodes of that protocol.
 # Files (docs/files.md) need Asterism::Transfer::FileInbox and Endpoint
 # (0.12.0); the Terminal (docs/terminal.md) needs Asterism::CLI.new(net:)
 # (0.13.0; with an older one it says so and the rest runs).
-# ASTERISM_DIR / ASTERISM_ZENOH_DIR point elsewhere. To take the gems from
-# rubygems.org instead, replace these two lines with
-#   gem "asterism", "~> 0.13", require: false
+# By default the checkouts next to this repository (ASTERISM_DIR /
+# ASTERISM_ZENOH_DIR point elsewhere). To take the gems from rubygems.org
+# instead, replace these lines with
+#   gem "asterism", "~> 0.14", require: false
 # (asterism-zenoh comes with it) and run `bundle install` (README, "The
 # Asterism gems").
 # ASTERISM_GEMS=rubygems takes them from rubygems.org (the container of
 # deploy/vps does; Bundler then resolves the lock again inside the image).
-if ENV["ASTERISM_GEMS"] == "rubygems"
-  gem "asterism", "~> 0.13", require: false
+# ASTERISM_GEMS=git takes asterism from its git repository at the commit
+# ASTERISM_REF (ASTERISM_GIT: another URL) and asterism-zenoh from
+# rubygems.org: an image built before an asterism release is published
+# (docs/install.md, "Building the image yourself").
+case ENV["ASTERISM_GEMS"]
+when "rubygems"
+  gem "asterism", "~> 0.14", require: false
+when "git"
+  gem "asterism", require: false,
+                  git: ENV.fetch("ASTERISM_GIT", "https://github.com/ruby-asterism/asterism.git"),
+                  ref: ENV.fetch("ASTERISM_REF")
 else
   gem "asterism-zenoh", require: false, path: ENV.fetch("ASTERISM_ZENOH_DIR", "../asterism-zenoh")
   gem "asterism", require: false, path: ENV.fetch("ASTERISM_DIR", "../asterism")
