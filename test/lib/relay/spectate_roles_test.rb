@@ -34,7 +34,8 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
                 "templates" => { "read" => %w[asterism/*/@shared/spectate/** asterism/*/games/@profile
                                               asterism/*/games/@pubs asterism/*/room$*/@profile asterism/*/room$*/@pubs
                                               asterism/*/games/spectate/call/${node}
-                                              asterism/*/room$*/spectate/call/${node}],
+                                              asterism/*/room$*/spectate/call/${node}
+                                              asterism/*/games/protocol/* asterism/*/room$*/protocol/*],
                                  "ask" => %w[asterism/*/games/@profile asterism/*/room$*/@profile
                                              asterism/*/games/spectate/call/${node}
                                              asterism/*/room$*/spectate/call/${node}],
@@ -116,6 +117,9 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
       refute allowed?("spectator-a", "declare_queryable", "ingress", "asterism/games/#{app}/@profile")
     end
     refute allowed?("spectator-a", "query", "ingress", "asterism/linux/demo/@profile"), "not every application"
+    # topic list finds the senders from their tokens, then asks their profiles by name
+    %w[games room01].each { assert allowed?("spectator-a", "liveliness_token", "egress", "asterism/games/#{_1}/protocol/2"), _1 }
+    refute allowed?("spectator-a", "liveliness_token", "egress", "asterism/linux/demo/protocol/2"), "no other application's token"
     refute reads?("spectator-a", "asterism/games/games/@status")
   end
 

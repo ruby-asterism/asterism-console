@@ -344,6 +344,8 @@ places too, a channel per key and sender (docs: README, "Recordings").
                    asterism/*/room$*/@pubs
                    asterism/*/games/spectate/call/${node}
                    asterism/*/room$*/spectate/call/${node}
+                   asterism/*/games/protocol/*
+                   asterism/*/room$*/protocol/*
   Ask              asterism/*/games/@profile
                    asterism/*/room$*/@profile
                    asterism/*/games/spectate/call/${node}
@@ -354,8 +356,11 @@ places too, a channel per key and sender (docs: README, "Recordings").
 
   Give it to a row of its own (Register, kind `client`, a name for the
   person, e.g. `spectator-a`; "Issue a certificate", "Save all (.tar)"),
-  and Apply. Only the spectate keys reach it, and the declarations and
-  types of the applications that put them (their `@profile` and `@pubs`:
+  and Apply. Only the spectate keys reach it, the liveliness tokens of the
+  applications that put them (`games` and `room<slot>`:
+  `asterism/<node>/<app>/protocol/2`, so `asterism topic list` finds them
+  and lists their spectate keys), and the declarations and
+  types of those applications (their `@profile` and `@pubs`:
   a shared key's type is read from its sender, `asterism topic info` and
   `type_of`), and the one object they expose for it, `spectate`: its
   `state(table)` gives a table's last spectate view (delayed as the
@@ -372,8 +377,8 @@ places too, a channel per key and sender (docs: README, "Recordings").
   spectator of the same certificate. A `spectator` made before the shared
   places (Read `asterism/*/spectate/**`) gets these lines in place of its
   spectate lines on update, and one that reads
-  `asterism/*/@shared/spectate/**` gets the `spectate/call` lines
-  (docs/install.md).
+  `asterism/*/@shared/spectate/**` gets the `spectate/call` and the
+  `protocol/*` lines (docs/install.md).
 - **The viewer role** (docs/g1_5.md, "Looking only") reads the nodes'
   shared places (`asterism/*/@shared/**`), so the spectate keys reach it
   as they are.
