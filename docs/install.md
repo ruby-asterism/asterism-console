@@ -1252,6 +1252,44 @@ From 0.3.20 to 0.3.21 (the certificate days field is greyed while No expiry is c
 - `./update.sh 0.3.21`. No migration, no change to nginx, `.env` or the roles.
 - Going back to 0.3.20 needs nothing but `./update.sh 0.3.20`.
 
+From 0.3.21 to the release after it (Asterism wire protocol 2: the
+applications' own profiles, their topics and types; not released yet):
+
+- Every node, the game host and the asterism command line must speak
+  protocol 2 too (the asterism gem and asterism-games of the same release,
+  the boards' firmware): protocol 1 and 2 do not mix. The values still
+  flow between them, but statuses and topics are not seen.
+- `./update.sh <version>`. One migration brings the roles to protocol 2
+  (`db/migrate/*_relay_role_app_profiles.rb`); it adds lines and removes
+  none an admin wrote:
+  - the example role `match`: `asterism/${node}/*/@profile`,
+    `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
+    write" (its nodes' applications answer their own profiles and tell
+    their statuses and topics);
+  - a "Read and write" line `<prefix>/*/@status` (the role `games-host`,
+    docs/rooms.md) gets `<prefix>/*/@profile` and `<prefix>/*/@pubs` next to
+    it, a "Read" line `<prefix>/*/@status` (the role `viewer`, docs/g1_5.md)
+    gets `<prefix>/*/@pubs`;
+  - an "Ask" line `<prefix>/*/@status` becomes `<prefix>/*/@profile`, and
+    "Read" gets `<prefix>/*/@profile` too.
+  The setup's output (`docker compose logs` of the update, the Databases
+  step) has a line `relay role <name> (protocol 2): ...` for each role it
+  changed. A role of your own that lets its nodes' applications tell a
+  status or stream topics without any of these lines needs
+  `asterism/${node}/*/@profile` and `asterism/${node}/*/@pubs` (and
+  `asterism/${node}/*/@status`) by hand, then Apply.
+- The router's configuration gets the console's rules of protocol 2 (the
+  query of `asterism/*/*/@profile`, the subscriptions to
+  `asterism/*/*/@status` and `asterism/*/*/@pubs`; no more query of
+  `@status`) with the roles' new lines: the update's setup writes it from
+  the registry and restarts the router on it, as Apply does. No separate
+  Apply is needed unless the setup says it could not restart the router.
+- **Check**: the details of the game host's app show its "Status" row
+  again and a "Topics" row with the topics it streams.
+- Going back to 0.3.21: `./update.sh 0.3.21`. The added lines stay (they
+  let through nothing protocol 1 uses); put the "Ask" line
+  `asterism/*/*/@status` back by hand where a role had it, then Apply.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.

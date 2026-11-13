@@ -208,7 +208,8 @@ console's code is particular to it: two roles and a row.
   wire protocol 2; asterism `docs/protocol.md` 8 and 10): a `**` does not
   match a chunk that starts with `@`, so each needs a line of its own. The
   console reads them with rules of its own and shows them in the details
-  of the host's node and app. A room's host tells none: the rooms' rules
+  of the host's node and app. A console updated from before protocol 2
+  adds the two lines next to the `@status` line by itself (docs/install.md). A room's host tells none: the rooms' rules
   let it write its own place there, which those chunks are not part of,
   and the console only watches who is in a room.
 
