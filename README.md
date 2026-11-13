@@ -210,7 +210,8 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
 - **Logs** (`/logs`): time, level, node (logger name), message, file:line
   and function; filters for the level (at least), the node and a text; the
   last 2000 lines. Asterism nodes can log on `asterism/<node>/<app>/log`
-  as a MessagePack Hash `{"level", "msg", "time"}` (a proposal; docs/v3.md).
+  as a MessagePack Hash `{"level", "msg", "time"}` ("time" in ms since
+  1970, an int; a proposal; docs/v3.md).
 - **Cost**: the bridge subscribes only while such a page is open
   (`StreamLease`, renewed every 10 s, 30 s, released when the page is left)
   and keeps at most 30 messages a second of each plotted topic, so a fast
@@ -227,7 +228,10 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   seconds) and start. The bridge subscribes and writes
   `storage/recordings/<time>-<random>.mcap` (gitignored) until you stop it
   or a limit is reached; the page shows messages, bytes, the duration, the
-  count per channel and any messages lost on the way. At most 2 at once,
+  count per channel and any messages lost on the way (those the
+  subscriptions had no room for, and the gaps in a sender's sequence
+  numbers; a sender that connects again starts a new run, which is not a
+  loss). At most 2 at once,
   512 MB and an hour each, `ASTERISM_RECORDINGS_MAX_BYTES` (4 GB) for all.
 - **The file**: one MCAP file. ROS 2 topics as rosbag2 writes them (CDR,
   schema `ros2msg` with the concatenated .msg definitions, the topic's QoS
@@ -253,8 +257,15 @@ ASTERISM_DEPRECATIONS=raise bin/bridge
   sequence numbers: it gets a channel per key and sender, the same topic,
   the sender in the metadata `asterism_from`, the schema and declaration
   from that sender's own; the timeline shows "from <sender>", and a
-  playback puts it with that sender's attachment (`[seq, ms or nil,
-  "<node>/<app>"]`). A key expression `asterism/**` (or
+  playback puts it with that sender's attachment (`[seq, id, ms or nil,
+  "<node>/<app>"]`).
+  Every value carries the run id of its sender's connection: a run gets
+  a channel of its own (the same topic, the id in the metadata
+  `asterism_run`), so a channel's sequence numbers go up one by one and a
+  restart is a new channel, not a gap; the timeline shows "run <id>"
+  where a key has several. A playback puts each recorded run with a run
+  id of its own (a new one per run and playback: the console is not the
+  sender's live connection). A key expression `asterism/**` (or
   `asterism/<node>/**`) records the shared places beside it
   (`asterism/*/@shared/**` and `asterism/@shared/**`, which no `**`
   reaches); a watch of such an expression too.
