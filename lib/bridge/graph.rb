@@ -98,11 +98,23 @@
 #     outside the rooms (its permanent tables, labelled by its profile). The
 #     console cannot read the profiles in a room, so the mark is the
 #     console's own.
+#   - The shared places (Asterism wire protocol 2, Bridge::Shared): data
+#     with no owner, at asterism/<node>/@shared/... and asterism/@shared/....
+#     A place is not an app (it has no token, objects or profile): one
+#     "a_shared" node per place, a node's ("a_shared:<node>", in its node's
+#     box) and the network's ("a_shared:@shared", outside every node), made
+#     from the declarations of the apps that are here (their @pubs entries
+#     "<node>/@shared/<name>" and "@shared/<name>"). Each declaring app gets
+#     a "shares" edge, app -> place, its label the names it puts there (as a
+#     ROS 2 topic edge lists its topics). The place's data "keys" lists each
+#     key with its senders and their own declarations (the type is the
+#     sender's). An app that leaves takes its declarations with it
+#     (Bridge::AppProfiles), so a place nobody declares is not drawn.
 module Bridge
   class Graph
     LAYERS = {
       "router" => "infra", "session" => "infra", "registered" => "infra",
-      "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism",
+      "a_node" => "asterism", "a_app" => "asterism", "a_object" => "asterism", "a_shared" => "asterism",
       "r_node" => "ros", "r_topic" => "ros", "others" => "infra", "room" => "rooms"
     }.freeze
 
@@ -146,6 +158,7 @@ module Bridge
       g.add_asterism(asterism, self_node)
       g.add_profiles(profiles)
       g.add_app_profiles(app_profiles)
+      g.add_shared_places(app_profiles)
       g.add_rooms(rooms, room_info, room_hosts)
       g.add_ros(ros)
       g.finish_ros
@@ -445,6 +458,40 @@ module Bridge
       enc = e && ((defined?(::Asterism::Pubs) && ::Asterism::Pubs.encoding_name(e)) || "encoding #{e}")
       { "name" => name, "type" => type, "encoding" => enc, "unit" => decl["u"], "desc" => decl["d"],
         "ts" => decl["ts"] ? true : nil }.compact
+    end
+
+    GLOBAL_PLACE = "a_shared:@shared".freeze
+
+    # The shared places the apps here declare (see the top): a node per
+    # place, a "shares" edge from each declaring app.
+    def add_shared_places(profiles)
+      places = {} # place id => { key => { app => row } }
+      names = Hash.new { |h, k| h[k] = [] } # [app id, place id] => [name, ...]
+      (profiles || {}).sort.each do |app, pr|
+        aid = "a_app:#{app}"
+        next unless @nodes[aid] && pr && pr["pubs"]
+        pr["pubs"].sort.each do |entry, decl|
+          kind, nid, name = Shared.place(entry)
+          next unless kind
+          pid = if kind == :global
+            node(GLOBAL_PLACE, "a_shared", "@shared (network)", "place" => "global")["id"]
+          else
+            next unless nid == app.split("/").first && @nodes["a_node:#{nid}"]
+            node("a_shared:#{nid}", "a_shared", "@shared", { "place" => "node", "node" => nid }, "a_node:#{nid}")["id"]
+          end
+          ((places[pid] ||= {})[entry] ||= {})[app] = self.class.topic_row(name, decl)
+          names[[ aid, pid ]] << name
+        end
+      end
+      places.each do |pid, keys|
+        @nodes[pid]["data"]["keys"] = keys.sort.map do |entry, by_app|
+          { "key" => entry, "senders" => by_app.sort.map { |app, row| row.merge("app" => app) } }
+        end
+      end
+      names.each do |(aid, pid), list|
+        e = edge(aid, pid, "shares", list.sort.join("\n"))
+        e["names"] = list.sort
+      end
     end
 
     def a_node(nid, self_node)

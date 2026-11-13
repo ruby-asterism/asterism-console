@@ -108,4 +108,74 @@ class Bridge::AppProfilesTest < ActiveSupport::TestCase
     assert_equal({ "name" => "x", "type" => "type 9", "encoding" => "encoding 99" },
                  Bridge::Graph.topic_row("x", { "t" => 9, "e" => 99 }))
   end
+
+  SHARED = "host/@shared/spectate/t1/state".freeze
+  SHARED_PUBS = { "spectate/t1/state" => { "t" => "g/table" } }.freeze
+
+  test "a shared place's key: the sender's declaration and its own definitions; another node's place is dropped" do
+    s = Bridge::AppProfiles.new
+    s.due(%w[host/games host/room01])
+    s.answered("host/games", { "pubs" => { SHARED => { "t" => "g/table" }, "pc/@shared/x" => { "t" => 1 } },
+                               "types" => { "g/table" => { "f" => [ [ "st", "int" ] ] } } })
+    s.answered("host/room01", { "pubs" => { SHARED => { "t" => "g/table", "ts" => true } },
+                                "types" => { "g/table" => { "f" => [ [ "st", "str" ] ] } } })
+    key = "asterism/#{SHARED}"
+    assert_equal [ { "t" => "g/table" }, { "g/table" => { "f" => [ [ "st", "int" ] ] } } ], s.topic(key, from: "host/games")
+    assert_equal [ { "t" => "g/table", "ts" => true }, { "g/table" => { "f" => [ [ "st", "str" ] ] } } ],
+                 s.topic(key, from: "host/room01")
+    assert_nil s.topic(key), "no sender: no declaration to read"
+    assert_nil s.topic(key, from: "host/other")
+    refute s.to_graph["host/games"]["pubs"].key?("pc/@shared/x"), "a node writes its own place only"
+  end
+
+  test "a sender that leaves takes its declarations with it; its late puts and answers are not kept" do
+    s = Bridge::AppProfiles.new
+    s.due(%w[host/games host/room01])
+    s.answered("host/games", { "pubs" => { SHARED => { "t" => 5 } } })
+    assert_equal [ true, false ], s.told_pubs("host/room01", { SHARED => { "t" => 5 } })
+    key = "asterism/#{SHARED}"
+    refute_nil s.topic(key, from: "host/room01")
+    s.due(%w[host/games]) # room01's token went away
+    assert_nil s.topic(key, from: "host/room01"), "its last @pubs put does not outlive it"
+    assert_equal %w[host/games], s.to_graph.keys
+    assert_equal [ false, false ], s.told_pubs("host/room01", { SHARED => { "t" => 5 } }), "a late put: not kept"
+    refute s.told_status("host/room01", { "x" => 1 })
+    refute s.answered("host/room01", { "pubs" => { SHARED => { "t" => 5 } } }), "a late answer: not kept"
+    refute s.ask_again("host/room01")
+    assert_equal %w[host/games], s.to_graph.keys
+    g = Bridge::Graph.build(asterism: %w[asterism/host/games], app_profiles: s.to_graph).to_h
+    shares = g["edges"].select { _1["kind"] == "shares" }
+    assert_equal [ "a_app:host/games" ], shares.map { _1["source"] }, "no line from the sender that left"
+    assert_equal %w[host/room01], s.due(%w[host/games host/room01]), "back: asked again"
+  end
+
+  test "the graph: the shared places as places, with lines from the apps that declare them" do
+    g = Bridge::Graph.build(
+      asterism: %w[asterism/host/games asterism/host/room01 asterism/pc/chat asterism/viewer/v],
+      app_profiles: { "host/games" => { "pubs" => { SHARED => { "t" => "g/table" }, "host/@shared/spectate/t2/state" => { "t" => "g/table" },
+                                                    "tables" => { "t" => 5 } } },
+                      "host/room01" => { "pubs" => { SHARED => { "t" => "g/table", "ts" => true } } },
+                      "pc/chat" => { "pubs" => { "@shared/lobby" => { "t" => 7, "d" => "hello" } } },
+                      "gone/app" => { "pubs" => { "@shared/lobby" => { "t" => 7 } } } }
+    ).to_h
+    by_id = g["nodes"].to_h { [ _1["id"], _1 ] }
+    place = by_id["a_shared:host"]
+    assert_equal [ "a_shared", "asterism", "@shared", "a_node:host" ], place.values_at("kind", "layer", "label", "parent")
+    assert_equal "node", place["data"]["place"]
+    assert_equal [ SHARED, "host/@shared/spectate/t2/state" ].sort, place["data"]["keys"].map { _1["key"] }
+    t1 = place["data"]["keys"].find { _1["key"] == SHARED }
+    assert_equal [ { "name" => "spectate/t1/state", "type" => "g/table", "app" => "host/games" },
+                   { "name" => "spectate/t1/state", "type" => "g/table", "ts" => true, "app" => "host/room01" } ], t1["senders"]
+    global = by_id["a_shared:@shared"]
+    assert_equal [ "a_shared", "@shared (network)", nil ], global.values_at("kind", "label", "parent")
+    assert_equal [ { "key" => "@shared/lobby", "senders" => [ { "name" => "lobby", "type" => "text", "desc" => "hello", "app" => "pc/chat" } ] } ],
+                 global["data"]["keys"]
+    shares = g["edges"].select { _1["kind"] == "shares" }.to_h { [ _1["source"], _1 ] }
+    assert_equal %w[a_app:host/games a_app:host/room01 a_app:pc/chat], shares.keys.sort
+    assert_equal [ "a_shared:host", "spectate/t1/state\nspectate/t2/state" ], shares["a_app:host/games"].values_at("target", "label")
+    assert_equal "a_shared:@shared", shares["a_app:pc/chat"]["target"]
+    refute by_id.key?("a_app:host/@shared"), "a place is not an app"
+    refute by_id.key?("a_shared:viewer"), "no declaration, no place"
+    assert_equal 1, g["nodes"].count { _1["kind"] == "a_shared" && _1["data"]["place"] == "global" }
+  end
 end

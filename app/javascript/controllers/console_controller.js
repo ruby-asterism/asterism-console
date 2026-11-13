@@ -93,6 +93,7 @@ const KINDS = {
   a_node:    { label: "Asterism node",   shape: "round-rectangle", color: "#ffffff", border: RUBY, size: 38 },
   a_app:     { label: "Asterism app",    shape: "round-rectangle", color: "#ffffff", border: GREY, dashed: true, size: 30 },
   a_object:  { label: "Asterism object", shape: "ellipse",         color: RUBY, size: 14 },
+  a_shared:  { label: "Shared place (@shared)", shape: "barrel",     color: "#fbe9e7", border: RUBY, size: 26 },
   r_node:    { label: "ROS 2 node",      shape: "round-rectangle", color: "#6a1b9a", size: 36 },
   r_group:   { label: "ROS 2 machine (folded)", shape: "round-rectangle", color: "#6a1b9a", border: "#6a1b9a", double: true, size: 50 },
   r_topic:   { label: "ROS 2 topic",     shape: "tag",             color: "#ef6c00", size: 28 },
@@ -146,7 +147,7 @@ const MARK_SIZE = 14
 const EDGE_COLORS = {
   session: "#9aa0a6", router_link: ROUTER_BLUE, carries: "#c0c4ca", attach: "#9aa0a6", peer_link: "#5c6bc0",
   peer_session: "#5c6bc0", expect: ROUTER_BLUE, via_router: "#9aa0a6",
-  publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00",
+  publishes: "#ef6c00", subscribes: "#ef6c00", topic_link: "#ef6c00", shares: RUBY,
 }
 
 // What a "via_router" edge means (V2.6), for its legend line and details.
@@ -335,6 +336,12 @@ export default class extends Controller {
           "text-background-color": "#fff", "text-background-opacity": 0.85, "text-background-padding": 1,
           "control-point-step-size": 50, "arrow-scale": 1 } },
       { selector: "edge[kind = 'topic_link']:selected", style: { width: 4, "line-color": "#ffb300", "target-arrow-color": "#ffb300" } },
+      // An app's line to a shared place it puts on (protocol 2), the names
+      // it puts there on it, as a topic's line.
+      { selector: "edge[kind = 'shares']", style: {
+          width: 1.5, "line-style": "dashed", label: "data(label)", "font-size": 8, color: "#8e2420", "text-wrap": "wrap",
+          "text-background-color": "#fff", "text-background-opacity": 0.85, "text-background-padding": 1 } },
+      { selector: "node[kind = 'a_shared']", style: { "font-size": 9, color: "#8e2420" } },
       // The registry's mark, in the top right corner (with the layer on).
       { selector: "node.reg-on[regmark]", style: {
           "background-image": "data(regmark)", "background-width": MARK_SIZE, "background-height": MARK_SIZE,
@@ -1137,6 +1144,7 @@ export default class extends Controller {
       `<span class="key">an icon before a name: the node's own (its profile), in place of the mark</span>` +
       lines + via +
       `<span class="key"><span class="swatch line" style="background:${EDGE_COLORS.topic_link}"></span>topic, publisher to subscriber</span>` +
+      `<span class="key"><span class="swatch line dashed-line" style="border-color:${EDGE_COLORS.shares}"></span>app to a shared place it puts on</span>` +
       `<span class="key">${badge(BADGE.services, "7")} services</span>` +
       `<span class="key">${badge(BADGE.unmatched, "2")} topics with no counterpart</span>` +
       registry
@@ -1355,6 +1363,13 @@ export default class extends Controller {
                   ["Types", info.types ? typesHtml(info.types) : null, true],
                   ["Objects", el.children().map((n) => this.link(n.id(), n.data("name"))).join(", "), true])
         break
+      case "a_shared":
+        rows.push(["Place", info.place === "global" ? "the whole network (asterism/@shared/...)" : `node ${esc(info.node)} (asterism/${esc(info.node)}/@shared/...)`, true],
+                  ["Keys", (info.keys || []).map((k) => `<code>${esc(k.key)}</code><br>` +
+                    k.senders.map((d) => `${this.link(`a_app:${d.app}`, d.app)}: ${pubsHtml([d])}`).join("<br>")).join("<br>") || "none", true])
+        html += `<p class="hint">Data with no owner: the applications that declare a key here put on it, each with its own
+          numbers and its own type (read from the sender). A place has no objects and no profile.</p>`
+        break
       case "a_object":
         rows.push(["Path", info.path],
                   ["Room", info.room ? this.link(`room:${info.room}`, roomName(this.cy.getElementById(`room:${info.room}`), info.room)) : null, true])
@@ -1428,6 +1443,7 @@ export default class extends Controller {
     if (kind === "r_node") html += this.rosNodeExtras(info)
     const callable = kind === "a_object" && !info.room
     if (callable) html += `<div class="methods" data-role="methods"><p class="hint">Reading the exposed methods...</p></div><div class="results" data-role="results"></div>`
+    if (kind === "a_shared") html += `<div class="row actions"><button type="button" data-watch="${esc(info.place === "global" ? "asterism/@shared/**" : `asterism/${info.node}/@shared/**`)}">Watch its values</button></div>`
     if (kind === "r_topic") html += `<div class="row actions"><button type="button" data-watch="${esc(`${info.domain}${info.name}/**`)}">Watch its values</button>` +
       `${plotLink(id)}</div>`
     this.renderDetails(html)
