@@ -12,7 +12,7 @@ class Bridge::AppProfilesTest < ActiveSupport::TestCase
            "camera" => { "t" => 4, "e" => 17 } }.freeze
   TYPES = { "mygame/board.strokes" => { "f" => [ [ "pts", "mygame/point[]" ], [ "color", "str" ] ] },
             "mygame/point" => { "f" => [ [ "x", "int" ], [ "y", "int" ] ], "d" => "a point" },
-            "mygame/other" => { "f" => [ [ "v", 1 ] ] } }.freeze
+            "mygame/other" => { "f" => [ [ "v", "number" ] ] } }.freeze
 
   def pl(v) = MessagePack.pack(v)
 
@@ -33,11 +33,12 @@ class Bridge::AppProfilesTest < ActiveSupport::TestCase
     s = Bridge::AppProfiles.new
     s.due(%w[linux/demo])
     assert s.answered("linux/demo", { "status" => { "ok" => 1, 2 => 3 }, "pubs" => PUBS.merge("bad" => 3, "x" => { "t" => 0 }),
-                                      "types" => TYPES.merge("broken" => { "f" => 1 }), "other" => 1 })
+                                      "types" => TYPES.merge("broken" => { "f" => 1 }, "numbered" => { "f" => [ [ "v", 1 ] ] }),
+                                      "other" => 1 })
     got = s.to_graph["linux/demo"]
     assert_equal({ "ok" => 1 }, got["status"])
     assert_equal PUBS.merge("x" => {}), got["pubs"], "a declaration with a bad type is kept without it"
-    assert_equal TYPES, got["types"]
+    assert_equal TYPES, got["types"], "a field type by number is not taken (names only)"
     refute s.answered("linux/demo", { "status" => { "ok" => 1 }, "pubs" => PUBS.merge("bad" => 3, "x" => { "t" => 0 }),
                                       "types" => TYPES }), "the same: no change"
     assert s.answered("linux/demo", {}), "answered without anything"
