@@ -311,8 +311,10 @@ host's node, its topics in the details. The host's role needs nothing
 more than the lines above: `asterism/${node}/*/@profile`, `@status` and
 `@pubs` cover `spectate` as they cover `games` (the update adds them to a
 role made before protocol 2, docs/install.md). The `spectator` role below
-reads the values only, not the application's profile or declarations; the
-console and a viewer read those.
+reads that application's profile and declarations too (its `@profile` and
+`@pubs` lines: `asterism topic list` with a spectator's certificate shows
+the tables' state topics), as the console and a viewer do; the update adds
+them to a role that reads `.../spectate/**`.
 
 - **The host's role**, `games-host`: the two lines `asterism/${node}/spectate`
   and `asterism/${node}/spectate/**` in "Read and write" (section "A game
@@ -324,6 +326,9 @@ console and a viewer read those.
   ```
   Read             asterism/*/spectate
                    asterism/*/spectate/**
+                   asterism/*/spectate/@profile
+                   asterism/*/spectate/@pubs
+  Ask              asterism/*/spectate/@profile
   Watch            asterism/**
   Browsers have this role: no
   ```
@@ -331,7 +336,8 @@ console and a viewer read those.
   Give it to a row of its own (Register, kind `client`, a name for the
   person, e.g. `spectator-a`; "Issue a certificate", "Save all (.tar)"),
   and Apply. Only the spectate keys reach it, and the host's application
-  `spectate` (its liveliness token, for the command line's watch); it
+  `spectate` (its liveliness token, for the command line's watch; its
+  profile and topics' declarations, for `asterism topic list`); it
   writes nothing and calls nothing. Leave "Browsers have this role" off:
   every browser is one subject at the router (docs/g1_5.md, "Browsers"),
   so a role for browsers would show every pass holder, players included,

@@ -27,7 +27,9 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
                                          asterism/*/game/**/@adv/**],
                              "watch" => %w[asterism/**] } }.freeze
   SPECTATOR = { "name" => "spectator", "for_browsers" => false,
-                "templates" => { "read" => %w[asterism/*/spectate asterism/*/spectate/**],
+                "templates" => { "read" => %w[asterism/*/spectate asterism/*/spectate/** asterism/*/spectate/@profile
+                                              asterism/*/spectate/@pubs],
+                                 "ask" => %w[asterism/*/spectate/@profile],
                                  "watch" => %w[asterism/**] } }.freeze
   # docs/g1_5.md, "Looking only".
   VIEWER = { "name" => "viewer", "for_browsers" => false,
@@ -99,6 +101,16 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
       assert reads?(s, "asterism/games/spectate/@status"), s
     end
     refute allowed?("games", "declare_queryable", "ingress", "asterism/other-host/spectate/@profile"), "its own node only"
+  end
+
+  test "a spectator reads the spectate application's profile and topics (topic list), and no other's" do
+    assert allowed?("spectator-a", "query", "ingress", "asterism/games/spectate/@profile")
+    assert allowed?("spectator-a", "reply", "egress", "asterism/games/spectate/@profile")
+    assert reads?("spectator-a", "asterism/games/spectate/@pubs")
+    refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/@profile"), "not the players' application"
+    refute reads?("spectator-a", "asterism/games/games/@pubs")
+    refute allowed?("spectator-a", "put", "ingress", "asterism/games/spectate/@pubs"), "writes nothing"
+    refute allowed?("spectator-a", "declare_queryable", "ingress", "asterism/games/spectate/@profile")
   end
 
   test "a spectator and a viewer read them" do

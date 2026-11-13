@@ -1259,9 +1259,10 @@ applications' own profiles, their topics and types; not released yet):
   protocol 2 too (the asterism gem and asterism-games of the same release,
   the boards' firmware): protocol 1 and 2 do not mix. The values still
   flow between them, but statuses and topics are not seen.
-- `./update.sh <version>`. One migration brings the roles to protocol 2
-  (`db/migrate/*_relay_role_app_profiles.rb`); it adds lines and removes
-  none an admin wrote:
+- `./update.sh <version>`. Two migrations bring the roles to protocol 2
+  (`db/migrate/*_relay_role_app_profiles.rb` and
+  `*_relay_role_spectate_profiles.rb`); they add lines and remove none an
+  admin wrote:
   - the example role `match`: `asterism/${node}/*/@profile`,
     `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
     write" (its nodes' applications answer their own profiles and tell
@@ -1271,10 +1272,15 @@ applications' own profiles, their topics and types; not released yet):
     it, a "Read" line `<prefix>/*/@status` (the role `viewer`, docs/g1_5.md)
     gets `<prefix>/*/@pubs`;
   - an "Ask" line `<prefix>/*/@status` becomes `<prefix>/*/@profile`, and
-    "Read" gets `<prefix>/*/@profile` too.
+    "Read" gets `<prefix>/*/@profile` too;
+  - a "Read" line `<prefix>/spectate/**` (the role `spectator`,
+    docs/rooms.md: the game host's `spectate` is an application of its own
+    in protocol 2) gets `<prefix>/spectate/@profile` and
+    `<prefix>/spectate/@pubs` in "Read" and `<prefix>/spectate/@profile` in
+    "Ask" (a spectator's `asterism topic list` shows the tables' topics).
   The setup's output (`docker compose logs` of the update, the Databases
-  step) has a line `relay role <name> (protocol 2): ...` for each role it
-  changed. A role of your own that lets its nodes' applications tell a
+  step) has a line `relay role <name> (protocol 2): ...` or
+  `relay role <name> (spectate's profile): ...` for each role it changed. A role of your own that lets its nodes' applications tell a
   status or stream topics without any of these lines needs
   `asterism/${node}/*/@profile` and `asterism/${node}/*/@pubs` (and
   `asterism/${node}/*/@status`) by hand, then Apply.
