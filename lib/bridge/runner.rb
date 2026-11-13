@@ -8,7 +8,9 @@
 #   - builds the graph (Bridge::Graph), keeps it in GraphState and
 #     broadcasts what changed (ConsoleChannel);
 #   - runs the page's requests (BridgeRequest: meta, call) and subscribes
-#     to the watched keys (Watch);
+#     to the watched keys (Watch), with the shared places a ** of theirs
+#     does not reach (asterism/** -> asterism/*/@shared/** and
+#     asterism/@shared/**, Bridge::Shared.companions; also for recordings);
 #   - measures ROS 2 topic rates (Bridge::Rates) while a page asks for them
 #     (RateLease): one wildcard per ROS 2 domain for "all topics", or the
 #     one topic whose details are open. Broadcast once a second, what
@@ -134,7 +136,7 @@ module Bridge
       @registry = []
       @names = []
       @dirty = true
-      @subs = {} # watch id => [key, Subscription]
+      @subs = {} # watch id => [key, Subscription, ...] (the key's, and its shared places')
       @rate = {} # watch id => [second, count, dropped]
       @workers = []
       @outbox = Queue.new # values seen on watched keys, broadcast by the main thread
@@ -607,14 +609,15 @@ module Bridge
     def sync_watches
       wanted = Watch.all.to_h { [ _1.id, _1 ] }
       (@subs.keys - wanted.keys).each do |id|
-        @subs.delete(id)[1].close
+        @subs.delete(id).drop(1).each(&:close)
         @rate.delete(id)
         say "bridge: unwatch #{id}"
       end
       wanted.each do |id, w|
         next if @subs.key?(id) || w.error.present?
         begin
-          @subs[id] = [ w.key, @z.subscribe(w.key) { |sample| watched(id, sample) } ]
+          # With the shared places a ** of the key would not reach (Shared.companions).
+          @subs[id] = [ w.key, *[ w.key, *Shared.companions(w.key) ].map { |e| @z.subscribe(e) { |sample| watched(id, sample) } } ]
           say "bridge: watch #{w.key}"
         rescue Asterism::Zenoh::Error, ArgumentError => e
           w.update!(error: e.message)
@@ -981,14 +984,17 @@ module Bridge
     def start_recording(r)
       sel = r.selection_value
       rec = Recorder.new(id: r.id, path: r.path, max_bytes: r.max_bytes, max_seconds: r.max_seconds,
-                         structure: sel["structure"], declarations: ->(key) { @app_profiles.topic(key) }) { |tid| ros_qos(tid) }
+                         structure: sel["structure"], declarations: ->(key, from) { @app_profiles.topic(key, from: from) }) { |tid| ros_qos(tid) }
       rec.open
       subs = []
       sel["topics"].each do |tid|
         expr = RateLease.key_expr(tid)
         subs << @z.subscribe(expr, depth: RECORD_DEPTH) { |sample| rec.ros(sample) }
       end
-      sel["keys"].each do |expr|
+      # asterism/** does not reach the shared places (@shared is verbatim):
+      # their expressions go beside it (Shared.companions).
+      exprs = sel["keys"].flat_map { [ _1, *Shared.companions(_1) ] }.uniq
+      exprs.each do |expr|
         subs << @z.subscribe(expr, depth: RECORD_DEPTH) { |sample| rec.key(expr, sample) }
       end
       rec.lost = -> { subs.sum { _1.respond_to?(:dropped) ? _1.dropped.to_i : 0 } }
@@ -1207,7 +1213,7 @@ module Bridge
       @receivers = nil
       @workers.each { _1.join(3) }
       @workers.clear
-      @subs.each_value { _1[1].close rescue nil }
+      @subs.each_value { |entry| entry.drop(1).each { _1.close rescue nil } }
       @subs.clear
       @rate_subs.each_value { _1.close rescue nil }
       @rate_subs.clear

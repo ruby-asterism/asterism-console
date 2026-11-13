@@ -126,6 +126,38 @@ class Bridge::PlayerTest < ActiveSupport::TestCase
     assert_equal({}, by["asterism/linux/demo/old"][2], "a protocol 1 recording: as it was")
   end
 
+  test "a shared place's channels go out with their sender's attachment" do
+    path = @dir.join("p3.mcap").to_s
+    key = "asterism/host/@shared/spectate/t1/state"
+    t0 = @t0
+    File.open(path, "wb") do |f|
+      w = MCAP::Writer.new(f, profile: "ros2")
+      sid = w.add_schema(name: "g/table", encoding: "", data: "")
+      chan = lambda do |topic, from, decl|
+        w.add_channel(topic: topic, message_encoding: "msgpack", schema_id: sid,
+                      metadata: { "asterism_key_expr" => "asterism/*/@shared/**", "asterism_protocol" => "2",
+                                  "asterism_declaration" => JSON.generate(decl), "asterism_from" => from }.compact)
+      end
+      games = chan.(key, "host/games", { "t" => "g/table" })
+      room = chan.(key, "host/room01", { "t" => "g/table", "ts" => true })
+      lobby = chan.("asterism/@shared/lobby", "pc/chat", { "t" => 7 })
+      app = chan.("asterism/host/games/x", "host/games", { "t" => 1 }) # not a shared key: the app's own form
+      w.add_message(channel_id: games, log_time: t0, publish_time: t0, sequence: 4, data: MessagePack.pack(1))
+      w.add_message(channel_id: room, log_time: t0 + 1, publish_time: 1_791_440_000_500_000_000, sequence: 0, data: MessagePack.pack(2))
+      w.add_message(channel_id: lobby, log_time: t0 + 2, publish_time: t0, sequence: 9, data: MessagePack.pack("hi"))
+      w.add_message(channel_id: app, log_time: t0 + 3, publish_time: t0, sequence: 3, data: MessagePack.pack(3))
+      w.finish
+    end
+    seen = []
+    pl = Bridge::Player.new(playback_id: 3, path: path, speed: 100.0, session: @session,
+                            put: ->(k, b, **opts) { seen << [ k, MessagePack.unpack(opts[:attachment]) ] })
+    pl.define_singleton_method(:wait) { |_s| nil }
+    pl.run
+    assert_nil pl.error
+    assert_equal [ [ key, [ 4, nil, "host/games" ] ], [ key, [ 0, 1_791_440_000_500, "host/room01" ] ],
+                   [ "asterism/@shared/lobby", [ 9, nil, "pc/chat" ] ], [ "asterism/host/games/x", [ 3 ] ] ], seen
+  end
+
   test "from a time, only some channels; stop" do
     pl = player(channel_ids: [ 2 ], start_ns: @t0 + 300_000_000)
     pl.define_singleton_method(:wait) { |_s| nil }

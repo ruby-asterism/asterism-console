@@ -73,7 +73,7 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
                                                    "mygame/point" => { "f" => [ [ "x", "int" ], [ "y", "int" ] ], "d" => "a point" } } ],
       "asterism/linux/demo/camera" => [ { "t" => 4, "e" => 17 }, {} ]
     }
-    rec = recorder(declarations: ->(key) { decls[key] }).open
+    rec = recorder(declarations: ->(key, _from) { decls[key] }).open
     stamp = Stamp.new(Time.at(1_791_450_000, 250, :usec))
     sample = ->(key, payload, att, enc: "zenoh/bytes", ts: stamp) do
       Asterism::Zenoh::Sample.new(key: key, payload: payload, attachment: att && MessagePack.pack(att), encoding: enc, timestamp: ts)
@@ -113,6 +113,53 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
     assert_equal [ 0, plain.log_time ], [ plain.sequence, plain.publish_time ], "no attachment, no timestamp: the log time"
   ensure
     r&.close
+  end
+
+  test "a shared place's key: a channel per sender, its numbers, the sender's own declaration and type" do
+    key = "asterism/host/@shared/spectate/t1/state"
+    table = ->(d) { { "g/table" => { "f" => [ [ "st", d ] ] } } }
+    decls = {
+      [ key, "host/games" ] => [ { "t" => "g/table" }, table.("int") ],
+      [ key, "host/room01" ] => [ { "t" => "g/table", "ts" => true }, table.("str") ],
+      [ "asterism/@shared/lobby", "pc/chat" ] => [ { "t" => 7 }, {} ]
+    }
+    asked = []
+    rec = recorder(declarations: ->(k, from) { asked << [ k, from ] && decls[[ k, from ]] }).open
+    sample = ->(k, att) { Asterism::Zenoh::Sample.new(key: k, payload: MessagePack.pack(1), attachment: att && MessagePack.pack(att)) }
+    rec.key("asterism/**", sample.(key, [ 4, nil, "host/games" ]))
+    rec.key("asterism/**", sample.(key, [ 0, 1_791_440_000_500, "host/room01" ]))
+    rec.key("asterism/**", sample.(key, [ 5, nil, "host/games" ]))
+    rec.key("asterism/**", sample.(key, [ 1, nil ])) # no sender: the key alone
+    rec.key("asterism/@shared/**", sample.("asterism/@shared/lobby", [ 9, nil, "pc/chat" ]))
+    rec.key("asterism/**", sample.("asterism/host/games/x", [ 2, nil, "host/room01" ])) # an app's key: no third element read
+    assert_equal 4, rec.progress["channel_counts"][key], "the senders' channels summed by topic"
+    rec.finish
+    assert_includes asked, [ key, "host/room01" ]
+    assert_includes asked, [ "asterism/host/games/x", nil ]
+    r = MCAP::Reader.new(@dir.join("r.mcap").to_s)
+    assert r.verify!
+    chans = r.info["channels"].select { _1["topic"] == key }
+    assert_equal [ nil, "host/games", "host/room01" ], chans.map { _1["metadata"]["asterism_from"] }.sort_by(&:to_s)
+    games = chans.find { _1["metadata"]["asterism_from"] == "host/games" }
+    room = chans.find { _1["metadata"]["asterism_from"] == "host/room01" }
+    assert_equal({ "t" => "g/table", "ts" => true }, JSON.parse(room["metadata"]["asterism_declaration"]))
+    assert_equal [ "g/table", "asterism/types" ], room.values_at("schema", "schema_encoding")
+    schemas = r.schemas.values.select { _1.name == "g/table" }.map { JSON.parse(_1.data) }
+    assert_equal [ "int", "str" ], schemas.map { _1.dig("g/table", "f", 0, 1) }.sort, "each sender's own definition"
+    lobby = r.info["channels"].find { _1["topic"] == "asterism/@shared/lobby" }
+    assert_equal [ "pc/chat", "asterism/text", "asterism/@shared/**" ],
+                 [ lobby["metadata"]["asterism_from"], lobby["schema"], lobby["metadata"]["asterism_key_expr"] ]
+    refute r.info["channels"].find { _1["topic"] == "asterism/host/games/x" }["metadata"].key?("asterism_from")
+    seqs = r.each_message.map { |m, ch, _| [ ch.metadata["asterism_from"], m.sequence ] if ch.topic == key }.compact
+    assert_equal [ 4, 5 ], seqs.select { _1[0] == "host/games" }.map(&:last), "the numbers stay per sender"
+    assert_equal [ 0 ], seqs.select { _1[0] == "host/room01" }.map(&:last)
+    m = r.each_message.find { |_, ch, _| ch.metadata["asterism_from"] == "host/room01" }[0]
+    assert_equal 1_791_440_000_500_000_000, m.publish_time
+    v = Bag::View.new(@dir.join("r.mcap").to_s)
+    assert_equal [ nil, "host/games", "host/room01" ], v.channels.select { _1["topic"] == key }.map { _1["from"] }.sort_by(&:to_s)
+  ensure
+    r&.close
+    v&.close
   end
 
   test "the size limit: the message that would pass it is not written, and the reason is told" do

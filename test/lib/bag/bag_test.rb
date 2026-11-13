@@ -90,7 +90,7 @@ class BagTest < ActiveSupport::TestCase
     assert_equal [ "image/jpeg", 32, 16 ], m["image"].values_at("mime", "width", "height")
     assert_equal({ "t" => 4, "e" => 17 }, Bag::Channels.declaration(v.channels[0]))
     assert_equal [ "msgpack", "image/png" ], [ Bag::Channels.message_encoding("zenoh/bytes"), Bag::Channels.message_encoding("image/png") ]
-    assert_equal [ [ 5, 12 ], [ 5, nil ], [ nil, nil ], [ nil, nil ] ],
+    assert_equal [ [ 5, 12, nil ], [ 5, nil, nil ], [ nil, nil, nil ], [ nil, nil, nil ] ],
                  [ [ 5, 12 ], [ 5 ], [ -1 ], "x" ].map { Bag::Channels.attachment(MessagePack.pack(_1)) }
   ensure
     v&.close

@@ -10,8 +10,12 @@ require "rbconfig"
 # records its topics with their encoding, sequence numbers, sender's time
 # and declared types (Bridge::Recorder); a recorded topic plays back with
 # its attachment. The program holds two connections of one node, as a game
-# host does (asterism-games: "game" and "spectate"): the second is an
-# application of its own, with its token, profile and topics.
+# host does with a room (asterism-games: "games" and "room01"): the second
+# is an application of its own, with its token, profile and topics. Both
+# put on one key of the node's shared place (protocol 2), each with its own
+# definition of one type name: the graph draws the place with a line from
+# each, a recording gets a channel per sender with that sender's schema,
+# and a sender that leaves takes its declarations with it.
 class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
   APP = <<~'RUBY'
     require "asterism"
@@ -25,12 +29,15 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     imu = net.publish("imu", type: :vector3, unit: "m/s2", ts: true)
     strokes = net.publish("board1/strokes", type: "mygame/board.strokes")
     cam = net.publish("camera", type: :image, encoding: "image/jpeg")
+    net.define_type("mygame/state", [ [ "turn", "int" ] ])
+    mine = net.publish("spectate/t1/state", shared: :node, type: "mygame/state")
     seen = []
     net.subscribe("*/*/played") { |v, info| seen << [ v, info.seq, info.time ] }
-    # The second application of the same node (a game host's spectate).
-    spec = Asterism.connect(ARGV[0], node: "livenode", app: "spectate")
+    net.subscribe("*/@shared/replayed/**") { |v, info| seen << [ v, info.seq, info.time, info.from ] }
+    # The second application of the same node (a game host's room).
+    spec = Asterism.connect(ARGV[0], node: "livenode", app: "room01")
     spec.define_type("mygame/state", [ [ "turn", "int" ], [ "seats", "str[]" ] ])
-    table = spec.publish("t1/state", type: "mygame/state")
+    table = spec.publish("spectate/t1/state", shared: :node, type: "mygame/state")
     spec.status(watchers: 0)
     STDOUT.puts "ready"
     STDOUT.flush
@@ -46,17 +53,22 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
         strokes.put([ [ [ 1, 2 ], [ 3, 4 ] ], "red" ])
         cam.put("\xFF\xD8\xFF\xE0jpeg".b)
         table.put([ 1, %w[a b] ])
+        mine.put([ 7 ])
+        table.put([ 2, %w[a b] ])
       when "status" then net.status(tables: 2)
       when "extra"
         net.define_type("mygame/extra", [ [ "v", :vector3 ] ])
         net.publish("extra", type: "mygame/extra")
+      when "leave"
+        spec.close
+        spec = nil
       when "seen"
         STDOUT.puts JSON.generate(seen)
       end
       STDOUT.puts "done"
       STDOUT.flush
     end
-    spec.close
+    spec&.close
     net.close
     router.close
   RUBY
@@ -127,8 +139,9 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     got = profiles.to_graph["livenode/demo"]
     assert_equal({ "tables" => 1 }, got["status"])
     assert_equal({ "imu" => { "t" => 2, "u" => "m/s2", "ts" => true }, "board1/strokes" => { "t" => "mygame/board.strokes" },
-                   "camera" => { "t" => 4, "e" => 17 } }, got["pubs"])
-    assert_equal %w[mygame/board.strokes mygame/point], got["types"].keys.sort
+                   "camera" => { "t" => 4, "e" => 17 }, "livenode/@shared/spectate/t1/state" => { "t" => "mygame/state" } },
+                 got["pubs"])
+    assert_equal %w[mygame/board.strokes mygame/point mygame/state], got["types"].keys.sort
     tell("status")
     eventually { profiles.to_graph.dig("livenode/demo", "status", "tables") == 2 }
     tell("extra")
@@ -138,28 +151,101 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     assert_equal [ [ "v", "vector3" ] ], profiles.to_graph.dig("livenode/demo", "types", "mygame/extra", "f")
     g = Bridge::Graph.build(asterism: %w[asterism/livenode/demo], app_profiles: profiles.to_graph).to_h
     app = g["nodes"].find { _1["id"] == "a_app:livenode/demo" }["data"]
-    assert_equal %w[board1/strokes camera extra imu], app["pubs"].map { _1["name"] }
+    assert_equal %w[board1/strokes camera extra imu livenode/@shared/spectate/t1/state], app["pubs"].map { _1["name"] }
   end
 
-  test "the second connection of the node is an application of its own: token, profile, topics, in the graph" do
+  SHARED_KEY = "asterism/livenode/@shared/spectate/t1/state".freeze
+
+  test "the second connection of the node is an application of its own; both declare one shared key, each its own type" do
     keys = @runner.instance_variable_get(:@asterism_keys).keys
-    assert_equal %w[asterism/livenode/demo asterism/livenode/spectate], keys.sort, "an application token each"
-    assert_equal %w[livenode/demo livenode/spectate], @runner.send(:asterism_apps).sort
+    assert_equal %w[asterism/livenode/demo asterism/livenode/room01], keys.sort, "an application token each"
+    assert_equal %w[livenode/demo livenode/room01], @runner.send(:asterism_apps).sort
     @runner.send(:sync_app_profiles)
     work
-    got = profiles.to_graph["livenode/spectate"]
+    got = profiles.to_graph["livenode/room01"]
     assert_equal({ "watchers" => 0 }, got["status"])
-    assert_equal({ "t1/state" => { "t" => "mygame/state" } }, got["pubs"])
+    assert_equal({ "livenode/@shared/spectate/t1/state" => { "t" => "mygame/state" } }, got["pubs"])
     assert_equal %w[mygame/state], got["types"].keys, "its own types, not the other connection's"
-    refute profiles.to_graph.dig("livenode/demo", "pubs", "t1/state"), "the other application does not declare it"
-    decl, defs = profiles.topic("asterism/livenode/spectate/t1/state")
-    assert_equal [ "mygame/state", %w[mygame/state] ], [ decl["t"], defs.keys ], "what a recording of it takes"
+    room_decl, room_defs = profiles.topic(SHARED_KEY, from: "livenode/room01")
+    demo_decl, demo_defs = profiles.topic(SHARED_KEY, from: "livenode/demo")
+    assert_equal [ "mygame/state", "mygame/state" ], [ room_decl["t"], demo_decl["t"] ]
+    assert_equal [ [ "seats", "str[]" ] ], room_defs["mygame/state"]["f"] - demo_defs["mygame/state"]["f"], "each sender's definition"
     g = Bridge::Graph.build(asterism: keys, app_profiles: profiles.to_graph).to_h
-    app = g["nodes"].find { _1["id"] == "a_app:livenode/spectate" } || flunk("no spectate application")
+    app = g["nodes"].find { _1["id"] == "a_app:livenode/room01" } || flunk("no room01 application")
     assert_equal "a_node:livenode", app["parent"]
-    assert_equal [ "t1/state" ], app["data"]["pubs"].map { _1["name"] }
     assert_equal({ "watchers" => 0 }, app["data"]["status"])
-    assert_equal 2, g["nodes"].count { _1["kind"] == "a_app" && _1["parent"] == "a_node:livenode" }
+    place = g["nodes"].find { _1["id"] == "a_shared:livenode" } || flunk("no shared place")
+    assert_equal [ "a_shared", "a_node:livenode" ], place.values_at("kind", "parent")
+    assert_equal %w[livenode/demo livenode/room01], place["data"]["keys"][0]["senders"].map { _1["app"] }
+    lines = g["edges"].select { _1["kind"] == "shares" }.map { [ _1["source"], _1["target"], _1["label"] ] }.sort
+    assert_equal [ [ "a_app:livenode/demo", "a_shared:livenode", "spectate/t1/state" ],
+                   [ "a_app:livenode/room01", "a_shared:livenode", "spectate/t1/state" ] ], lines
+    refute g["nodes"].any? { _1["kind"] == "a_app" && _1["label"].include?("@shared") }, "a place is not an app"
+  end
+
+  test "a sender that leaves: its token goes, its declarations with it (graph and recorder)" do
+    @runner.send(:sync_app_profiles)
+    work
+    refute_nil profiles.topic(SHARED_KEY, from: "livenode/room01")
+    tell("leave")
+    eventually do
+      @z.liveliness_get("asterism/livenode/*", timeout: 1.0).sort == %w[asterism/livenode/demo]
+    end
+    @runner.instance_variable_get(:@asterism_keys).delete("asterism/livenode/room01") # what the bridge's watch does
+    @runner.send(:sync_app_profiles)
+    assert_nil profiles.topic(SHARED_KEY, from: "livenode/room01")
+    refute_nil profiles.topic(SHARED_KEY, from: "livenode/demo")
+    g = Bridge::Graph.build(asterism: @runner.instance_variable_get(:@asterism_keys).keys, app_profiles: profiles.to_graph).to_h
+    assert_equal [ "a_app:livenode/demo" ], g["edges"].select { _1["kind"] == "shares" }.map { _1["source"] }
+    place = g["nodes"].find { _1["id"] == "a_shared:livenode" }
+    assert_equal %w[livenode/demo], place["data"]["keys"][0]["senders"].map { _1["app"] }
+  end
+
+  test "a recording of asterism/**: the shared key beside it, a channel per sender; its playback in the sender's form" do
+    @runner.send(:sync_app_profiles)
+    work
+    path = @dir.join("shared.mcap")
+    rec = Bridge::Recorder.new(id: 2, path: path, max_bytes: 1024 * 1024, max_seconds: 60,
+                               declarations: ->(key, from) { profiles.topic(key, from: from) }).open
+    exprs = [ "asterism/**", *Bridge::Shared.companions("asterism/**") ]
+    subs = exprs.map { |e| @z.subscribe(e, depth: 64) { rec.key(e, _1) } }
+    sleep 0.5
+    tell("put")
+    eventually { rec.progress["channel_counts"][SHARED_KEY].to_i >= 3 }
+    subs.each(&:close)
+    rec.finish
+    r = MCAP::Reader.new(path.to_s)
+    chans = r.info["channels"].select { _1["topic"] == SHARED_KEY }
+    assert_equal %w[livenode/demo livenode/room01], chans.map { _1["metadata"]["asterism_from"] }.sort
+    assert chans.all? { _1["metadata"]["asterism_key_expr"] == "asterism/*/@shared/**" }
+    fields = r.channels.values.select { _1.topic == SHARED_KEY }
+              .to_h { |c| [ c.metadata["asterism_from"], JSON.parse(r.schemas[c.schema_id].data)["mygame/state"]["f"] ] }
+    assert_equal [ [ "turn", "int" ] ], fields["livenode/demo"]
+    assert_equal [ [ "turn", "int" ], [ "seats", "str[]" ] ], fields["livenode/room01"]
+    msgs = r.each_message.filter_map { |m, ch, _| [ ch.metadata["asterism_from"], m ] if ch.topic == SHARED_KEY }
+    room = msgs.select { _1[0] == "livenode/room01" }.map(&:last)
+    assert_equal [ room[0].sequence, room[0].sequence + 1 ], room.map(&:sequence), "room01's own numbers"
+    assert_equal 1, msgs.count { _1[0] == "livenode/demo" }
+    room_meta = chans.find { _1["metadata"]["asterism_from"] == "livenode/room01" }["metadata"]
+    r.close
+
+    # Played back onto another shared key: the app reads the sender and its numbers.
+    played = @dir.join("replayed.mcap")
+    File.open(played, "wb") do |f|
+      w = MCAP::Writer.new(f, profile: "ros2")
+      c = w.add_channel(topic: "asterism/console/@shared/replayed/t1", message_encoding: "msgpack",
+                        schema_id: w.add_schema(name: "mygame/state", encoding: "", data: ""), metadata: room_meta)
+      room.each { w.add_message(channel_id: c, log_time: _1.log_time, publish_time: _1.publish_time, sequence: _1.sequence, data: _1.data) }
+      w.finish
+    end
+    pl = Bridge::Player.new(playback_id: 2, path: played.to_s, speed: 10.0, session: @z.session,
+                            put: ->(key, bytes, **opts) { @z.put(key, bytes, **opts) })
+    pl.run
+    assert_nil pl.error
+    eventually { JSON.parse(tell("seen").first).count { _1[3] } >= 2 }
+    seen = JSON.parse(tell("seen").first).select { _1[3] }
+    assert_equal room.map(&:sequence), seen.map { _1[1] }
+    assert_equal %w[livenode/room01 livenode/room01], seen.map { _1[3] }
   end
 
   test "the node's profile, asked on the bridge's connection" do
@@ -176,7 +262,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     work
     path = @dir.join("live.mcap")
     rec = Bridge::Recorder.new(id: 1, path: path, max_bytes: 1024 * 1024, max_seconds: 60,
-                               declarations: ->(key) { profiles.topic(key) }).open
+                               declarations: ->(key, from) { profiles.topic(key, from: from) }).open
     sub = @z.subscribe("asterism/livenode/demo/**", depth: 64) { rec.key("asterism/livenode/demo/**", _1) }
     sleep 0.5 # the publishers learn of the subscriber
     tell("put")

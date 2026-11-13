@@ -104,6 +104,15 @@ class Bridge::RunnerRecordingsTest < ActiveSupport::TestCase
     reader.close
   end
 
+  test "asterism/** is recorded with the shared places beside it (@shared is verbatim)" do
+    r = recording(topics: [], keys: [ "asterism/**", "asterism/host/**", "asterism/@shared/**" ], structure: false)
+    @runner.send(:sync_recordings)
+    assert_equal %w[asterism/** asterism/*/@shared/** asterism/@shared/** asterism/host/** asterism/host/@shared/**], @z.open_exprs
+    r.stop!
+    @runner.send(:sync_recordings)
+    assert_empty @z.open_exprs
+  end
+
   test "a limit ends it; the network structure follows the graph" do
     r = recording(keys: [], structure: true)
     @runner.send(:sync_recordings)

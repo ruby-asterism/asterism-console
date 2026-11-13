@@ -14,7 +14,9 @@
 #     key as they are, with the recorded encoding (none for msgpack) and,
 #     for a protocol 2 recording, the attachment of protocol 2: the
 #     recorded sequence number and, for a topic declared with "ts", the
-#     recorded publish time in ms.
+#     recorded publish time in ms. A shared place's channel (one per
+#     sender, Bag::Channels) goes out in the shared form of its sender:
+#     [seq, ms or nil, "<node>/<app>"].
 #   The network structure (and anything else): not sent.
 #
 # The payloads are sent as recorded (the CDR bytes are not decoded), so a
@@ -162,13 +164,18 @@ module Bridge
 
     # The put's options of a key channel's message: its encoding (none for
     # msgpack) and, recorded with protocol 2, the attachment [seq] or
-    # [seq, ms] (a topic declared with "ts").
+    # [seq, ms] (a topic declared with "ts"), or on a shared place's
+    # channel [seq, ms or nil, its sender].
     def key_options(c, m)
       opts = {}
       opts[:encoding] = c.message_encoding unless c.message_encoding == "msgpack"
       if c.metadata[Bag::Channels::PROTOCOL_KEY].to_i >= 2
-        att = [ m.sequence ]
-        att << m.publish_time / 1_000_000 if Bag::Channels.declaration(channel_hash(c))["ts"] == true
+        h = channel_hash(c)
+        ms = m.publish_time / 1_000_000 if Bag::Channels.declaration(h)["ts"] == true
+        from = Bag::Channels.from(h)
+        att = if from && Shared.key?(c.topic) then [ m.sequence, ms, from ]
+        else [ m.sequence, *ms ]
+        end
         opts[:attachment] = MessagePack.pack(att)
       end
       opts

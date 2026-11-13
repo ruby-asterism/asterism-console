@@ -30,7 +30,15 @@
 #                    A message's sequence is the number of its attachment,
 #                    its publish_time the sender's time of the attachment
 #                    (ms; topics declared with "ts"), else the router's
-#                    timestamp, else the log time
+#                    timestamp, else the log time.
+#                    A key of a shared place (Bridge::Shared:
+#                    asterism/<node>/@shared/..., asterism/@shared/...) may
+#                    have several senders, each numbering its own values
+#                    (attachment [seq, ms or nil, "<node>/<app>"]): it gets
+#                    a channel per key and sender, the same topic, the
+#                    sender in the metadata asterism_from, the schema and
+#                    asterism_declaration from that sender's declaration
+#                    and definitions
 #   the network      topic "/asterism/graph", message encoding "json",
 #                    schema "asterism/graph" (a JSON Schema): snapshots and
 #                    diffs of the console's graph (Bridge::Graph)
@@ -47,6 +55,9 @@ module Bag
     TYPES_ENCODING = "asterism/types"
     # The channel metadata with the topic's declaration (JSON).
     DECLARATION_KEY = "asterism_declaration"
+    # The channel metadata with the sender of a shared place's key
+    # ("<node>/<app>").
+    FROM_KEY = "asterism_from"
     # The built-in types by number (docs/protocol.md 11 of the asterism gem).
     BUILTIN_TYPES = %w[number vector3 pose image state log text].freeze
     # The highest sequence number (it goes back to 0 after it).
@@ -95,16 +106,22 @@ module Bag
       e.empty? || e == "zenoh/bytes" ? "msgpack" : e
     end
 
-    # [sequence number, sender's time in ms or nil] of an Asterism
-    # attachment ([seq] or [seq, ms] in MessagePack), or [nil, nil].
+    # [sequence number, sender's time in ms or nil, sender or nil] of an
+    # Asterism attachment ([seq], [seq, ms] or, on a shared place,
+    # [seq, ms or nil, "<node>/<app>"] in MessagePack), or [nil, nil, nil].
     def attachment(bytes)
-      return [ nil, nil ] if bytes.nil? || bytes.empty?
+      return [ nil, nil, nil ] if bytes.nil? || bytes.empty?
       require "msgpack"
       a = MessagePack.unpack(bytes.to_s.b)
-      return [ nil, nil ] unless a.is_a?(Array) && a[0].is_a?(Integer) && a[0].between?(0, SEQ_MAX)
-      [ a[0], a[1].is_a?(Integer) ? a[1] : nil ]
+      return [ nil, nil, nil ] unless a.is_a?(Array) && a[0].is_a?(Integer) && a[0].between?(0, SEQ_MAX)
+      [ a[0], a[1].is_a?(Integer) ? a[1] : nil, Bridge::Shared.sender(a[2]) ]
     rescue StandardError
-      [ nil, nil ]
+      [ nil, nil, nil ]
+    end
+
+    # The sender a key channel was recorded for (a shared place's), or nil.
+    def from(channel)
+      Bridge::Shared.sender(channel.dig("metadata", FROM_KEY))
     end
 
     # [name, encoding, data] of a key channel's schema (above): enc the

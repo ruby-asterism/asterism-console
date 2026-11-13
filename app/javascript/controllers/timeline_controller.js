@@ -138,7 +138,8 @@ export default class extends Controller {
       g.fillStyle = text
       g.fillText(shorten(ch.topic, 32), 19, y + 14)
       g.fillStyle = muted
-      g.fillText(`${shorten(ch.schema || ch.message_encoding, 24)} - ${ch.count}`, 19, y + 28)
+      // A shared place's key has a row per sender (its numbers are the sender's).
+      g.fillText(`${shorten(ch.schema || ch.message_encoding, 24)} - ${ch.count}${ch.from ? ` - from ${ch.from}` : ""}`, 19, y + 28)
       g.strokeStyle = line
       g.beginPath(); g.moveTo(0, y + ROW_H - 0.5); g.lineTo(w, y + ROW_H - 0.5); g.stroke()
       const counts = this.ticks?.channels?.[ch.id]
@@ -211,7 +212,7 @@ export default class extends Controller {
   renderMessage(m) {
     const ch = this.channels.find((c) => c.id === this.selected)
     if (!ch || !m) { this.messageTarget.innerHTML = `<p class="hint">Click a channel's row.</p>`; return }
-    let html = `<p class="name">${esc(ch.topic)}</p>`
+    let html = `<p class="name">${esc(ch.topic)}${ch.from ? ` <span class="hint">from ${esc(ch.from)}</span>` : ""}</p>`
     if (m.error && m.log_time == null) { this.messageTarget.innerHTML = html + `<p class="error">${esc(m.error)}</p>`; return }
     const ago = this.cursor - m.log_time
     html += dl([
@@ -240,7 +241,7 @@ export default class extends Controller {
       const m = all.at?.[c.id]
       const text = !m ? "-" : m.error ? m.error : m.log ? `[${m.log.level}] ${m.log.name}: ${m.log.msg}` : m.text
       const old = m && m.log_time > this.cursor ? " (later)" : ""
-      return `<li><a href="#" data-ch="${c.id}">${esc(c.topic)}</a>${old} ${imageTag(m?.image, "msg-thumb")}<code class="wrap">${esc(shorten(text, 160))}</code></li>`
+      return `<li><a href="#" data-ch="${c.id}">${esc(c.topic)}</a>${c.from ? ` <span class="hint">from ${esc(c.from)}</span>` : ""}${old} ${imageTag(m?.image, "msg-thumb")}<code class="wrap">${esc(shorten(text, 160))}</code></li>`
     })
     this.atListTarget.innerHTML = `<ul class="plain at-list">${rows.join("")}</ul>`
     this.atListTarget.querySelectorAll("[data-ch]").forEach((a) => a.addEventListener("click", (ev) => {

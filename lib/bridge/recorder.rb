@@ -35,9 +35,10 @@ module Bridge
 
     # qos: a block that gives the QoS profiles (Bag::Qos.parse Hashes) of a
     # topic id's publishers, for the channel's offered_qos_profiles.
-    # declarations: a key -> [declaration, {type name => definition}] or
-    # nil (Bridge::AppProfiles#topic): what the application declared for
-    # the topic on that key, read when its channel is made.
+    # declarations: (key, sender) -> [declaration, {type name => definition}]
+    # or nil (Bridge::AppProfiles#topic): what the application declared for
+    # the topic on that key (on a shared place's key: what the sender
+    # declared, nil sender: none), read when its channel is made.
     def initialize(id:, path:, max_bytes:, max_seconds:, structure: false, clock: nil, wall_ns: nil,
                    declarations: nil, &qos)
       @id = id
@@ -48,7 +49,7 @@ module Bridge
       @clock = clock || -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) }
       @wall_ns = wall_ns || -> { Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond) }
       @qos = qos || ->(_tid) { [] }
-      @declarations = declarations || ->(_key) { nil }
+      @declarations = declarations || ->(_key, _from) { nil }
       @lock = Mutex.new
       @channels = {} # key => channel id
       @dropped = 0
@@ -90,13 +91,15 @@ module Bridge
     end
 
     # A sample of an Asterism key (receiving thread). A key whose values
-    # change encoding gets a channel per encoding.
+    # change encoding gets a channel per encoding; a shared place's key a
+    # channel per sender too (its numbers are the sender's).
     def key(expr, sample)
       key = sample.key.to_s
       enc = Bag::Channels.message_encoding(sample.respond_to?(:encoding) ? sample.encoding : nil)
-      seq, ms = Bag::Channels.attachment(sample.attachment)
-      write("key:#{key} #{enc}", sample.payload, sample_time(sample)) do
-        args = -> { key_channel_args(expr, key, enc) }
+      seq, ms, from = Bag::Channels.attachment(sample.attachment)
+      from = nil unless Shared.key?(key)
+      write("key:#{key} #{enc}#{" #{from}" if from}", sample.payload, sample_time(sample)) do
+        args = -> { key_channel_args(expr, key, enc, from) }
         [ args, ms && ms * 1_000_000, seq ]
       end
     end
@@ -139,9 +142,11 @@ module Bridge
       end
       @lock.synchronize do
         return { "messages" => 0, "bytes" => 0, "duration_s" => 0, "channel_counts" => {}, "dropped" => @dropped, "lost" => lost } unless @writer
-        counts = @writer.channel_counts.to_h { |cid, n| [ @writer.channel(cid).topic, n ] }
+        # Summed by topic: a shared place's key has a channel per sender.
+        counts = Hash.new(0)
+        @writer.channel_counts.each { |cid, n| counts[@writer.channel(cid).topic] += n }
         { "messages" => @writer.message_count, "bytes" => @writer.size, "duration_s" => elapsed.round(2),
-          "channel_counts" => counts, "dropped" => @dropped, "lost" => lost }
+          "channel_counts" => counts.to_h, "dropped" => @dropped, "lost" => lost }
       end
     end
 
@@ -205,13 +210,14 @@ module Bridge
                           metadata: args[:metadata])
     end
 
-    def key_channel_args(expr, key, enc)
+    def key_channel_args(expr, key, enc, from = nil)
       decl, types = begin
-        @declarations.call(key)
+        @declarations.call(key, from)
       rescue StandardError
         nil # not known: an untyped channel
       end
       meta = { "asterism_key_expr" => expr, Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s }
+      meta[Bag::Channels::FROM_KEY] = from if from
       meta[Bag::Channels::DECLARATION_KEY] = JSON.generate(decl) if decl
       { topic: key, message_encoding: enc, schema: Bag::Channels.key_schema(enc, decl, types), metadata: meta }
     end

@@ -57,7 +57,7 @@ module Bag
 
     # The channels with what kind each is: "ros" (cdr), "key" (an Asterism
     # key: msgpack, or a topic's own encoding), "graph" (the network
-    # structure), "other".
+    # structure), "other"; and the sender of a shared place's channel.
     def channels
       @channels ||= info["channels"].map do |c|
         kind = if Channels.graph?(c) then "graph"
@@ -65,7 +65,8 @@ module Bag
         elsif Channels.key?(c) then "key"
         else "other"
         end
-        c.merge("kind" => kind, "type" => kind == "ros" ? c["schema"] : nil)
+        # A shared place's key has a channel per sender (Channels): "from".
+        c.merge("kind" => kind, "type" => kind == "ros" ? c["schema"] : nil, "from" => kind == "key" ? Channels.from(c) : nil)
       end
     end
 
