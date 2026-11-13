@@ -302,6 +302,18 @@ token. It holds each view for the table's spectator delay (none by
 default) before it puts it. Nothing in the console's code is particular
 to it: two lines of a role and a role.
 
+With Asterism wire protocol 2 the host's `spectate` is an application of
+its own: a second connection of the host's node, beside `games`, with its
+liveliness token, its own profile (`asterism/<host>/spectate/@profile`),
+its status and its topics' declarations (`.../@status`, `.../@pubs`; the
+tables' state with its type). The graph draws it as an application in the
+host's node, its topics in the details. The host's role needs nothing
+more than the lines above: `asterism/${node}/*/@profile`, `@status` and
+`@pubs` cover `spectate` as they cover `games` (the update adds them to a
+role made before protocol 2, docs/install.md). The `spectator` role below
+reads the values only, not the application's profile or declarations; the
+console and a viewer read those.
+
 - **The host's role**, `games-host`: the two lines `asterism/${node}/spectate`
   and `asterism/${node}/spectate/**` in "Read and write" (section "A game
   host's permanent tables" above). The rooms' host uses the same row, so
