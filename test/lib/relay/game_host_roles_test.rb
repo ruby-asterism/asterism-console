@@ -125,7 +125,7 @@ class Relay::GameHostRolesTest < ActiveSupport::TestCase
     %w[console fmruby_cccccc room_01_s01 room_02_s01].each { assert_equal rules.(without, _1), rules.(with, _1), _1 }
     assert_equal %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile
                     asterism/${node}/*/@status].map { _1.sub("${node}", "games") },
-                 rules.(with, "games").flat_map { _1["key_exprs"] } - [ "asterism/**" ]
+                 rules.(with, "games").reject { _1["id"] == "subscribers_out" }.flat_map { _1["key_exprs"] } - [ "asterism/**" ]
   end
 
   test "the rooms stay closed both ways" do

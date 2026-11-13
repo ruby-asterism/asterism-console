@@ -85,6 +85,10 @@ class Relay::RoleMigrationTest < ActiveSupport::TestCase
             was = self.class.allowed?(old, subject, message, flow, key)
             now = self.class.allowed?(new, subject, message, flow, key)
             next if was == now
+            # Protocol 2 tells every subject of the subscribers' declarations
+            # (CloudConfig::SUBSCRIBERS): the only thing the roles' ACL lets
+            # through that the old one did not.
+            next if now && message == "declare_subscriber" && flow == "egress"
             where = "#{subject} #{message} #{flow} #{key}"
             refute now, "allowed only after the migration: #{where}"
             assert_equal [ "query", "ingress" ], [ message, flow ], "only queries from it may change: #{where}"

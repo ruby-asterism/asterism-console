@@ -34,11 +34,11 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal %w[console viewer zenohd-home], config.subject_names
     h = config.to_h
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out], pol["zenohd_home"]
+    assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out subscribers_out], pol["zenohd_home"]
     assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
                     console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
-                    console__shared_out], pol["console"]
-    assert_equal %w[viewer_ro_in viewer_ro_out], pol["viewer"]
+                    console__shared_out subscribers_out], pol["console"]
+    assert_equal %w[viewer_ro_in viewer_ro_out subscribers_out], pol["viewer"]
     refute pol.key?("idle")
   end
 
@@ -88,7 +88,7 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
       refute AclEvaluator.allowed?(acl, who, "put", "egress", node_key), "#{who}: asterism/** does not reach @shared"
       refute AclEvaluator.allowed?(acl, who, "put", "egress", global_key), who
     end
-    with = acl["rules"].select { (_1["key_exprs"] & Relay::CloudConfig::SHARED_PLACES).any? }.map { _1["id"] }
+    with = acl["rules"].select { (_1["key_exprs"] & Relay::CloudConfig::SHARED_PLACES).any? }.map { _1["id"] } - %w[subscribers_out]
     assert_equal %w[console__shared_in console__shared_out], with
   end
 
@@ -182,7 +182,7 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal [ "asterism/**" ], rule(h, "role__match_watch")["key_exprs"]
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[alice__match_rw role__match_read_in role__match_read_out alice__match_ask role__match_ask
-                    role__match_watch], pol["alice"]
+                    role__match_watch subscribers_out], pol["alice"]
     assert_equal 1, h["access_control"]["rules"].count { _1["id"] == "role__match_read_in" }, "shared rules once"
     refute h["access_control"]["rules"].any? { _1["key_exprs"].any? { |k| k.include?("demo") } }
   end
@@ -215,12 +215,13 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     refute ids.any? { _1.start_with?("fmruby_aaaaaa__files_from") }, "a mark not set gives nothing"
     refute ids.any? { _1.start_with?("off__") || _1.start_with?("plain__files") }, "a row out of the ACL, or unmarked"
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[fmruby_aaaaaa__files_to_console_ask fmruby_aaaaaa__files_to_console_answer], pol["fmruby_aaaaaa"],
+    assert_equal %w[fmruby_aaaaaa__files_to_console_ask fmruby_aaaaaa__files_to_console_answer subscribers_out], pol["fmruby_aaaaaa"],
                  "a mark alone puts the row in the ACL"
     assert_equal [ %w[reply], %w[egress], [ "asterism/console/transfer/inbox/call/fmruby-aaaaaa" ] ],
                  rule(h, "fmruby_aaaaaa__files_to_console_answer").values_at("messages", "flows", "key_exprs"),
                  "the replies to its calls reach it"
-    assert_equal %w[home_bob__files_to_console_ask home_bob__files_to_console_answer home_bob__files_from_console_rw],
+    assert_equal %w[home_bob__files_to_console_ask home_bob__files_to_console_answer home_bob__files_from_console_rw
+                    subscribers_out],
                  pol["home_bob"]
     # what zenohd decides: a node calls the console's inbox under its own name only
     acl = h["access_control"]
@@ -346,7 +347,7 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
                     console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
-                    console__shared_out console__rooms_in console__rooms_out], pol["console"]
+                    console__shared_out console__rooms_in console__rooms_out subscribers_out], pol["console"]
     allowed = []
     Relay::CloudConfig::ALL.each do |message|
       %w[ingress egress].each do |flow|

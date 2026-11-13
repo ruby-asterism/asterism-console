@@ -134,6 +134,21 @@
 # subject (the pages without a certificate) is refused every transfer key
 # (asterism/*/transfer and below): files only with a verified name.
 #
+# Subscribers' declarations towards publishers (asterism protocol 2): a
+# topic's values go out through a declared publisher, which sends only
+# while it knows a matching subscriber, and the router hands it the
+# subscribers' declarations as egress declare_subscriber, checked against
+# the publisher's own rules. A subscriber with a wildcard node
+# (asterism/*/games/*/state, asterism/*/@shared/spectate/**) is not inside
+# a node's own keys, so it never reached the publisher and got nothing
+# unless a named subscriber was there too. Every registry row, browser
+# certificate and the shared ws/ subject therefore gets one shared rule:
+# egress declare_subscriber on asterism/** and the two shared places
+# (SUBSCRIBERS). It tells a node the key expressions others subscribe to,
+# nothing else: values, calls and writes keep their rules. The update's
+# setup writes it with the rest (no migration). Seats and the rooms' hosts
+# have it inside room/<slot>/** already.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -182,6 +197,12 @@ module Relay
     SHARED_PLACES = [ "asterism/*/@shared/**", "asterism/@shared/**" ].freeze
     SHARED_IN = %w[declare_subscriber put].freeze
     SHARED_OUT = %w[put].freeze
+    # The subscribers' declarations every subject may be told of (see the
+    # top of this file): the keys of the applications' topics and the
+    # shared places (a ** never matches a chunk that starts with @).
+    SUBSCRIBERS = [ "asterism/**", "asterism/*/@shared/**", "asterism/@shared/**" ].freeze
+    SUBSCRIBERS_RULE = { "id" => "subscribers_out", "messages" => %w[declare_subscriber], "flows" => %w[egress],
+                         "permission" => "allow", "key_exprs" => SUBSCRIBERS }.freeze
     # A seat's or a host's own writes in a room (0.3.0).
     OWN = %w[put delete declare_queryable liveliness_token reply].freeze
     ROOM_READ_IN = %w[declare_subscriber declare_liveliness_subscriber liveliness_query].freeze
@@ -357,6 +378,7 @@ module Relay
         end
         mine.concat(room_host_rules(rules, id, p["name"])) if room_hosts.include?(p["name"])
         next if mine.empty?
+        mine << subscribers_rule(shared)
         subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
         policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
       end
@@ -368,6 +390,7 @@ module Relay
           rules << { "id" => "browsers__no_transfer", "messages" => ALL, "flows" => %w[egress ingress],
                      "permission" => "deny", "key_exprs" => TRANSFER_KEYS }
           mine << "browsers__no_transfer"
+          mine << subscribers_rule(shared)
           subjects << { "id" => "browsers", "link_protocols" => [ "ws" ] }
           policies << { "id" => "browsers", "rules" => mine, "subjects" => [ "browsers" ] }
         end
@@ -383,6 +406,13 @@ module Relay
       end
       { "enabled" => true, "default_permission" => "deny", "rules" => rules, "subjects" => subjects,
         "policies" => policies }
+    end
+
+    # The shared rule of the subscribers' declarations (once in shared);
+    # its id.
+    def subscribers_rule(shared)
+      shared["subscribers_out"] ||= SUBSCRIBERS_RULE.merge("key_exprs" => SUBSCRIBERS.dup)
+      "subscribers_out"
     end
 
     # The console's reading of the nodes' profiles (asterism/<node>/@profile):
@@ -469,6 +499,7 @@ module Relay
       rules << { "id" => "#{id}__no_calls", "messages" => %w[query], "flows" => %w[ingress], "permission" => "deny",
                  "key_exprs" => [ ALL_CALLS ] }
       mine << "#{id}__no_calls"
+      mine << subscribers_rule(shared)
       if b["receivers_managed"]
         mine.concat(section_rules(rules, "#{id}__receives_files", "rw", transfer_keys([ name ])))
       end
