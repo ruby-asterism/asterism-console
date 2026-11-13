@@ -19,6 +19,9 @@ class RelayRole < ApplicationRecord
   # A key template: a key expression, where ${node} stands for one chunk.
   TEMPLATE = %r{\A[A-Za-z0-9_\-.*@~%:+=/${}]{1,200}\z}
   VARIABLE = "${node}".freeze
+  # Zenoh's wildcard inside a chunk (room$*: room01, room02, ...), passed to
+  # the router as it is.
+  SUB_CHUNK = "$*".freeze
 
   has_many :peer_roles, class_name: "RelayPeerRole", dependent: :destroy
   has_many :peers, through: :peer_roles, source: :relay_peer
@@ -45,11 +48,13 @@ class RelayRole < ApplicationRecord
 
   private
 
-  # A template is a key expression once ${node} is put in; no other ${...}.
+  # A template is a key expression once ${node} is put in; no other ${...};
+  # $* inside a chunk is Zenoh's.
   def templates_are_keys
     templates.each do |section, lines|
       bad = lines.reject do |t|
-        TEMPLATE.match?(t) && t.gsub(VARIABLE, "x").match?(RelayPeer::KEY) && !t.gsub(VARIABLE, "").include?("$" + "{")
+        TEMPLATE.match?(t) && t.gsub(VARIABLE, "x").gsub(SUB_CHUNK, "x").match?(RelayPeer::KEY) &&
+          !t.gsub(VARIABLE, "").include?("$" + "{")
       end
       errors.add(:"#{section}_templates", "has lines that are not key templates: #{bad.join(' ')}") if bad.any?
     end

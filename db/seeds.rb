@@ -7,7 +7,10 @@
 # admin may change or remove it, and it is not made again once any role
 # exists. Its nodes' applications may answer their own profiles and put
 # their statuses and topics (Asterism wire protocol 2; consoles made before
-# get those lines from db/migrate/*_relay_role_app_profiles.rb). A "match"
+# get those lines from db/migrate/*_relay_role_app_profiles.rb), and they
+# read the network's shared place asterism/@shared/** (read only: writing
+# it is for a role an admin makes; db/migrate/*_relay_role_shared_places.rb
+# for consoles made before). A "match"
 # role without a description gets one (also done for
 # existing consoles by db/migrate/*_relay_role_match_description.rb).
 require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
@@ -17,7 +20,7 @@ if RelayRole.none?
     description: RelayRoleMatchDescription.description("game"),
     rw_templates: "asterism/${node}\nasterism/${node}/game/**\nasterism/${node}/game/**/@adv/**\nasterism/${node}/@profile\n" \
                   "asterism/${node}/*/@profile\nasterism/${node}/*/@status\nasterism/${node}/*/@pubs",
-    read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/game/**/@adv/**\nasterism/*/@profile",
+    read_templates: "asterism/*\nasterism/*/game/**\nasterism/*/game/**/@adv/**\nasterism/*/@profile\nasterism/@shared/**",
     ask_templates: "asterism/*/@profile\nasterism/*/game/*/meta\nasterism/*/game/*/call/${node}\nasterism/*/game/**/@adv/**",
     watch_templates: "asterism/**",
     for_browsers: true

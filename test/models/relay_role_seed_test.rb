@@ -3,6 +3,7 @@ require Rails.root.join("db/migrate/20261013100000_relay_roles").to_s
 require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
 require Rails.root.join("db/migrate/20261014170000_relay_role_adv_keys").to_s
 require Rails.root.join("db/migrate/20261113100000_relay_role_app_profiles").to_s
+require Rails.root.join("db/migrate/20261113300000_relay_role_shared_places").to_s
 
 # A new console (db:prepare loads the schema and runs db/seeds.rb) and a
 # migrated one (the migration) start with the same role "match".
@@ -19,6 +20,8 @@ class RelayRoleSeedTest < ActiveSupport::TestCase
     migrated.assign_attributes(rw_templates: adv[:rw], read_templates: adv[:read], ask_templates: adv[:ask])
     p2, = RelayRoleAppProfiles.with_app_profiles("match", migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
     migrated.assign_attributes(rw_templates: p2[:rw], read_templates: p2[:read], ask_templates: p2[:ask])
+    sh, = RelayRoleSharedPlaces.with_shared_places("match", migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
+    migrated.assign_attributes(rw_templates: sh[:rw], read_templates: sh[:read], ask_templates: sh[:ask])
     assert_equal migrated.to_config["templates"].transform_values(&:sort), seeded.to_config["templates"].transform_values(&:sort)
     assert_equal migrated.to_config.except("templates"), seeded.to_config.except("templates")
     load Rails.root.join("db/seeds.rb")

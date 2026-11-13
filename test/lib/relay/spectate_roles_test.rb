@@ -1,20 +1,23 @@
 require "test_helper"
 require_relative "../../test_helpers/acl_evaluator"
-require_relative "../../test_helpers/spectate_connection"
+require_relative "../../test_helpers/game_host_connections"
 
 # The game host's spectate keys (docs/rooms.md, "Watching the tables from
-# outside"; asterism-games 0.18.0): asterism/<host>/spectate/<table>/state,
-# a room's table as room<slot>-<table>, put by the host on the registered
-# side. The host (games-host with the two spectate lines) writes them; a
-# spectator's row and a viewer read them; the players' rows, the browsers
-# and the rooms' seats neither receive nor subscribe to them, and the
-# rules the console makes for the rooms do not reach them.
+# outside"): on its node's shared place (protocol 2),
+# asterism/<host>/@shared/spectate/<table>/state, a room's table as
+# room<slot>-<table>, put on the registered side by the host's application
+# games and by a room's application room<slot>. The host (games-host with
+# its node's place and the rooms' applications) writes them; a spectator's
+# row and a viewer read them, the spectator with the senders' declarations
+# for the types; the players' rows, the browsers and the rooms' seats
+# neither receive nor subscribe to them, and the rules the console makes
+# for the rooms do not reach them.
 class Relay::SpectateRolesTest < ActiveSupport::TestCase
   GAMES_HOST = { "name" => "games-host", "for_browsers" => false,
                  "templates" => { "rw" => %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile
                                              asterism/${node}/*/@profile asterism/${node}/*/@status
-                                             asterism/${node}/*/@pubs asterism/${node}/spectate
-                                             asterism/${node}/spectate/**],
+                                             asterism/${node}/*/@pubs asterism/${node}/@shared/**
+                                             asterism/${node}/room$* asterism/${node}/room$*/**],
                                   "read" => %w[asterism/*/game], "watch" => %w[asterism/**] } }.freeze
   GAMES = { "name" => "games", "for_browsers" => true,
             "templates" => { "read" => %w[asterism/*/games/**],
@@ -22,20 +25,21 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
   MATCH = { "name" => "match", "for_browsers" => true,
             "templates" => { "rw" => %w[asterism/${node} asterism/${node}/game/** asterism/${node}/game/**/@adv/**
                                         asterism/${node}/@profile],
-                             "read" => %w[asterism/* asterism/*/game/** asterism/*/game/**/@adv/** asterism/*/@profile],
+                             "read" => %w[asterism/* asterism/*/game/** asterism/*/game/**/@adv/** asterism/*/@profile
+                                         asterism/@shared/**],
                              "ask" => %w[asterism/*/@profile asterism/*/game/*/meta asterism/*/game/*/call/${node}
                                          asterism/*/game/**/@adv/**],
                              "watch" => %w[asterism/**] } }.freeze
   SPECTATOR = { "name" => "spectator", "for_browsers" => false,
-                "templates" => { "read" => %w[asterism/*/spectate asterism/*/spectate/** asterism/*/spectate/@profile
-                                              asterism/*/spectate/@pubs],
-                                 "ask" => %w[asterism/*/spectate/@profile],
+                "templates" => { "read" => %w[asterism/*/@shared/spectate/** asterism/*/games/@profile
+                                              asterism/*/games/@pubs asterism/*/room$*/@profile asterism/*/room$*/@pubs],
+                                 "ask" => %w[asterism/*/games/@profile asterism/*/room$*/@profile],
                                  "watch" => %w[asterism/**] } }.freeze
   # docs/g1_5.md, "Looking only".
   VIEWER = { "name" => "viewer", "for_browsers" => false,
              "templates" => { "rw" => %w[asterism/${node}/** asterism/${node}/@profile],
                               "read" => %w[asterism/** asterism/*/@profile asterism/*/*/@profile asterism/*/*/@status
-                                          asterism/*/*/@pubs],
+                                          asterism/*/*/@pubs asterism/*/@shared/** asterism/@shared/**],
                               "ask" => %w[asterism/*/@profile asterism/*/*/*/meta asterism/*/*/@profile],
                               "watch" => %w[asterism/**] } }.freeze
 
@@ -50,7 +54,7 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
   SETTINGS = { "browsers" => "ws/[::]:7449", "room_seats" => { "01" => %w[01 02], "02" => %w[01] },
                "room_hosts" => %w[games] }.freeze
 
-  KEYS = %w[asterism/games/spectate/mahjong1/state asterism/games/spectate/room01-mahjong1/state].freeze
+  KEYS = %w[asterism/games/@shared/spectate/mahjong1/state asterism/games/@shared/spectate/room01-mahjong1/state].freeze
   SEATS = %w[room-01-s01 room-01-s02 room-02-s01].freeze
 
   def acl
@@ -67,62 +71,69 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
     allowed?(subject, "put", "egress", key) || allowed?(subject, "declare_subscriber", "ingress", key)
   end
 
-  test "the host puts the spectate keys and its application's token, and nobody else writes them" do
+  test "the host puts the spectate keys, and nobody else writes them" do
     KEYS.each do |k|
       assert allowed?("games", "put", "ingress", k), k
       (%w[fmruby-aaaaaa player-a spectator-a admin-viewer] + SEATS + [ :ws ]).each do |s|
         refute allowed?(s, "put", "ingress", k), "#{s} writes #{k}"
       end
     end
-    assert allowed?("games", "liveliness_token", "ingress", "asterism/games/spectate")
-    refute allowed?("games", "put", "ingress", "asterism/other-host/spectate/mahjong1/state"), "its own node only"
+    refute allowed?("games", "put", "ingress", "asterism/other-host/@shared/spectate/mahjong1/state"), "its own node only"
+    refute allowed?("games", "put", "ingress", "asterism/@shared/spectate/mahjong1/state"), "not the network's place"
   end
 
-  test "the host's application answers its own profile and puts its status and topics (protocol 2)" do
-    assert allowed?("games", "declare_queryable", "ingress", "asterism/games/games/@profile")
-    assert allowed?("games", "reply", "ingress", "asterism/games/games/@profile")
-    assert allowed?("games", "put", "ingress", "asterism/games/games/@status")
-    assert allowed?("games", "put", "ingress", "asterism/games/games/@pubs")
+  test "the host's applications answer their own profiles and put their status and topics (protocol 2)" do
+    %w[games room01].each do |app|
+      assert allowed?("games", "declare_queryable", "ingress", "asterism/games/#{app}/@profile"), app
+      assert allowed?("games", "reply", "ingress", "asterism/games/#{app}/@profile"), app
+      assert allowed?("games", "put", "ingress", "asterism/games/#{app}/@status"), app
+      assert allowed?("games", "put", "ingress", "asterism/games/#{app}/@pubs"), app
+      %w[console admin-viewer].each do |s|
+        assert allowed?(s, "query", "ingress", "asterism/games/#{app}/@profile"), s
+        assert allowed?(s, "reply", "egress", "asterism/games/#{app}/@profile"), s
+        assert reads?(s, "asterism/games/#{app}/@pubs"), s
+      end
+    end
     refute allowed?("games", "put", "ingress", "asterism/other-host/games/@pubs"), "its own node only"
-    %w[console admin-viewer].each do |s|
-      assert allowed?(s, "query", "ingress", "asterism/games/games/@profile"), s
-      assert allowed?(s, "reply", "egress", "asterism/games/games/@profile"), s
-      assert reads?(s, "asterism/games/games/@pubs"), s
-    end
-    %w[player-a spectator-a].each { refute allowed?(_1, "query", "ingress", "asterism/games/games/@profile"), _1 }
+    refute allowed?("player-a", "query", "ingress", "asterism/games/games/@profile")
   end
 
-  test "the host's spectate connection, an application of its own (protocol 2), does all it does" do
-    assert_empty SpectateConnection.refused(acl)
-    %w[console admin-viewer].each do |s|
-      assert allowed?(s, "query", "ingress", "asterism/games/spectate/@profile"), s
-      assert allowed?(s, "reply", "egress", "asterism/games/spectate/@profile"), s
-      assert reads?(s, "asterism/games/spectate/@pubs"), s
-      assert reads?(s, "asterism/games/spectate/@status"), s
-    end
-    refute allowed?("games", "declare_queryable", "ingress", "asterism/other-host/spectate/@profile"), "its own node only"
+  test "the host's connections, games and a room's room01, do all they do" do
+    assert_empty GameHostConnections.refused(acl)
+    refute allowed?("games", "liveliness_token", "ingress", "asterism/other-host/room01"), "its own node only"
   end
 
-  test "a spectator reads the spectate application's profile and topics (topic list), and no other's" do
-    assert allowed?("spectator-a", "query", "ingress", "asterism/games/spectate/@profile")
-    assert allowed?("spectator-a", "reply", "egress", "asterism/games/spectate/@profile")
-    assert reads?("spectator-a", "asterism/games/spectate/@pubs")
-    refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/@profile"), "not the players' application"
-    refute reads?("spectator-a", "asterism/games/games/@pubs")
-    refute allowed?("spectator-a", "put", "ingress", "asterism/games/spectate/@pubs"), "writes nothing"
-    refute allowed?("spectator-a", "declare_queryable", "ingress", "asterism/games/spectate/@profile")
+  test "a spectator reads the senders' declarations and types (topic info, type_of), and no other application's" do
+    %w[games room01].each do |app|
+      assert allowed?("spectator-a", "query", "ingress", "asterism/games/#{app}/@profile"), app
+      assert allowed?("spectator-a", "reply", "egress", "asterism/games/#{app}/@profile"), app
+      assert reads?("spectator-a", "asterism/games/#{app}/@pubs"), app
+      refute allowed?("spectator-a", "put", "ingress", "asterism/games/#{app}/@pubs"), "writes nothing"
+      refute allowed?("spectator-a", "declare_queryable", "ingress", "asterism/games/#{app}/@profile")
+    end
+    refute allowed?("spectator-a", "query", "ingress", "asterism/linux/demo/@profile"), "not every application"
+    refute reads?("spectator-a", "asterism/games/games/@status")
   end
 
   test "a spectator and a viewer read them" do
     KEYS.each do |k|
-      %w[spectator-a admin-viewer].each do |s|
+      %w[spectator-a admin-viewer console].each do |s|
         assert allowed?(s, "declare_subscriber", "ingress", k), "#{s} subscribes to #{k}"
         assert allowed?(s, "put", "egress", k), "#{s} receives #{k}"
       end
     end
-    assert allowed?("spectator-a", "declare_subscriber", "ingress", "asterism/games/spectate/*/**"),
-           "the command line's object echo 'games/spectate/*'"
-    assert allowed?("spectator-a", "liveliness_token", "egress", "asterism/games/spectate"), "the application shows"
+    assert allowed?("spectator-a", "declare_subscriber", "ingress", "asterism/*/@shared/spectate/**"),
+           "the subscription of the commentary and the browser build"
+  end
+
+  test "the network's place: members and the viewer read it, the spectator does not, nobody of these writes it" do
+    key = "asterism/@shared/lobby"
+    %w[fmruby-aaaaaa admin-viewer].each { assert reads?(_1, key), _1 }
+    assert reads?(:ws, key), "the browsers have match"
+    %w[spectator-a player-a].each { refute reads?(_1, key), _1 }
+    (%w[games fmruby-aaaaaa player-a spectator-a admin-viewer] + [ :ws ]).each do |s|
+      refute allowed?(s, "put", "ingress", key), "#{s} writes the network's place"
+    end
   end
 
   test "the players, the browsers and the rooms' seats do not" do
@@ -148,11 +159,13 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
   end
 
   test "a spectator reads nothing else" do
+    refute reads?("spectator-a", "asterism/games/@shared/other/x"), "the spectate keys only"
     refute reads?("spectator-a", "asterism/games/games/mahjong1/state"), "not the players' keys"
     refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/mahjong1/call/spectator-a"), "no call"
     refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/mahjong1/meta")
     refute reads?("spectator-a", "room/01/asterism/games/games/mahjong1/state"), "not a room"
     refute allowed?("spectator-a", "declare_subscriber", "ingress", "asterism/**"), "not everything (the MCP bridge)"
     refute allowed?("spectator-a", "liveliness_token", "ingress", "asterism/spectator-a/cli-0a1b"), "unseen"
+    refute reads?("spectator-a", "asterism/games/spectate/mahjong1/state"), "the old spectate keys: nothing there"
   end
 end

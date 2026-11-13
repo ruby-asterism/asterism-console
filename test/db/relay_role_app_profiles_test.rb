@@ -1,7 +1,8 @@
 require "test_helper"
 require_relative "../test_helpers/acl_evaluator"
-require_relative "../test_helpers/spectate_connection"
+require_relative "../test_helpers/game_host_connections"
 require Rails.root.join("db/migrate/20261113100000_relay_role_app_profiles").to_s
+require Rails.root.join("db/migrate/20261113300000_relay_role_shared_places").to_s
 
 # Roles made before Asterism wire protocol 2 brought to it on update: the
 # example role's nodes answer their applications' profiles, a role's
@@ -58,18 +59,17 @@ class RelayRoleAppProfilesTest < ActiveSupport::TestCase
     end
   end
 
-  test "games-host made before protocol 2: the host's spectate connection does all it does once updated" do
+  test "games-host made before protocol 2: the host's connections do all they do once updated (with the shared places)" do
     peers = [ { "name" => "games", "kind" => "client", "roles" => %w[games-host], "in_acl" => true } ]
     acl = ->(rw, read) do
       role = { "name" => "games-host", "for_browsers" => false,
                "templates" => { "rw" => rw, "read" => read, "watch" => %w[asterism/**] } }
       Relay::CloudConfig.new(peers, {}, roles: [ role ]).access_control
     end
-    before = SpectateConnection.refused(acl.(HOST[0], HOST[1]))
-    assert_equal [ "asterism/games/spectate/@profile", "asterism/games/spectate/@pubs" ], before.map(&:last).uniq.sort,
-                 "protocol 1's lines miss only the application's profile and topics"
+    refute_empty GameHostConnections.refused(acl.(HOST[0], HOST[1]))
     t, = fix("games-host", *HOST)
-    assert_empty SpectateConnection.refused(acl.(lines(t)[:rw], lines(t)[:read]))
+    sh, = RelayRoleSharedPlaces.with_shared_places("games-host", t[:rw], t[:read], t[:ask])
+    assert_empty GameHostConnections.refused(acl.(lines(sh)[:rw], lines(sh)[:read]))
   end
 
   test "on the database: the rows change, logged; the router lets the host and the viewer do protocol 2" do
