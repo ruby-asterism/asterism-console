@@ -65,6 +65,16 @@ class Bridge::GraphRoomsTest < ActiveSupport::TestCase
     refute g["nodes"].any? { _1["id"].start_with?("a_node:room/01/x", "a_node:room/01/a") }, "not protocol 1 keys"
   end
 
+  test "a room's application token with the protocol's number" do
+    g = Bridge::Graph.build(rooms: %w[room/04/asterism/wasm-0d0e0f/game/protocol/2 room/04/asterism/wasm-0d0e0f/game/table
+                                      room/04/asterism/wasm-111111/game/protocol/3]).to_h
+    app = node(g, "a_app:room/04/wasm-0d0e0f/game")
+    assert_equal [ 2, nil, "04" ], app["data"].values_at("protocol", "other_protocol", "room")
+    assert_equal app["id"], node(g, "a_object:room/04/wasm-0d0e0f/game/table")["parent"]
+    assert node(g, "a_app:room/04/wasm-111111/game")["data"]["other_protocol"]
+    refute g["nodes"].any? { _1["id"].include?("/protocol") }, "the number is not an object"
+  end
+
   test "the room's nodes are not the registered side's, and link to the router like other clients" do
     g = graph
     outside = node(g, "a_node:wasm-a1b2c3")

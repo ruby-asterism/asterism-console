@@ -99,7 +99,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
               @z.subscribe(Bridge::Runner::PUBS) { @runner.send(:pubs_notice, _1) } ]
     @z.start
     # The tokens the bridge follows (asterism/**): the two applications.
-    @z.liveliness_get("asterism/livenode/*", timeout: 2.0).each { @runner.instance_variable_get(:@asterism_keys)[_1] = true }
+    @z.liveliness_get("asterism/livenode/*/protocol/2", timeout: 2.0).each { @runner.instance_variable_get(:@asterism_keys)[_1] = true }
     @dir = Rails.root.join("tmp", "app-profiles-live-#{Process.pid}")
     FileUtils.mkdir_p(@dir)
   end
@@ -161,7 +161,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     assert_equal [ :app, "livenode/demo" ], queue.pop(true), "a type not known: asked again"
     @runner.send(:fetch_app_profile, "livenode/demo")
     assert_equal [ [ "v", "vector3" ] ], profiles.to_graph.dig("livenode/demo", "types", "mygame/extra", "f")
-    g = Bridge::Graph.build(asterism: %w[asterism/livenode/demo], app_profiles: profiles.to_graph).to_h
+    g = Bridge::Graph.build(asterism: %w[asterism/livenode/demo/protocol/2], app_profiles: profiles.to_graph).to_h
     app = g["nodes"].find { _1["id"] == "a_app:livenode/demo" }["data"]
     assert_equal %w[board1/strokes camera extra imu livenode/@shared/spectate/t1/state], app["pubs"].map { _1["name"] }
   end
@@ -170,7 +170,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
 
   test "the second connection of the node is an application of its own; both declare one shared key, each its own type" do
     keys = @runner.instance_variable_get(:@asterism_keys).keys
-    assert_equal %w[asterism/livenode/demo asterism/livenode/room01], keys.sort, "an application token each"
+    assert_equal %w[asterism/livenode/demo/protocol/2 asterism/livenode/room01/protocol/2], keys.sort, "an application token each"
     assert_equal %w[livenode/demo livenode/room01], @runner.send(:asterism_apps).sort
     @runner.send(:sync_app_profiles)
     work
@@ -201,9 +201,9 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     refute_nil profiles.topic(SHARED_KEY, from: "livenode/room01")
     tell("leave")
     eventually do
-      @z.liveliness_get("asterism/livenode/*", timeout: 1.0).sort == %w[asterism/livenode/demo]
+      @z.liveliness_get("asterism/livenode/*/protocol/2", timeout: 1.0).sort == %w[asterism/livenode/demo/protocol/2]
     end
-    @runner.instance_variable_get(:@asterism_keys).delete("asterism/livenode/room01") # what the bridge's watch does
+    @runner.instance_variable_get(:@asterism_keys).delete("asterism/livenode/room01/protocol/2") # what the bridge's watch does
     @runner.send(:sync_app_profiles)
     assert_nil profiles.topic(SHARED_KEY, from: "livenode/room01")
     refute_nil profiles.topic(SHARED_KEY, from: "livenode/demo")

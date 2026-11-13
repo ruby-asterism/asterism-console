@@ -17,7 +17,11 @@ calls the methods that Asterism nodes expose.
   orange topics, Ruby red Asterism); the Asterism levels differ by shape: a
   node is a white box with a Ruby red border and a mark before its name for
   what Ruby runs it (Family mruby, PicoRuby, CRuby, console), an app a grey
-  dashed box, an object a small Ruby red dot (docs/v2_2.md). A node of
+  dashed box, an object a small Ruby red dot (docs/v2_2.md). An app whose
+  liveliness token says another wire protocol than the console's 2
+  (`asterism/<node>/<app>/protocol/<n>`; protocol 1's token has no number)
+  has a red box and "(protocol N)" after its name: its values still flow,
+  calls between it and the others are refused. A node of
   asterism 0.5.0 or later tells its profile: the mark comes from its kind,
   its icon is drawn before its name, its host and display name are in the
   details; an older node (no profile) has no mark (docs/v2_5.md). A display name also goes before the ID in the label, and

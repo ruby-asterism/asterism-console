@@ -8,9 +8,13 @@
 // nodes only), else none. This console itself is "<ID> (this console)", and
 // a room's game host "<ID> (room NN)" (0.3.3): the rooms' nodes are not the
 // registry's, and their labels stay as they are.
+//
+// An Asterism app whose token says another protocol than the console's
+// (data "other_protocol", Bridge::Graph) is "<app> (protocol N)".
 export function nodeLabel(n) {
   const data = n.data || {}
   if (data.self) return `${n.label} (this console)`
+  if (n.kind === "a_app" && data.other_protocol) return `${n.label} (protocol ${data.protocol})`
   if (n.kind === "a_node" && data.room_host && data.room) return `${n.label} (room ${data.room})`
   if (!["a_node", "router", "registered"].includes(n.kind)) return n.label
   const shown = data.peer?.display_name || (n.kind === "a_node" ? data.profile?.name : null)

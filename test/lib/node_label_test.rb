@@ -55,4 +55,12 @@ class NodeLabelTest < ActiveSupport::TestCase
     ])
     assert_equal [ "console (this console)", "games (room 05)", "wasm-1a2b3c" ], got
   end
+
+  test "an app of another protocol says its number" do
+    got = labels([
+      { "kind" => "a_app", "label" => "demo", "data" => { "protocol" => 2 } },
+      { "kind" => "a_app", "label" => "old", "data" => { "protocol" => 1, "other_protocol" => true } }
+    ])
+    assert_equal [ "demo", "old (protocol 1)" ], got
+  end
 end

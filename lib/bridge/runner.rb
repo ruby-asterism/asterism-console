@@ -901,7 +901,8 @@ module Bridge
       keys = @lock.synchronize { @asterism_keys.keys }
       keys.filter_map do |k|
         parts = k.split("/")
-        "#{parts[1]}/#{parts[2]}" if parts.size.between?(3, 4)
+        # asterism/<node>/<app>[/<object>], asterism/<node>/<app>/protocol/<n>
+        "#{parts[1]}/#{parts[2]}" if parts.size.between?(3, 5)
       end.uniq - [ "#{@node_id}/#{@app}" ]
     end
 

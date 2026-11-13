@@ -126,6 +126,22 @@ class Bridge::GraphTest < ActiveSupport::TestCase
     assert_nil Bridge::Graph.parse_ros_token("asterism/x")
   end
 
+  # Asterism wire protocol 2: an application's token says the protocol it
+  # speaks (asterism/<node>/<app>/protocol/<n>); one of another protocol
+  # (protocol 1's token without the number, or another number) is marked.
+  test "an application's protocol from its token, another one marked" do
+    keys = %w[asterism/n2/demo/protocol/2 asterism/n2/demo/screen asterism/n1/old asterism/n3/later/protocol/3
+              asterism/n4/odd/protocol/02 asterism/n4/odd/version/2 asterism/n4/odd/protocol/x]
+    g = Bridge::Graph.build(asterism: keys).to_h
+    assert_equal({ "node" => "n2", "app" => "demo", "protocol" => 2 }, node(g, "a_app:n2/demo")["data"])
+    assert_equal "a_app:n2/demo", node(g, "a_object:n2/demo/screen")["parent"]
+    assert_equal({ "node" => "n1", "app" => "old", "protocol" => 1, "other_protocol" => true }, node(g, "a_app:n1/old")["data"])
+    assert_equal [ 3, true ], node(g, "a_app:n3/later")["data"].values_at("protocol", "other_protocol")
+    refute g["nodes"].any? { _1["id"].start_with?("a_app:n4", "a_node:n4", "a_object:n4") }, "not tokens of the protocol"
+    assert_equal [ "n", "a", nil, "protocol" ], Bridge::Graph.asterism_token(%w[n a protocol]), "an object may be named protocol"
+    assert_equal [ "n", "a", 7, nil ], Bridge::Graph.asterism_token(%w[n a protocol 7])
+  end
+
   test "router links from the linkstate and from router sessions" do
     other = "d00dfeed00000000000000000000beef"
     a = admin

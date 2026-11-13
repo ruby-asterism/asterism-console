@@ -9,11 +9,16 @@
 #                                                            "peers" => [...],
 #                                                            "routers" => [...] } } } }
 #   asterism: token keys alive under asterism/** (with the "asterism/" prefix):
-#             asterism/<node>/<app> (an application) and
-#             asterism/<node>/<app>/<object> (an exposed object), protocol 1
+#             asterism/<node>/<app>/protocol/<n> (an application that speaks
+#             protocol n; protocol 1's was asterism/<node>/<app>) and
+#             asterism/<node>/<app>/<object> (an exposed object). An app
+#             gets data "protocol" (the number its token says, when it
+#             said one) and, when that is not PROTOCOL, data
+#             "other_protocol" true (the page marks it)
 #   ros:      token keys alive under @ros2_lv/**
 #   rooms:    token keys alive under room/*/asterism/** (0.2.1, docs/rooms.md):
-#             room/<slot>/asterism/<node>/<app>[/<object>]
+#             room/<slot>/asterism/<node>/<app>[/<object>] and
+#             room/<slot>/asterism/<node>/<app>/protocol/<n>
 #   room_info: the open rooms (Room.for_graph: "slot", "name", "uid",
 #             "expires_at", "app"), for the rooms' frames
 #   room_hosts: the node IDs of the game hosts that join the rooms with their
@@ -120,6 +125,32 @@ module Bridge
 
     # An Asterism token of a room: room/<slot>/asterism/<rest>.
     ROOM_TOKEN = %r{\Aroom/([^/]+)/asterism/(.+)\z}
+
+    # The Asterism wire protocol the console speaks (the asterism gem's
+    # Asterism::PROTOCOL; written here, the graph needs no Zenoh).
+    PROTOCOL = 2
+
+    # The chunks of an Asterism token (after "asterism/"): [node, app,
+    # protocol, object]. An application's token asterism/<node>/<app>/
+    # protocol/<n> gives n (asterism docs/protocol.md 6.1), protocol 1's
+    # asterism/<node>/<app> gives 1; an object's has object; anything else
+    # is nil.
+    def self.asterism_token(parts)
+      return nil if parts.any?(&:empty?)
+      case parts.size
+      when 2 then [ parts[0], parts[1], 1, nil ]
+      when 3 then [ parts[0], parts[1], nil, parts[2] ]
+      when 4
+        return nil unless parts[2] == "protocol" && parts[3].match?(/\A(0|[1-9][0-9]{0,8})\z/)
+        [ parts[0], parts[1], parts[3].to_i, nil ]
+      end
+    end
+
+    # The data of an app whose token says protocol pr (nil: an object's).
+    def self.protocol_data(pr)
+      return {} if pr.nil?
+      pr == PROTOCOL ? { "protocol" => pr } : { "protocol" => pr, "other_protocol" => true }
+    end
 
     # The services every rclcpp node serves for its parameters (and its
     # type description): /<node>/<one of these>.
@@ -360,20 +391,16 @@ module Bridge
     def add_asterism(keys, self_node)
       keys.each do |key|
         parts = key.to_s.sub(%r{\Aasterism/}, "").split("/")
-        next if parts.empty? || parts.any?(&:empty?)
-        case parts.size
-        when 2 # an application's token (protocol 1): the app is up, maybe with no object
-          nid, app = parts
-          a_node(nid, self_node)
-          node("a_app:#{nid}/#{app}", "a_app", app, { "node" => nid, "app" => app }, "a_node:#{nid}")
-        when 3
-          nid, app, obj = parts
-          a_node(nid, self_node)
-          aid = "a_app:#{nid}/#{app}"
-          node(aid, "a_app", app, { "node" => nid, "app" => app }, "a_node:#{nid}")
-          oid = "a_object:#{nid}/#{app}/#{obj}"
-          node(oid, "a_object", obj, { "path" => "#{nid}/#{app}/#{obj}", "node" => nid, "app" => app }, aid)
-        end
+        t = self.class.asterism_token(parts) or next
+        nid, app, pr, obj = t
+        a_node(nid, self_node)
+        aid = "a_app:#{nid}/#{app}"
+        # An application's token: the app is up (maybe with no object), and
+        # the protocol it speaks.
+        node(aid, "a_app", app, { "node" => nid, "app" => app }.merge(self.class.protocol_data(pr)), "a_node:#{nid}")
+        next unless obj
+        oid = "a_object:#{nid}/#{app}/#{obj}"
+        node(oid, "a_object", obj, { "path" => "#{nid}/#{app}/#{obj}", "node" => nid, "app" => app }, aid)
       end
     end
 
@@ -385,16 +412,16 @@ module Bridge
       Array(keys).each do |key|
         m = ROOM_TOKEN.match(key.to_s) or next
         slot = m[1]
-        parts = m[2].split("/")
-        next if parts.size < 2 || parts.size > 3 || parts.any?(&:empty?)
-        nid, app, obj = parts
+        t = self.class.asterism_token(m[2].split("/")) or next
+        nid, app, pr, obj = t
         frame = room_frame(slot, by_slot[slot])
         base = "room/#{slot}/#{nid}"
         data = { "node" => nid, "room" => slot }
         data["room_host"] = true if hosts.include?(nid)
         node("a_node:#{base}", "a_node", nid, data, frame)
         aid = "a_app:#{base}/#{app}"
-        node(aid, "a_app", app, { "node" => nid, "app" => app, "room" => slot }, "a_node:#{base}")
+        node(aid, "a_app", app, { "node" => nid, "app" => app, "room" => slot }.merge(self.class.protocol_data(pr)),
+             "a_node:#{base}")
         next unless obj
         node("a_object:#{base}/#{app}/#{obj}", "a_object", obj,
              { "path" => "#{base}/#{app}/#{obj}", "node" => nid, "app" => app, "room" => slot }, aid)

@@ -284,6 +284,11 @@ export default class extends Controller {
       { selector: "node[kind = 'a_app']:parent", style: {
           "background-opacity": 0, padding: 8, "text-valign": "top", "text-margin-y": -3, color: "#5f6368" } },
       { selector: "node[kind = 'a_object']", style: { "font-size": 9, "border-width": 0 } },
+      // An app that speaks another Asterism protocol (its token's number,
+      // label "<app> (protocol N)"): a red box and label; its values flow,
+      // calls between it and the others are refused.
+      { selector: "node[kind = 'a_app'][?other_protocol]", style: {
+          "border-color": "#c62828", "border-width": 2, "border-style": "solid", color: "#c62828" } },
       // A machine of ROS 2 nodes, folded: a larger purple box with a second
       // outline around it (several nodes in one), its name in bold.
       { selector: "node[kind = 'r_group']", style: {
@@ -406,6 +411,7 @@ export default class extends Controller {
     if (n.kind === "a_node" && n.data?.icon) data.icon = n.data.icon
     if (n.kind === "r_topic") data.label = this.topicNodeLabel(n.id, n.label)
     if (n.data?.room) data.room = n.data.room
+    if (n.data?.other_protocol) data.other_protocol = true
     if (n.kind === "room") data.label = roomLabel(n)
     return { group: "nodes", data, classes: `layer-${n.layer}` }
   }
@@ -1358,6 +1364,8 @@ export default class extends Controller {
       }
       case "a_app":
         rows.push(["Node", info.node],
+                  ["Protocol", info.protocol == null ? null :
+                    (info.other_protocol ? `${esc(String(info.protocol))} (not this console's: its calls are refused, its values still flow)` : esc(String(info.protocol))), true],
                   ["Status", info.status ? statusHtml(info.status) : null, true],
                   ["Topics", info.pubs ? pubsHtml(info.pubs) : null, true],
                   ["Types", info.types ? typesHtml(info.types) : null, true],
