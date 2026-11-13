@@ -194,9 +194,15 @@ console's code is particular to it: two roles and a row.
                    asterism/${node}/room$*
                    asterism/${node}/room$*/**
   Read             asterism/*/game
+                   asterism/*/game/protocol/*
   Watch            asterism/**
   Browsers have this role: no
   ```
+
+  `asterism/*/game/protocol/*` lets the host see the players'
+  applications come and go: an application's liveliness token says the
+  protocol it speaks (`asterism/<node>/game/protocol/2`), one key below
+  `asterism/*/game`. A role made before gets it on update (docs/install.md).
 
   `asterism/${node}/@shared/**` lets the host put its tables' spectate
   views on its node's shared place, and `asterism/${node}/room$*` and

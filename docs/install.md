@@ -1302,11 +1302,21 @@ applications' own profiles, their topics and types; not released yet):
     values): a "Read" line `<prefix>/@shared/spectate/**` (the role
     `spectator`) gets `<prefix>/games/spectate/call/${node}` and
     `<prefix>/room$*/spectate/call/${node}` in "Read" and in "Ask" (it
-    calls that object only, under its own name).
+    calls that object only, under its own name);
+  - the applications' tokens with the protocol (an application's
+    liveliness token is `asterism/<node>/<app>/protocol/2`, one key longer
+    than protocol 1's `asterism/<node>/<app>`; asterism `docs/protocol.md`
+    6.1): a "Read and write" or "Read" line that names an application's key
+    exactly (`asterism/*/game` in the role `games-host`) gets
+    `<line>/protocol/*` next to it, unless the section has `<line>/**`
+    already (lines with `**` reach the new token as they are).
   The setup's output (`docker compose logs` of the update, the Databases
   step) has a line `relay role <name> (protocol 2): ...`,
-  `relay role <name> (spectate's profile): ...` or
-  `relay role <name> (shared places): ...` for each role it changed. A role of your own that lets its nodes' applications tell a
+  `relay role <name> (spectate's profile): ...`,
+  `relay role <name> (shared places): ...` or
+  `relay role <name> (application tokens with the protocol): ...` for each
+  role it changed. A role of your own that names an application exactly
+  needs `<line>/protocol/*` too. A role of your own that lets its nodes' applications tell a
   status or stream topics without any of these lines needs
   `asterism/${node}/*/@profile` and `asterism/${node}/*/@pubs` (and
   `asterism/${node}/*/@status`) by hand, then Apply.
