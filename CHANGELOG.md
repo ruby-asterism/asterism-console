@@ -12,7 +12,7 @@ the command that goes back).
 
 What an update needs: **every node moves to Asterism wire protocol 2 with
 it** (the asterism gem 0.14.0, asterism-games 0.23.0, the boards'
-firmware, the browser build); five data migrations on the roles (they add
+firmware, the browser build); six data migrations on the roles (they add
 lines; a spectator's old spectate lines are replaced); the update's setup
 writes the router's configuration and restarts the router. Going back to
 0.3.21 needs the update's backup (`./update.sh 0.3.21 --restore <it>`):
@@ -56,7 +56,21 @@ docs/install.md, "From 0.3.21 to 0.4.0".
   keys on the host's shared place, the senders' `@profile` / `@pubs` and
   the calls of their `spectate` object under its own name; a line that
   names an application's key exactly (`asterism/*/game` of games-host) gets
-  `<line>/protocol/*`. Role lines may use Zenoh's `$*` (`room$*`).
+  `<line>/protocol/*`; a spectator reads the tokens of the applications
+  that put the spectate keys (`<prefix>/games/protocol/*`,
+  `<prefix>/room$*/protocol/*`), so its `asterism topic list` shows them.
+  Role lines may use Zenoh's `$*` (`room$*`).
+- The subscribers' declarations reach the publishers: every registry row,
+  browser certificate and the browsers' ws/ entrance share one rule
+  (`subscribers_out`, egress `declare_subscriber` on `asterism/**`,
+  `asterism/*/@shared/**`, `asterism/@shared/**`). A protocol 2 topic goes
+  out through a declared publisher, which sends only while it knows of a
+  matching subscriber; the router dropped the declaration of a reader whose
+  key has a wildcard node (the commentary's `*/@shared/spectate/*/state`,
+  the console's `asterism/**`), which then got nothing unless a named
+  reader was there too. It tells a node the key expressions others
+  subscribe to, nothing more. Generated with the router's configuration:
+  the update's setup writes it, no migration.
 - The image can be built before an asterism release is out:
   `ASTERISM_GEMS=git ASTERISM_REF=<commit>` (Gemfile, Dockerfile build
   args, `docker-compose.build.yml`; docs/install.md "Building the image

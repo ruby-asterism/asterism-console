@@ -1296,11 +1296,11 @@ profiles, their topics and types):
   boards' firmware, the browser build): protocol 1 and 2 do not mix. The
   values still flow between them, but statuses and topics are not seen,
   and a call between the two is refused (the error kind `protocol`).
-- `./update.sh 0.4.0`. Five migrations bring the roles to protocol 2
+- `./update.sh 0.4.0`. Six migrations bring the roles to protocol 2
   (`db/migrate/*_relay_role_app_profiles.rb`,
   `*_relay_role_spectate_profiles.rb`, `*_relay_role_shared_places.rb`,
-  `*_relay_role_spectate_calls.rb` and `*_relay_role_app_token_protocol.rb`,
-  in that order); they add lines and remove none an admin wrote, except a
+  `*_relay_role_spectate_calls.rb`, `*_relay_role_app_token_protocol.rb`
+  and `*_relay_role_spectate_tokens.rb`, in that order); they add lines and remove none an admin wrote, except a
   spectator's old spectate lines (below):
   - the example role `match`: `asterism/${node}/*/@profile`,
     `asterism/${node}/*/@status` and `asterism/${node}/*/@pubs` in "Read and
@@ -1316,7 +1316,7 @@ profiles, their topics and types):
     docs/rooms.md: the game host's `spectate` is an application of its own
     in protocol 2) gets `<prefix>/spectate/@profile` and
     `<prefix>/spectate/@pubs` in "Read" and `<prefix>/spectate/@profile` in
-    "Ask" (a spectator's `asterism topic list` shows the tables' topics);
+    "Ask" (the next migration replaces them with the shared places' lines);
   - the shared places (asterism `docs/protocol.md` 17: data with no owner
     at `asterism/<node>/@shared/**` and `asterism/@shared/**`; the game
     host's spectate keys moved to `asterism/<host>/@shared/spectate/...`,
@@ -1347,12 +1347,20 @@ profiles, their topics and types):
     6.1): a "Read and write" or "Read" line that names an application's key
     exactly (`asterism/*/game` in the role `games-host`) gets
     `<line>/protocol/*` next to it, unless the section has `<line>/**`
-    already (lines with `**` reach the new token as they are).
+    already (lines with `**` reach the new token as they are);
+  - the senders' tokens: a "Read" line `<prefix>/@shared/spectate/**`
+    (the role `spectator`) gets `<prefix>/games/protocol/*` and
+    `<prefix>/room$*/protocol/*` (the liveliness tokens of the applications
+    that put the spectate keys, and no other: `asterism topic list` and
+    `topic info` with a spectator's certificate find them and show the
+    spectate keys with their types).
   The setup's output (`docker compose logs` of the update, the Databases
   step) has a line `relay role <name> (protocol 2): ...`,
   `relay role <name> (spectate's profile): ...`,
-  `relay role <name> (shared places): ...` or
-  `relay role <name> (application tokens with the protocol): ...` for each
+  `relay role <name> (shared places): ...`,
+  `relay role <name> (spectate calls): ...`,
+  `relay role <name> (application tokens with the protocol): ...` or
+  `relay role <name> (spectate tokens): ...` for each
   role it changed. A role of your own that names an application exactly
   needs `<line>/protocol/*` too. A role of your own that lets its nodes' applications tell a
   status or stream topics without any of these lines needs
@@ -1363,7 +1371,14 @@ profiles, their topics and types):
   `asterism/*/*/@status` and `asterism/*/*/@pubs`, the subscription to
   and the put on the shared places `asterism/*/@shared/**` and
   `asterism/@shared/**` for recordings, watches and playbacks; no more
-  query of `@status`) with the roles' new lines: the update's setup writes it from
+  query of `@status`), one rule every row, browser certificate and the
+  browsers' ws/ entrance share (`subscribers_out`: the subscribers'
+  declarations on `asterism/**`, `asterism/*/@shared/**` and
+  `asterism/@shared/**` may go out to them, so a declared publisher learns
+  of a reader whose key has a wildcard node, such as the commentary's
+  `*/@shared/spectate/*/state`; without it such a reader gets nothing; it
+  tells a node the key expressions others subscribe to, nothing else)
+  with the roles' new lines: the update's setup writes it from
   the registry and restarts the router on it, as Apply does. No separate
   Apply is needed unless the setup says it could not restart the router.
 - **Check**: the details of the game host's app show its "Status" row
