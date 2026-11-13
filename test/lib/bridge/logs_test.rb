@@ -29,7 +29,7 @@ class Bridge::LogsTest < ActiveSupport::TestCase
 
   test "an Asterism log key: MessagePack { level, msg, time }" do
     l = Bridge::Logs.line("asterism/fmruby-aaaaaa/demo/log",
-                          MessagePack.pack("level" => "error", "msg" => "motor stalled", "time" => 1_700_000_002.5), 1)
+                          MessagePack.pack("level" => "error", "msg" => "motor stalled", "time" => 1_700_000_002_500), 1)
     assert_equal "ERROR", l["level"]
     assert_equal "fmruby-aaaaaa/demo", l["name"]
     assert_equal 1_700_000_002_500, l["at"]

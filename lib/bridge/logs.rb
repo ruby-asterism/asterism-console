@@ -4,8 +4,9 @@
 #     message an rcl_interfaces/msg/Log, decoded with the generated type
 #     (vendor/msgs; asterism does not bundle rcl_interfaces).
 #   - Asterism (a proposal, docs/v3.md): asterism/<node>/<app>/log, each
-#     message a MessagePack Hash { "level", "msg", "time" } and optionally
-#     "name", "file", "line", "function".
+#     message a MessagePack Hash { "level", "msg", "time" (ms since 1970,
+#     an int: the built-in log type of protocol 2) } and optionally "name",
+#     "file", "line", "function".
 #
 # The bridge subscribes while a log page is open (StreamLease "log") and
 # feeds every message to record, on the receiving thread; record keeps at
@@ -118,7 +119,8 @@ module Bridge
       v = v.transform_keys(&:to_s)
       parts = key.split("/")
       sev = severity(v["level"])
-      time = v["time"].is_a?(Numeric) && v["time"].positive? ? (v["time"] * 1000).round : at
+      # The built-in log type's time: ms since 1970, an int (wire protocol 2).
+      time = v["time"].is_a?(Numeric) && v["time"].positive? ? v["time"].round : at
       { "at" => time, "received" => at, "level" => level_name(sev), "severity" => sev,
         "name" => text(v["name"] || "#{parts[1]}/#{parts[2]}"), "msg" => text(v["msg"]),
         "file" => text(v["file"]), "line" => v["line"].is_a?(Integer) ? v["line"] : nil,
