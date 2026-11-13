@@ -2,6 +2,7 @@ require "test_helper"
 require Rails.root.join("db/migrate/20261013100000_relay_roles").to_s
 require Rails.root.join("db/migrate/20261014090000_relay_role_match_description").to_s
 require Rails.root.join("db/migrate/20261014170000_relay_role_adv_keys").to_s
+require Rails.root.join("db/migrate/20261113100000_relay_role_app_profiles").to_s
 
 # A new console (db:prepare loads the schema and runs db/seeds.rb) and a
 # migrated one (the migration) start with the same role "match".
@@ -11,10 +12,13 @@ class RelayRoleSeedTest < ActiveSupport::TestCase
     load Rails.root.join("db/seeds.rb")
     seeded = RelayRole.sole
     # A migrated console gets the role from the G1.5 migration, then the
-    # @adv lines from RelayRoleAdvKeys.
+    # @adv lines from RelayRoleAdvKeys and the protocol 2 lines from
+    # RelayRoleAppProfiles.
     migrated = RelayRole.new(RelayRoles.match_role("game").except(:browser_app)) # the column went in 0.3.12
     adv = RelayRoleAdvKeys.with_adv(migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
     migrated.assign_attributes(rw_templates: adv[:rw], read_templates: adv[:read], ask_templates: adv[:ask])
+    p2, = RelayRoleAppProfiles.with_app_profiles("match", migrated.rw_templates, migrated.read_templates, migrated.ask_templates)
+    migrated.assign_attributes(rw_templates: p2[:rw], read_templates: p2[:read], ask_templates: p2[:ask])
     assert_equal migrated.to_config["templates"].transform_values(&:sort), seeded.to_config["templates"].transform_values(&:sort)
     assert_equal migrated.to_config.except("templates"), seeded.to_config.except("templates")
     load Rails.root.join("db/seeds.rb")
