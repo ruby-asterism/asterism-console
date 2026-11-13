@@ -78,13 +78,13 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
     sample = ->(key, payload, att, enc: "zenoh/bytes", ts: stamp) do
       Asterism::Zenoh::Sample.new(key: key, payload: payload, attachment: att && MessagePack.pack(att), encoding: enc, timestamp: ts)
     end
-    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.1, 0, 9.8 ]), [ 7, 1_791_440_000_123 ]))
-    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.2, 0, 9.8 ]), [ 8, 1_791_440_000_223 ]))
-    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/board1/strokes", MessagePack.pack([ [ 1, 2 ] ]), [ 3 ]))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.1, 0, 9.8 ]), [ 7, 1, 1_791_440_000_123 ]))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.2, 0, 9.8 ]), [ 8, 1, 1_791_440_000_223 ]))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/board1/strokes", MessagePack.pack([ [ 1, 2 ] ]), [ 3, 1 ]))
     jpeg = "\xFF\xD8\xFF\xE0jpeg".b
-    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/camera", jpeg, [ 0 ], enc: "image/jpeg"))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/camera", jpeg, [ 0, 1 ], enc: "image/jpeg"))
     assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/plain", MessagePack.pack(1), nil, ts: nil))
-    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/text", "hello", [ 1 ], enc: "text/plain"))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/text", "hello", [ 1, 1 ], enc: "text/plain"))
     rec.finish
     r = MCAP::Reader.new(@dir.join("r.mcap").to_s)
     assert r.verify!
@@ -126,12 +126,12 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
     asked = []
     rec = recorder(declarations: ->(k, from) { asked << [ k, from ] && decls[[ k, from ]] }).open
     sample = ->(k, att) { Asterism::Zenoh::Sample.new(key: k, payload: MessagePack.pack(1), attachment: att && MessagePack.pack(att)) }
-    rec.key("asterism/**", sample.(key, [ 4, nil, "host/games" ]))
-    rec.key("asterism/**", sample.(key, [ 0, 1_791_440_000_500, "host/room01" ]))
-    rec.key("asterism/**", sample.(key, [ 5, nil, "host/games" ]))
-    rec.key("asterism/**", sample.(key, [ 1, nil ])) # no sender: the key alone
-    rec.key("asterism/@shared/**", sample.("asterism/@shared/lobby", [ 9, nil, "pc/chat" ]))
-    rec.key("asterism/**", sample.("asterism/host/games/x", [ 2, nil, "host/room01" ])) # an app's key: no third element read
+    rec.key("asterism/**", sample.(key, [ 4, 1, nil, "host/games" ]))
+    rec.key("asterism/**", sample.(key, [ 0, 2, 1_791_440_000_500, "host/room01" ]))
+    rec.key("asterism/**", sample.(key, [ 5, 1, nil, "host/games" ]))
+    rec.key("asterism/**", sample.(key, [ 1, 3 ])) # no sender: the key alone
+    rec.key("asterism/@shared/**", sample.("asterism/@shared/lobby", [ 9, 4, nil, "pc/chat" ]))
+    rec.key("asterism/**", sample.("asterism/host/games/x", [ 2, 1, nil, "host/room01" ])) # an app's key: no fourth element read
     assert_equal 4, rec.progress["channel_counts"][key], "the senders' channels summed by topic"
     rec.finish
     assert_includes asked, [ key, "host/room01" ]
@@ -160,6 +160,53 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
   ensure
     r&.close
     v&.close
+  end
+
+  test "run ids: a channel per run, gaps in a run counted as lost, a new run not; forgetting an application that left" do
+    key = "asterism/linux/demo/imu"
+    shared = "asterism/host/@shared/spectate/t1/state"
+    rec = recorder.open
+    rec.lost = -> { 2 } # what the subscriptions dropped
+    put = ->(k, att, expr: "asterism/**") { rec.key(expr, Asterism::Zenoh::Sample.new(key: k, payload: MessagePack.pack(1), attachment: MessagePack.pack(att))) }
+    [ 10, 11, 14 ].each { put.(key, [ _1, 500 ]) }                 # 12 and 13 lost
+    [ 0, 1 ].each { put.(key, [ _1, 501 ]) }                       # the sender connected again: a new run
+    put.(key, [ 5, 501 ], expr: "asterism/linux/**")                 # another expression's subscription: its own first value
+    [ 0, 3 ].each { put.(shared, [ _1, 7, nil, "host/room01" ]) }    # 1 and 2 lost, per sender
+    put.(shared, [ 0, 9, nil, "host/games" ])
+    put.(key, [ 2_147_483_647, 502 ])
+    put.(key, [ 0, 502 ])                                            # wraps: no gap
+    p = rec.progress
+    assert_equal [ 4, 6, 2 ], p.values_at("gaps", "lost", "restarts"), "2 + 2 gaps, the dropped ones besides; runs 501 and 502"
+    # The application left: its next value is a first one (no gap counted from what came before).
+    rec.forget("linux/demo")
+    put.(key, [ 9, 502 ])
+    rec.forget("host/room01")
+    put.(shared, [ 9, 7, nil, "host/room01" ])
+    put.(shared, [ 3, 9, nil, "host/games" ]) # host/games did not leave: 1 and 2 lost
+    assert_equal [ 6, 2 ], rec.progress.values_at("gaps", "restarts"), "the forgotten ones start again without a gap"
+    rec.finish
+    r = MCAP::Reader.new(@dir.join("r.mcap").to_s)
+    assert r.verify!
+    imu = r.info["channels"].select { _1["topic"] == key }
+    assert_equal %w[500 501 502], imu.map { _1["metadata"]["asterism_run"] }.uniq.sort, "a channel per run"
+    seqs = r.each_message.filter_map { |m, ch, _| [ ch.metadata["asterism_run"], m.sequence ] if ch.topic == key }
+    assert_equal [ 10, 11, 14 ], seqs.select { _1[0] == "500" }.map(&:last)
+    assert_equal [ 0, 1, 5 ], seqs.select { _1[0] == "501" }.map(&:last)
+    room = r.info["channels"].select { _1["topic"] == shared }.map { _1["metadata"].values_at("asterism_from", "asterism_run") }
+    assert_equal [ [ "host/games", "9" ], [ "host/room01", "7" ] ], room.sort
+    assert_equal [ 500, 501, 502 ], imu.map { Bag::Channels.run(_1) }.uniq.sort
+    v = Bag::View.new(@dir.join("r.mcap").to_s)
+    assert_equal [ 500, 501, 502 ], v.channels.select { _1["topic"] == key }.map { _1["run"] }.uniq.sort, "the timeline tells the runs"
+    assert_equal [ nil ], v.channels.select { _1["topic"] == shared }.map { _1["run"] }.uniq, "one run per sender: not told"
+    plain = Bridge::Recorder.new(id: 3, path: @dir.join("n.mcap"), max_bytes: 1024 * 1024, max_seconds: 60).open
+    plain.key("asterism/**", Asterism::Zenoh::Sample.new(key: key, payload: MessagePack.pack(1), attachment: MessagePack.pack([ 4 ])))
+    plain.finish
+    no_run = MCAP::Reader.new(@dir.join("n.mcap").to_s)
+    refute no_run.info["channels"][0]["metadata"].key?("asterism_run"), "a value without a run id: no run in the metadata"
+  ensure
+    r&.close
+    v&.close
+    no_run&.close
   end
 
   test "the size limit: the message that would pass it is not written, and the reason is told" do

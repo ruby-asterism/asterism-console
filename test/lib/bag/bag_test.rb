@@ -90,8 +90,18 @@ class BagTest < ActiveSupport::TestCase
     assert_equal [ "image/jpeg", 32, 16 ], m["image"].values_at("mime", "width", "height")
     assert_equal({ "t" => 4, "e" => 17 }, Bag::Channels.declaration(v.channels[0]))
     assert_equal [ "msgpack", "image/png" ], [ Bag::Channels.message_encoding("zenoh/bytes"), Bag::Channels.message_encoding("image/png") ]
-    assert_equal [ [ 5, 12, nil ], [ 5, nil, nil ], [ nil, nil, nil ], [ nil, nil, nil ] ],
-                 [ [ 5, 12 ], [ 5 ], [ -1 ], "x" ].map { Bag::Channels.attachment(MessagePack.pack(_1)) }
+    app_key = "asterism/linux/demo/imu"
+    assert_equal [ [ 5, 12, nil, nil ], [ 5, 12, 1_791_440_000_123, nil ], [ 5, nil, nil, nil ], [ nil, nil, nil, nil ],
+                   [ nil, nil, nil, nil ], [ 5, 12, nil, nil ] ],
+                 [ [ 5, 12 ], [ 5, 12, 1_791_440_000_123 ], [ 5 ], [ -1 ], "x", [ 5, 12, nil, "linux/other" ] ]
+                   .map { Bag::Channels.attachment(app_key, MessagePack.pack(_1)) }, "an app's key: no sender read"
+    assert_equal [ nil, nil, nil, nil ], Bag::Channels.attachment(app_key, nil)
+    assert_equal [ 3, 7, nil, "host/room01" ],
+                 Bag::Channels.attachment("asterism/host/@shared/t1", MessagePack.pack([ 3, 7, nil, "host/room01" ]))
+    assert_equal [ 3, 7, nil, nil ],
+                 Bag::Channels.attachment("asterism/host/@shared/t1", MessagePack.pack([ 3, 7, nil, "pc/chat" ])),
+                 "another node's sender on a node's place: none"
+    assert_equal [ 3, 7, 9, "pc/chat" ], Bag::Channels.attachment("asterism/@shared/lobby", MessagePack.pack([ 3, 7, 9, "pc/chat" ]))
   ensure
     v&.close
   end

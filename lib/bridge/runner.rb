@@ -157,6 +157,7 @@ module Bridge
       @profiles = Profiles.new
       @profile_queue = Queue.new # [node, notice or nil] or [:app, app] for the profile worker
       @app_profiles = AppProfiles.new
+      @apps_here = nil # the applications sync_app_profiles saw last
       @watch = nil # Bridge::RouterWatch (run)
       @stop = false
     end
@@ -262,6 +263,7 @@ module Bridge
       @log_subs = {}
       @profiles.clear
       @app_profiles.clear
+      @apps_here = nil
       @profile_queue.clear
     end
 
@@ -904,9 +906,16 @@ module Bridge
     end
 
     # The applications that appeared are asked (once; again after they
-    # leave and come back).
+    # leave and come back). Those that left are forgotten: their
+    # declarations and types (AppProfiles#due) and the numbers the
+    # recordings follow of their values (Recorder#forget, docs/protocol.md
+    # 8.5 and 9.4 of the asterism gem).
     def sync_app_profiles
-      @app_profiles.due(asterism_apps).each { @profile_queue << [ :app, _1 ] }
+      apps = asterism_apps
+      gone = @apps_here ? @apps_here - apps : []
+      @apps_here = apps
+      gone.each { |app| @recorders.each_value { _1[:recorder].forget(app) } }
+      @app_profiles.due(apps).each { @profile_queue << [ :app, _1 ] }
     end
 
     # A put on asterism/<node>/<app>/@status (the receiving thread).

@@ -10,7 +10,7 @@
 # application declares what it puts there in its own @pubs, under the
 # entry "<node>/@shared/<name>" or "@shared/<name>" (the key under
 # "asterism/"). Several applications may put on one key; each value's
-# attachment names its sender ([seq, ms or nil, "<node>/<app>"]) and the
+# attachment names its sender ([seq, id, ms or nil, "<node>/<app>"]) and the
 # numbers count per sender. The type is read from the sender's own
 # declaration and definitions.
 #

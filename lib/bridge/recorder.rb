@@ -12,7 +12,13 @@
 #                  declared type (and the definitions of an application's
 #                  own type, Bag::Channels); sequence the attachment's
 #                  number, publish_time the sender's time of the attachment,
-#                  else the router's timestamp
+#                  else the router's timestamp; a channel per run id of the
+#                  attachment (a sender that connects again starts a new
+#                  channel). The numbers are followed as a reader does
+#                  (Asterism::Sequences, per key expression subscribed, per
+#                  key and, on a shared place, sender): a gap in a run is
+#                  counted as lost, a new run is not; forget drops what is
+#                  kept of an application that left
 #   graph(...)     the network structure: a snapshot when the recording starts
 #                  and every SNAPSHOT_EVERY seconds of changes, a diff on
 #                  every change in between
@@ -32,6 +38,10 @@ module Bridge
     # How many samples the subscriptions dropped before the recorder saw
     # them (their queues were full): set by the runner.
     attr_writer :lost
+    # Values missing from the senders' numbering (lost on the way, or by
+    # the sender's own queue), and the new runs seen (a sender connected
+    # again, or numbered from an unexpected place).
+    attr_reader :gaps, :restarts
 
     # qos: a block that gives the QoS profiles (Bag::Qos.parse Hashes) of a
     # topic id's publishers, for the channel's offered_qos_profiles.
@@ -56,6 +66,10 @@ module Bridge
       @stop_reason = nil
       @graph_snapshot_at = nil
       @lost = -> { 0 }
+      @seq_lock = Mutex.new
+      @seqs = {} # key expression => Asterism::Sequences
+      @gaps = 0
+      @restarts = 0
     end
 
     def open
@@ -96,12 +110,18 @@ module Bridge
     def key(expr, sample)
       key = sample.key.to_s
       enc = Bag::Channels.message_encoding(sample.respond_to?(:encoding) ? sample.encoding : nil)
-      seq, ms, from = Bag::Channels.attachment(sample.attachment)
-      from = nil unless Shared.key?(key)
-      write("key:#{key} #{enc}#{" #{from}" if from}", sample.payload, sample_time(sample)) do
-        args = -> { key_channel_args(expr, key, enc, from) }
+      seq, run, ms, from = Bag::Channels.attachment(key, sample.attachment)
+      count(expr, key, seq, run, from) if seq
+      write("key:#{key} #{enc}#{" #{from}" if from}#{" run #{run}" if run}", sample.payload, sample_time(sample)) do
+        args = -> { key_channel_args(expr, key, enc, from, run) }
         [ args, ms && ms * 1_000_000, seq ]
       end
+    end
+
+    # The application app ("<node>/<app>") left the network: the numbers
+    # kept of its values are forgotten (its next value is a first one).
+    def forget(app)
+      @seq_lock.synchronize { @seqs.each_value { _1.forget(app) } }
     end
 
     # The network structure (main thread): the whole graph when there is no
@@ -133,20 +153,24 @@ module Bridge
     end
 
     # { "messages", "bytes", "duration_s", "channel_counts" => { topic => n },
-    #   "dropped" (not written: errors), "lost" (dropped by the subscriptions) }
+    #   "dropped" (not written: errors), "lost" (dropped by the subscriptions,
+    #   and missing from the senders' numbering), "gaps" (the latter alone),
+    #   "restarts" (new runs) }
     def progress
       lost = begin
         @lost.call.to_i
       rescue StandardError
         0
       end
+      gaps, restarts = @seq_lock.synchronize { [ @gaps, @restarts ] }
+      lost += gaps
       @lock.synchronize do
-        return { "messages" => 0, "bytes" => 0, "duration_s" => 0, "channel_counts" => {}, "dropped" => @dropped, "lost" => lost } unless @writer
+        return { "messages" => 0, "bytes" => 0, "duration_s" => 0, "channel_counts" => {}, "dropped" => @dropped, "lost" => lost, "gaps" => gaps, "restarts" => restarts } unless @writer
         # Summed by topic: a shared place's key has a channel per sender.
         counts = Hash.new(0)
         @writer.channel_counts.each { |cid, n| counts[@writer.channel(cid).topic] += n }
         { "messages" => @writer.message_count, "bytes" => @writer.size, "duration_s" => elapsed.round(2),
-          "channel_counts" => counts.to_h, "dropped" => @dropped, "lost" => lost }
+          "channel_counts" => counts.to_h, "dropped" => @dropped, "lost" => lost, "gaps" => gaps, "restarts" => restarts }
       end
     end
 
@@ -210,7 +234,22 @@ module Bridge
                           metadata: args[:metadata])
     end
 
-    def key_channel_args(expr, key, enc, from = nil)
+    # Follows the number seq of run id run on a key (from: its sender on a
+    # shared place) as a reader of expr does.
+    def count(expr, key, seq, run, from)
+      app = from
+      if app.nil? && !Shared.key?(key)
+        parts = key.split("/")
+        app = "#{parts[1]}/#{parts[2]}" if parts.size >= 4
+      end
+      @seq_lock.synchronize do
+        lost, restarted = (@seqs[expr] ||= ::Asterism::Sequences.new).see(from ? "#{key}\n#{from}" : key, run, seq, app)
+        @gaps += lost
+        @restarts += 1 if restarted
+      end
+    end
+
+    def key_channel_args(expr, key, enc, from = nil, run = nil)
       decl, types = begin
         @declarations.call(key, from)
       rescue StandardError
@@ -218,6 +257,7 @@ module Bridge
       end
       meta = { "asterism_key_expr" => expr, Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s }
       meta[Bag::Channels::FROM_KEY] = from if from
+      meta[Bag::Channels::RUN_KEY] = run.to_s if run
       meta[Bag::Channels::DECLARATION_KEY] = JSON.generate(decl) if decl
       { topic: key, message_encoding: enc, schema: Bag::Channels.key_schema(enc, decl, types), metadata: meta }
     end

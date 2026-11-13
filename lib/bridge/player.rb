@@ -13,10 +13,15 @@
 #   Asterism keys (msgpack, or a topic's own encoding): put on the recorded
 #     key as they are, with the recorded encoding (none for msgpack) and,
 #     for a protocol 2 recording, the attachment of protocol 2: the
-#     recorded sequence number and, for a topic declared with "ts", the
-#     recorded publish time in ms. A shared place's channel (one per
-#     sender, Bag::Channels) goes out in the shared form of its sender:
-#     [seq, ms or nil, "<node>/<app>"].
+#     recorded sequence number, a run id and, for a topic declared with
+#     "ts", the recorded publish time in ms ([seq, id] or [seq, id, ms]).
+#     A shared place's channel (one per sender, Bag::Channels) goes out in
+#     the shared form of its sender: [seq, id, ms or nil, "<node>/<app>"].
+#     The run id is the playback's own, as a connection's is (the console
+#     puts the values, the sender is not there): a new random one for each
+#     sender's recorded run (asterism_run, or none for a recording made
+#     before run ids), so the runs stay apart as they were recorded and a
+#     reader does not take the playback for the sender's live run.
 #   The network structure (and anything else): not sent.
 #
 # The payloads are sent as recorded (the CDR bytes are not decoded), so a
@@ -59,6 +64,7 @@ module Bridge
       @stop = false
       @nodes = {}
       @publishers = {}
+      @runs = {} # [sender, recorded run id or nil] => the run id put
     end
 
     def start
@@ -163,9 +169,9 @@ module Bridge
     end
 
     # The put's options of a key channel's message: its encoding (none for
-    # msgpack) and, recorded with protocol 2, the attachment [seq] or
-    # [seq, ms] (a topic declared with "ts"), or on a shared place's
-    # channel [seq, ms or nil, its sender].
+    # msgpack) and, recorded with protocol 2, the attachment [seq, id] or
+    # [seq, id, ms] (a topic declared with "ts"), or on a shared place's
+    # channel [seq, id, ms or nil, its sender].
     def key_options(c, m)
       opts = {}
       opts[:encoding] = c.message_encoding unless c.message_encoding == "msgpack"
@@ -173,12 +179,24 @@ module Bridge
         h = channel_hash(c)
         ms = m.publish_time / 1_000_000 if Bag::Channels.declaration(h)["ts"] == true
         from = Bag::Channels.from(h)
-        att = if from && Shared.key?(c.topic) then [ m.sequence, ms, from ]
-        else [ m.sequence, *ms ]
+        shared = from && Shared.key?(c.topic)
+        id = run_id(shared ? from : c.topic.split("/")[1, 2].join("/"), Bag::Channels.run(h))
+        att = if shared then [ m.sequence, id, ms, from ]
+        else [ m.sequence, id, *ms ]
         end
         opts[:attachment] = MessagePack.pack(att)
       end
       opts
+    end
+
+    # The run id this playback puts for a sender's recorded run.
+    def run_id(sender, run)
+      @runs[[ sender, run ]] ||= begin
+        used = @runs.values
+        id = rand(0x10000)
+        id = rand(0x10000) while used.size < 0x10000 && used.include?(id)
+        id
+      end
     end
 
     def wait(seconds)

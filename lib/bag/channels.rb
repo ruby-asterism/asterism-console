@@ -34,11 +34,19 @@
 #                    A key of a shared place (Bridge::Shared:
 #                    asterism/<node>/@shared/..., asterism/@shared/...) may
 #                    have several senders, each numbering its own values
-#                    (attachment [seq, ms or nil, "<node>/<app>"]): it gets
-#                    a channel per key and sender, the same topic, the
+#                    (attachment [seq, id, ms or nil, "<node>/<app>"]): it
+#                    gets a channel per key and sender, the same topic, the
 #                    sender in the metadata asterism_from, the schema and
 #                    asterism_declaration from that sender's declaration
-#                    and definitions
+#                    and definitions.
+#                    Every value's attachment has the run id of its
+#                    sender's connection ([seq, id], [seq, id, ms]): a new
+#                    id is a new run (the sender connected again), whose
+#                    numbers start again from 0. A run gets a channel of
+#                    its own (the same topic, the id in the metadata
+#                    asterism_run), so a channel's sequence numbers are one
+#                    run's and go up one by one: a gap in them is a value
+#                    lost, and a restart is a new channel, not a gap
 #   the network      topic "/asterism/graph", message encoding "json",
 #                    schema "asterism/graph" (a JSON Schema): snapshots and
 #                    diffs of the console's graph (Bridge::Graph)
@@ -58,6 +66,9 @@ module Bag
     # The channel metadata with the sender of a shared place's key
     # ("<node>/<app>").
     FROM_KEY = "asterism_from"
+    # The channel metadata with the run id of the values (the sender's
+    # connection, as a decimal string): a run has a channel of its own.
+    RUN_KEY = "asterism_run"
     # The built-in types by number (docs/protocol.md 11 of the asterism gem).
     BUILTIN_TYPES = %w[number vector3 pose image state log text].freeze
     # The highest sequence number (it goes back to 0 after it).
@@ -106,22 +117,31 @@ module Bag
       e.empty? || e == "zenoh/bytes" ? "msgpack" : e
     end
 
-    # [sequence number, sender's time in ms or nil, sender or nil] of an
-    # Asterism attachment ([seq], [seq, ms] or, on a shared place,
-    # [seq, ms or nil, "<node>/<app>"] in MessagePack), or [nil, nil, nil].
-    def attachment(bytes)
-      return [ nil, nil, nil ] if bytes.nil? || bytes.empty?
-      require "msgpack"
-      a = MessagePack.unpack(bytes.to_s.b)
-      return [ nil, nil, nil ] unless a.is_a?(Array) && a[0].is_a?(Integer) && a[0].between?(0, SEQ_MAX)
-      [ a[0], a[1].is_a?(Integer) ? a[1] : nil, Bridge::Shared.sender(a[2]) ]
+    # [sequence number, run id, sender's time in ms, sender] of an Asterism
+    # attachment on key (Asterism.read_attachment: [seq, id], [seq, id, ms]
+    # or, on a shared place, [seq, id, ms or nil, "<node>/<app>"] in
+    # MessagePack; the sender is read on a shared place's key only), each
+    # nil when it is not there; [nil, nil, nil, nil] without a number.
+    def attachment(key, bytes)
+      none = [ nil, nil, nil, nil ]
+      return none if bytes.nil? || bytes.empty?
+      require "asterism"
+      place, node, = Bridge::Shared.key_place(key)
+      ::Asterism.read_attachment(bytes.to_s.b, place, node) || none
     rescue StandardError
-      [ nil, nil, nil ]
+      none
     end
 
     # The sender a key channel was recorded for (a shared place's), or nil.
     def from(channel)
       Bridge::Shared.sender(channel.dig("metadata", FROM_KEY))
+    end
+
+    # The run id a key channel was recorded for, or nil (values without
+    # one, or a recording made before run ids).
+    def run(channel)
+      s = channel.dig("metadata", RUN_KEY).to_s
+      s.match?(/\A\d{1,10}\z/) ? s.to_i : nil
     end
 
     # [name, encoding, data] of a key channel's schema (above): enc the

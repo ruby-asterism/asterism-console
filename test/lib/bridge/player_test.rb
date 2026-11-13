@@ -118,10 +118,12 @@ class Bridge::PlayerTest < ActiveSupport::TestCase
     by = puts_seen.to_h { [ _1[0], _1 ] }
     imu = by["asterism/linux/demo/imu"]
     refute imu[2].key?(:encoding), "MessagePack goes without an encoding"
-    assert_equal [ 41, 1_791_400_000_123 ], MessagePack.unpack(imu[2][:attachment])
+    imu_att = MessagePack.unpack(imu[2][:attachment])
+    assert_equal [ 41, 1_791_400_000_123 ], imu_att.values_at(0, 2)
+    assert imu_att[1].between?(0, 0xffff), "a run id of the playback's"
     cam = by["asterism/linux/demo/camera"]
     assert_equal "image/jpeg", cam[2][:encoding]
-    assert_equal [ 5 ], MessagePack.unpack(cam[2][:attachment]), "no ts declared: the number alone"
+    assert_equal [ 5, imu_att[1] ], MessagePack.unpack(cam[2][:attachment]), "no ts declared: the number and the run id (one run of linux/demo)"
     assert_equal "\xFF\xD8jpeg".b, cam[1]
     assert_equal({}, by["asterism/linux/demo/old"][2], "a protocol 1 recording: as it was")
   end
@@ -154,8 +156,44 @@ class Bridge::PlayerTest < ActiveSupport::TestCase
     pl.define_singleton_method(:wait) { |_s| nil }
     pl.run
     assert_nil pl.error
+    ids = seen.map { _1[1][1] }
+    assert ids.all? { _1.is_a?(Integer) && _1.between?(0, 0xffff) }
     assert_equal [ [ key, [ 4, nil, "host/games" ] ], [ key, [ 0, 1_791_440_000_500, "host/room01" ] ],
-                   [ "asterism/@shared/lobby", [ 9, nil, "pc/chat" ] ], [ "asterism/host/games/x", [ 3 ] ] ], seen
+                   [ "asterism/@shared/lobby", [ 9, nil, "pc/chat" ] ], [ "asterism/host/games/x", [ 3 ] ] ],
+                 seen.map { |k, a| [ k, a.values_at(0, *(2...a.size)) ] }, "the sender's form, with a run id"
+    assert_equal ids[0], ids[3], "host/games: one run on its own key and on the shared one"
+    assert_equal 3, ids.uniq.size, "the other senders' runs apart"
+  end
+
+  test "recorded runs go out as runs of the playback's own, apart as they were recorded" do
+    path = @dir.join("runs.mcap").to_s
+    key = "asterism/linux/demo/imu"
+    t0 = @t0
+    File.open(path, "wb") do |f|
+      w = MCAP::Writer.new(f, profile: "ros2")
+      sid = w.add_schema(name: "asterism/number", encoding: "", data: "")
+      chan = lambda do |run|
+        w.add_channel(topic: key, message_encoding: "msgpack", schema_id: sid,
+                      metadata: { "asterism_key_expr" => "asterism/**", "asterism_protocol" => "2",
+                                  "asterism_declaration" => JSON.generate("t" => 1), "asterism_run" => run }.compact)
+      end
+      a = chan.("500")
+      b = chan.("501")
+      w.add_message(channel_id: a, log_time: t0, publish_time: t0, sequence: 7, data: MessagePack.pack(1))
+      w.add_message(channel_id: a, log_time: t0 + 1, publish_time: t0, sequence: 8, data: MessagePack.pack(2))
+      w.add_message(channel_id: b, log_time: t0 + 2, publish_time: t0, sequence: 0, data: MessagePack.pack(3))
+      w.finish
+    end
+    seen = []
+    pl = Bridge::Player.new(playback_id: 4, path: path, speed: 100.0, session: @session,
+                            put: ->(_k, _b, **opts) { seen << MessagePack.unpack(opts[:attachment]) })
+    pl.define_singleton_method(:wait) { |_s| nil }
+    pl.run
+    assert_nil pl.error
+    assert_equal [ 7, 8, 0 ], seen.map(&:first)
+    assert_equal seen[0][1], seen[1][1], "one recorded run, one run id"
+    refute_equal seen[1][1], seen[2][1], "the next recorded run, another"
+    assert_equal 2, seen[0].size, "no ts: [seq, id]"
   end
 
   test "from a time, only some channels; stop" do

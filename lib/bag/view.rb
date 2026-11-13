@@ -66,8 +66,15 @@ module Bag
         else "other"
         end
         # A shared place's key has a channel per sender (Channels): "from".
-        c.merge("kind" => kind, "type" => kind == "ros" ? c["schema"] : nil, "from" => kind == "key" ? Channels.from(c) : nil)
+        c.merge("kind" => kind, "type" => kind == "ros" ? c["schema"] : nil, "from" => kind == "key" ? Channels.from(c) : nil,
+                "run" => kind == "key" ? Channels.run(c) : nil)
       end
+      # A key has a channel per run of its sender (Channels): the run is
+      # told only where there are several (the sender connected again).
+      @channels.group_by { _1.values_at("topic", "from") }.each_value do |cs|
+        cs.each { _1["run"] = nil } if cs.map { _1["run"] }.uniq.size < 2
+      end
+      @channels
     end
 
     def channel(id) = channels.find { _1["id"] == id.to_i }

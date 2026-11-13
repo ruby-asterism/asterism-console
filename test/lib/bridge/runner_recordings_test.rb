@@ -104,6 +104,29 @@ class Bridge::RunnerRecordingsTest < ActiveSupport::TestCase
     reader.close
   end
 
+  test "the row's lost count has the gaps in the senders' numbers; an application that leaves is forgotten" do
+    r = recording(topics: [], keys: [ "asterism/**" ], structure: false)
+    @runner.send(:sync_recordings)
+    keys = @runner.instance_variable_get(:@asterism_keys)
+    keys["asterism/linux/demo"] = true
+    @runner.send(:sync_app_profiles)
+    put = ->(seq, run) { @z.deliver_sample(Asterism::Zenoh::Sample.new(key: "asterism/linux/demo/imu", payload: MessagePack.pack(1), attachment: MessagePack.pack([ seq, run ]))) }
+    put.(0, 40)
+    put.(3, 40) # 1 and 2 lost
+    put.(0, 41) # connected again: a new run, nothing lost
+    @runner.send(:report_recordings)
+    assert_equal 2, r.reload.lost
+    keys.delete("asterism/linux/demo") # its token went
+    @runner.send(:sync_app_profiles)
+    keys["asterism/linux/demo"] = true
+    put.(5, 41) # after it left: a first value, though the run is the same
+    @runner.send(:report_recordings)
+    assert_equal 2, r.reload.lost
+    r.stop!
+    @runner.send(:sync_recordings)
+    assert_equal 2, r.reload.lost
+  end
+
   test "asterism/** is recorded with the shared places beside it (@shared is verbatim)" do
     r = recording(topics: [], keys: [ "asterism/**", "asterism/host/**", "asterism/@shared/**" ], structure: false)
     @runner.send(:sync_recordings)

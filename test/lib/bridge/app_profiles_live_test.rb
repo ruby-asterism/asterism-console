@@ -31,6 +31,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     cam = net.publish("camera", type: :image, encoding: "image/jpeg")
     net.define_type("mygame/state", [ [ "turn", "int" ] ])
     mine = net.publish("spectate/t1/state", shared: :node, type: "mygame/state")
+    quick = nil
     seen = []
     net.subscribe("*/*/played") { |v, info| seen << [ v, info.seq, info.time ] }
     net.subscribe("*/@shared/replayed/**") { |v, info| seen << [ v, info.seq, info.time, info.from ] }
@@ -62,6 +63,16 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
       when "leave"
         spec.close
         spec = nil
+      when "restart"
+        # A sender that connects again at once: a new run id, numbers from 0.
+        2.times do |run|
+          quick&.close
+          quick = Asterism.connect(ARGV[0], node: "livenode", app: "quick")
+          n = quick.publish("n", type: :number)
+          t = Time.now
+          Asterism.poll_all while Time.now - t < 0.3 # the publisher learns of the subscriber
+          (run == 0 ? 3 : 4).times { |i| n.put(i) }
+        end
       when "seen"
         STDOUT.puts JSON.generate(seen)
       end
@@ -69,6 +80,7 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
       STDOUT.flush
     end
     spec&.close
+    quick&.close
     net.close
     router.close
   RUBY
@@ -229,11 +241,12 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     room_meta = chans.find { _1["metadata"]["asterism_from"] == "livenode/room01" }["metadata"]
     r.close
 
-    # Played back onto another shared key: the app reads the sender and its numbers.
+    # Played back onto another key of the sender's node's place (a sender of another node is none
+    # there): the app reads the sender and its numbers.
     played = @dir.join("replayed.mcap")
     File.open(played, "wb") do |f|
       w = MCAP::Writer.new(f, profile: "ros2")
-      c = w.add_channel(topic: "asterism/console/@shared/replayed/t1", message_encoding: "msgpack",
+      c = w.add_channel(topic: "asterism/livenode/@shared/replayed/t1", message_encoding: "msgpack",
                         schema_id: w.add_schema(name: "mygame/state", encoding: "", data: ""), metadata: room_meta)
       room.each { w.add_message(channel_id: c, log_time: _1.log_time, publish_time: _1.publish_time, sequence: _1.sequence, data: _1.data) }
       w.finish
@@ -304,5 +317,28 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     seen = JSON.parse(tell("seen").first)
     assert_equal seqs, seen.map { _1[1] }
     assert_equal imu.map { _1.publish_time / 1_000_000 }, seen.map { _1[2] }
+  end
+
+  test "a sender that connects again at once while recording: a new run, a channel of its own, nothing lost" do
+    path = @dir.join("restart.mcap")
+    rec = Bridge::Recorder.new(id: 3, path: path, max_bytes: 1024 * 1024, max_seconds: 60).open
+    sub = @z.subscribe("asterism/livenode/quick/**", depth: 64) { rec.key("asterism/livenode/quick/**", _1) }
+    rec.lost = -> { sub.dropped.to_i }
+    tell("restart")
+    eventually { rec.progress["messages"] >= 7 }
+    p = rec.progress
+    assert_equal [ 0, 0, 1 ], p.values_at("lost", "gaps", "restarts"), "a new run is not a loss"
+    sub.close
+    rec.finish
+    r = MCAP::Reader.new(path.to_s)
+    chans = r.info["channels"].select { _1["topic"] == "asterism/livenode/quick/n" }
+    runs = chans.map { _1["metadata"]["asterism_run"] }
+    assert_equal 2, runs.uniq.size, "a channel per run"
+    assert runs.all? { _1.to_i.between?(0, 0xffff) && _1 == _1.to_i.to_s }
+    seqs = r.each_message.filter_map { |m, ch, _| [ ch.metadata["asterism_run"], m.sequence ] if ch.topic == "asterism/livenode/quick/n" }
+    assert_equal [ [ 0, 1, 2 ], [ 0, 1, 2, 3 ] ], seqs.chunk_while { _1[0] == _2[0] }.map { |c| c.map(&:last) },
+                 "each run numbered from 0, one by one"
+  ensure
+    r&.close
   end
 end

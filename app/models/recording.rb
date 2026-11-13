@@ -15,7 +15,8 @@
 #
 # messages, bytes, duration_s and channel_counts are the progress the
 # bridge writes about once a second (lost: messages the subscriptions
-# dropped before they could be written, or that failed to be written); info is what MCAP::Reader says of the
+# dropped before they could be written, that failed to be written, or that
+# are missing from a sender's sequence numbers); info is what MCAP::Reader says of the
 # finished (or uploaded) file, kept so the list does not read every file.
 class Recording < ApplicationRecord
   STATUSES = %w[pending recording stopping done failed uploaded].freeze
