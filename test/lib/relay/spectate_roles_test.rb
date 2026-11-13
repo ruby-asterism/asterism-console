@@ -32,8 +32,12 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
                              "watch" => %w[asterism/**] } }.freeze
   SPECTATOR = { "name" => "spectator", "for_browsers" => false,
                 "templates" => { "read" => %w[asterism/*/@shared/spectate/** asterism/*/games/@profile
-                                              asterism/*/games/@pubs asterism/*/room$*/@profile asterism/*/room$*/@pubs],
-                                 "ask" => %w[asterism/*/games/@profile asterism/*/room$*/@profile],
+                                              asterism/*/games/@pubs asterism/*/room$*/@profile asterism/*/room$*/@pubs
+                                              asterism/*/games/spectate/call/${node}
+                                              asterism/*/room$*/spectate/call/${node}],
+                                 "ask" => %w[asterism/*/games/@profile asterism/*/room$*/@profile
+                                             asterism/*/games/spectate/call/${node}
+                                             asterism/*/room$*/spectate/call/${node}],
                                  "watch" => %w[asterism/**] } }.freeze
   # docs/g1_5.md, "Looking only".
   VIEWER = { "name" => "viewer", "for_browsers" => false,
@@ -158,10 +162,26 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
     end
   end
 
+  test "a spectator calls the senders' spectate object (state after lost values), under its own name, and no other object" do
+    %w[games room01].each do |app|
+      k = "asterism/games/#{app}/spectate/call/spectator-a"
+      assert allowed?("spectator-a", "query", "ingress", k), k
+      assert allowed?("spectator-a", "reply", "egress", k), k
+      refute allowed?("spectator-a", "query", "ingress", "asterism/games/#{app}/spectate/call/player-a"), "another name"
+      refute allowed?("spectator-a", "query", "ingress", "asterism/games/#{app}/mahjong1/call/spectator-a"), "a table"
+      refute allowed?("spectator-a", "query", "ingress", "asterism/games/#{app}/spectate/meta"), "no meta"
+      refute allowed?("spectator-a", "declare_queryable", "ingress", k)
+    end
+    refute allowed?("spectator-a", "query", "ingress", "asterism/games/room01/spectate/call/*"), "no wildcard caller"
+    refute allowed?("room-01-s01", "query", "ingress", "asterism/games/games/spectate/call/room-01-s01"), "a seat"
+    refute allowed?("player-a", "query", "ingress", "asterism/games/room01/spectate/call/player-a"),
+           "a player calls the games application's objects (its role), not a room's"
+  end
+
   test "a spectator reads nothing else" do
     refute reads?("spectator-a", "asterism/games/@shared/other/x"), "the spectate keys only"
     refute reads?("spectator-a", "asterism/games/games/mahjong1/state"), "not the players' keys"
-    refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/mahjong1/call/spectator-a"), "no call"
+    refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/mahjong1/call/spectator-a"), "no table's call"
     refute allowed?("spectator-a", "query", "ingress", "asterism/games/games/mahjong1/meta")
     refute reads?("spectator-a", "room/01/asterism/games/games/mahjong1/state"), "not a room"
     refute allowed?("spectator-a", "declare_subscriber", "ingress", "asterism/**"), "not everything (the MCP bridge)"

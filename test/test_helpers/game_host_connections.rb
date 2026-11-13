@@ -9,6 +9,8 @@
 #            duplicate check, the node's profile (each connection of the
 #            node answers it), its own profile, status and topics, and the
 #            room's tables' spectate views on the same shared place
+#   both     answer a call on their object "spectate" (state(table): the
+#            last spectate view, for a reader that lost values)
 #
 # There is no "spectate" application any more (it was a second connection
 # of the host before the shared places).
@@ -29,7 +31,11 @@ module GameHostConnections
     [ "reply", "ingress", "asterism/games/room01/@profile" ],
     [ "put", "ingress", "asterism/games/room01/@status" ],
     [ "put", "ingress", "asterism/games/room01/@pubs" ],
-    [ "put", "ingress", "asterism/games/@shared/spectate/room01-mahjong1/state" ]
+    [ "put", "ingress", "asterism/games/@shared/spectate/room01-mahjong1/state" ],
+    [ "query", "egress", "asterism/games/games/spectate/call/spectator-a" ],
+    [ "reply", "ingress", "asterism/games/games/spectate/call/spectator-a" ],
+    [ "query", "egress", "asterism/games/room01/spectate/call/spectator-a" ],
+    [ "reply", "ingress", "asterism/games/room01/spectate/call/spectator-a" ]
   ].freeze
 
   # The actions the ACL refuses to the host (empty: it does all of them).
