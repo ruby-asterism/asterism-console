@@ -187,7 +187,9 @@ console's code is particular to it: two roles and a row.
   Read and write   asterism/${node}
                    asterism/${node}/games/**
                    asterism/${node}/@profile
+                   asterism/${node}/*/@profile
                    asterism/${node}/*/@status
+                   asterism/${node}/*/@pubs
                    asterism/${node}/spectate
                    asterism/${node}/spectate/**
   Read             asterism/*/game
@@ -200,14 +202,15 @@ console's code is particular to it: two roles and a row.
   "Watching the tables from outside" below). A role made before them
   works as before: the router drops those puts.
 
-  `asterism/${node}/*/@status` lets the host tell its tables' counts
-  (asterism-games 0.9.0, "Status"; asterism `docs/protocol.md` 8): a
-  `**` does not match the chunk `@status`, so it needs a line of its own.
-  The console reads the statuses with a rule of its own (0.3.4) and shows
-  them in the details of the host's node and app. A room's host tells
-  none: the rooms' rules let it write its own place there, which the
-  chunk `@status` is not part of, and the console only watches who is in a
-  room.
+  `asterism/${node}/*/@profile`, `asterism/${node}/*/@status` and
+  `asterism/${node}/*/@pubs` let the host's application answer its own
+  profile and tell its tables' counts and the topics it streams (Asterism
+  wire protocol 2; asterism `docs/protocol.md` 8 and 10): a `**` does not
+  match a chunk that starts with `@`, so each needs a line of its own. The
+  console reads them with rules of its own and shows them in the details
+  of the host's node and app. A room's host tells none: the rooms' rules
+  let it write its own place there, which those chunks are not part of,
+  and the console only watches who is in a room.
 
   `Read asterism/*/game` lets the router send the host the players' table
   apps' liveliness tokens (the app `game`), so that the host sees a player

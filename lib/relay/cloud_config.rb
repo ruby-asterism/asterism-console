@@ -72,11 +72,17 @@
 # (the graph's names, marks and icons, Bridge::Profiles). Nobody else gets
 # it.
 #
-# The applications' statuses (0.3.4, asterism's asterism/<node>/<app>/@status,
-# another verbatim chunk): the console's certificate gets the same kind of
-# rule for asterism/*/*/@status (the details of a node or an app,
-# Bridge::Statuses). A node that tells a status needs a role that lets it
-# write asterism/${node}/*/@status (docs/rooms.md: games-host does).
+# The applications' own profiles (asterism protocol 2: an application
+# answers asterism/<node>/<app>/@profile and puts its status and its
+# topics' declarations on .../@status and .../@pubs, other verbatim chunks):
+# the console's certificate gets the same kind of rules, from it the query
+# of asterism/*/*/@profile and the subscriptions to asterism/*/*/@status and
+# asterism/*/*/@pubs, to it the replies and the puts (the details of a node
+# or an app and the recorder's schemas, Bridge::AppProfiles). A node whose
+# applications tell a status or stream topics needs a role that lets it
+# write asterism/${node}/*/@profile (its queryable and replies),
+# asterism/${node}/*/@status and asterism/${node}/*/@pubs (docs/rooms.md:
+# games-host).
 #
 # Files with the console (0.3.14, T4b, docs/files.md): a row marked
 # files_to_console gets, for each node it speaks for, the ask line
@@ -154,9 +160,15 @@ module Relay
     PROFILES = "asterism/*/@profile".freeze
     PROFILES_IN = %w[declare_subscriber query].freeze
     PROFILES_OUT = %w[put reply].freeze
-    # The applications' statuses the console reads (0.3.4): the same, for
-    # asterism/*/*/@status (** does not match @status either).
-    STATUSES = "asterism/*/*/@status".freeze
+    # The applications' own profiles the console reads (protocol 2): the
+    # same, for asterism/*/*/@profile (queries, ** does not match @profile
+    # either) and the puts on asterism/*/*/@status and asterism/*/*/@pubs.
+    APP_PROFILES = "asterism/*/*/@profile".freeze
+    APP_PROFILES_IN = %w[query].freeze
+    APP_PROFILES_OUT = %w[reply].freeze
+    APP_NOTICES = [ "asterism/*/*/@status", "asterism/*/*/@pubs" ].freeze
+    APP_NOTICES_IN = %w[declare_subscriber].freeze
+    APP_NOTICES_OUT = %w[put].freeze
     # A seat's or a host's own writes in a room (0.3.0).
     OWN = %w[put delete declare_queryable liveliness_token reply].freeze
     ROOM_READ_IN = %w[declare_subscriber declare_liveliness_subscriber liveliness_query].freeze
@@ -327,7 +339,7 @@ module Relay
         end
         if p["name"] == @settings["console"]
           mine.concat(profile_rules(rules, id))
-          mine.concat(status_rules(rules, id))
+          mine.concat(app_profile_rules(rules, id))
           mine.concat(rooms_watch_rules(rules, id))
         end
         mine.concat(room_host_rules(rules, id, p["name"])) if room_hosts.include?(p["name"])
@@ -370,14 +382,20 @@ module Relay
       [ "#{id}__profiles_in", "#{id}__profiles_out" ]
     end
 
-    # The console's reading of the applications' statuses
-    # (asterism/<node>/<app>/@status, 0.3.4): the rules and their ids.
-    def status_rules(rules, id)
-      rules << { "id" => "#{id}__statuses_in", "messages" => PROFILES_IN, "flows" => %w[ingress],
-                 "permission" => "allow", "key_exprs" => [ STATUSES ] }
-      rules << { "id" => "#{id}__statuses_out", "messages" => PROFILES_OUT, "flows" => %w[egress],
-                 "permission" => "allow", "key_exprs" => [ STATUSES ] }
-      [ "#{id}__statuses_in", "#{id}__statuses_out" ]
+    # The console's reading of the applications' own profiles (protocol 2:
+    # asterism/<node>/<app>/@profile, @status, @pubs): the rules and their ids.
+    def app_profile_rules(rules, id)
+      list = [
+        [ "app_profiles_in", APP_PROFILES_IN, %w[ingress], [ APP_PROFILES ] ],
+        [ "app_profiles_out", APP_PROFILES_OUT, %w[egress], [ APP_PROFILES ] ],
+        [ "app_notices_in", APP_NOTICES_IN, %w[ingress], APP_NOTICES ],
+        [ "app_notices_out", APP_NOTICES_OUT, %w[egress], APP_NOTICES ]
+      ]
+      list.map do |suffix, messages, flows, keys|
+        rid = "#{id}__#{suffix}"
+        rules << { "id" => rid, "messages" => messages, "flows" => flows, "permission" => "allow", "key_exprs" => keys }
+        rid
+      end
     end
 
     # The console's watch of the rooms (when there are seats): the

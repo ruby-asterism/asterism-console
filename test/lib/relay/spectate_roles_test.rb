@@ -11,7 +11,8 @@ require_relative "../../test_helpers/acl_evaluator"
 class Relay::SpectateRolesTest < ActiveSupport::TestCase
   GAMES_HOST = { "name" => "games-host", "for_browsers" => false,
                  "templates" => { "rw" => %w[asterism/${node} asterism/${node}/games/** asterism/${node}/@profile
-                                             asterism/${node}/*/@status asterism/${node}/spectate
+                                             asterism/${node}/*/@profile asterism/${node}/*/@status
+                                             asterism/${node}/*/@pubs asterism/${node}/spectate
                                              asterism/${node}/spectate/**],
                                   "read" => %w[asterism/*/game], "watch" => %w[asterism/**] } }.freeze
   GAMES = { "name" => "games", "for_browsers" => true,
@@ -30,8 +31,9 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
   # docs/g1_5.md, "Looking only".
   VIEWER = { "name" => "viewer", "for_browsers" => false,
              "templates" => { "rw" => %w[asterism/${node}/** asterism/${node}/@profile],
-                              "read" => %w[asterism/** asterism/*/@profile asterism/*/*/@status],
-                              "ask" => %w[asterism/*/@profile asterism/*/*/*/meta asterism/*/*/@status],
+                              "read" => %w[asterism/** asterism/*/@profile asterism/*/*/@profile asterism/*/*/@status
+                                          asterism/*/*/@pubs],
+                              "ask" => %w[asterism/*/@profile asterism/*/*/*/meta asterism/*/*/@profile],
                               "watch" => %w[asterism/**] } }.freeze
 
   PEERS = [
@@ -71,6 +73,20 @@ class Relay::SpectateRolesTest < ActiveSupport::TestCase
     end
     assert allowed?("games", "liveliness_token", "ingress", "asterism/games/spectate")
     refute allowed?("games", "put", "ingress", "asterism/other-host/spectate/mahjong1/state"), "its own node only"
+  end
+
+  test "the host's application answers its own profile and puts its status and topics (protocol 2)" do
+    assert allowed?("games", "declare_queryable", "ingress", "asterism/games/games/@profile")
+    assert allowed?("games", "reply", "ingress", "asterism/games/games/@profile")
+    assert allowed?("games", "put", "ingress", "asterism/games/games/@status")
+    assert allowed?("games", "put", "ingress", "asterism/games/games/@pubs")
+    refute allowed?("games", "put", "ingress", "asterism/other-host/games/@pubs"), "its own node only"
+    %w[console admin-viewer].each do |s|
+      assert allowed?(s, "query", "ingress", "asterism/games/games/@profile"), s
+      assert allowed?(s, "reply", "egress", "asterism/games/games/@profile"), s
+      assert reads?(s, "asterism/games/games/@pubs"), s
+    end
+    %w[player-a spectator-a].each { refute allowed?(_1, "query", "ingress", "asterism/games/games/@profile"), _1 }
   end
 
   test "a spectator and a viewer read them" do
