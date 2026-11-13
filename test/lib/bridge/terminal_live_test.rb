@@ -19,20 +19,20 @@ class Bridge::TerminalLiveTest < ActiveSupport::TestCase
       def add(a, b) = a + b
       def sub(a, b) = a - b
     end
-    Asterism.status(tables: 1)
-    Asterism.connect(nil, node: "calcnode", app: "calc", mode: :peer, listen: ARGV[0])
-    Asterism.expose("calc", Calc.new, methods: { add: { args: %w[a b], doc: "Adds a and b." }, sub: 2 })
+    net = Asterism.connect(nil, node: "calcnode", app: "calc", mode: :peer, listen: ARGV[0])
+    net.status(tables: 1)
+    net.expose("calc", Calc.new, methods: { add: { args: %w[a b], doc: "Adds a and b." }, sub: 2 })
     STDOUT.puts "ready"
     STDOUT.flush
     loop do
-      Asterism.poll
+      net.poll
       r, = IO.select([STDIN], nil, nil, 0.002)
       next unless r
       line = STDIN.gets
       break if line.nil?
-      Asterism.status(tables: line.to_i)
+      net.status(tables: line.to_i)
     end
-    Asterism.close
+    net.close
   RUBY
 
   setup do
@@ -42,17 +42,17 @@ class Bridge::TerminalLiveTest < ActiveSupport::TestCase
     incs = %w[asterism asterism-zenoh].flat_map { |g| Gem.loaded_specs.fetch(g).full_require_paths.flat_map { [ "-I", _1 ] } }
     @node = IO.popen([ RbConfig.ruby, *incs, "-e", NODE, loc ], "r+")
     assert_equal "ready", @node.gets&.strip
-    Asterism.connect(loc, node: "console", app: "console", mode: :peer)
-    Asterism.net.start
+    @net = Asterism.connect(loc, node: "console", app: "console", mode: :peer)
+    @net.start
     t = Time.now
-    sleep 0.05 until Asterism.each("calcnode/**").size == 1 || Time.now - t > 5
+    sleep 0.05 until @net.each("calcnode/**").size == 1 || Time.now - t > 5
     TerminalSession.renew(page: PAGE, user: users(:user))
-    @terminal = Bridge::Terminal.new(say: ->(_) { })
+    @terminal = Bridge::Terminal.new(say: ->(_) { }, net: -> { @net })
   end
 
   teardown do
     @terminal&.close
-    Asterism.close if Asterism.connected?
+    @net&.close
     if @node
       @node.close_write rescue nil
       @node.read rescue nil
@@ -113,7 +113,7 @@ class Bridge::TerminalLiveTest < ActiveSupport::TestCase
     @terminal.sync
     finished(c)
     assert_equal [ "stopped", "stopped (Ctrl-C)" ], [ c.status, c.reason ]
-    assert Asterism.connected?, "the connection stays"
+    assert @net.connected?, "the connection stays"
 
     t = typed("call calcnode/calc/calc a", kind: "complete")
     run_until { !TerminalCommand.exists?(t.id) }

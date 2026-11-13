@@ -3,7 +3,7 @@
 #
 # How the bridge learns them (Runner#sync_profiles, #profile_worker):
 #   - a node that appears is asked once, without the icon
-#     (Asterism.profile_of(node, icon: false)); when its icon_hash is not in
+#     (net.profile_of(node, icon: false)); when its icon_hash is not in
 #     the icon store (NodeIcon), it is asked again with the icon, which is
 #     kept by its hash. Nodes with the same icon share one row: the icon
 #     crosses the network once per icon, not once per node.

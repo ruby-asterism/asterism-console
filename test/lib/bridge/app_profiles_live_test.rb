@@ -3,29 +3,39 @@ require "asterism"
 require "socket"
 require "rbconfig"
 
-# Protocol 2 against a CRuby application in another process, over a peer
-# link (no router): the bridge asks its own profile (status, topics, types)
-# with one get, follows its puts on @status and @pubs (a new type of its
-# own asks again), and records its topics with their encoding, sequence
-# numbers, sender's time and declared types (Bridge::Recorder); a recorded
-# topic plays back with its attachment.
+# Protocol 2 against a CRuby program in another process, through a router
+# that program opens (zenoh-c in router mode): the bridge asks an
+# application's own profile (status, topics, types) with one get, follows
+# its puts on @status and @pubs (a new type of its own asks again), and
+# records its topics with their encoding, sequence numbers, sender's time
+# and declared types (Bridge::Recorder); a recorded topic plays back with
+# its attachment. The program holds two connections of one node, as a game
+# host does (asterism-games: "game" and "spectate"): the second is an
+# application of its own, with its token, profile and topics.
 class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
   APP = <<~'RUBY'
     require "asterism"
     require "json"
-    Asterism.status(tables: 1)
-    Asterism.define_type("mygame/point", [ [ "x", "int" ], [ "y", "int" ] ], desc: "a point")
-    Asterism.define_type("mygame/board.strokes", [ [ "pts", "mygame/point[]" ], [ "color", "str" ] ])
-    Asterism.connect(nil, node: "livenode", app: "demo", mode: :peer, listen: ARGV[0])
-    imu = Asterism.publish("imu", type: :vector3, unit: "m/s2", ts: true)
-    strokes = Asterism.publish("board1/strokes", type: "mygame/board.strokes")
-    cam = Asterism.publish("camera", type: :image, encoding: "image/jpeg")
+    router = Asterism::Zenoh::Session.open(nil, config: { "mode" => "router", "listen/endpoints" => [ ARGV[0] ],
+                                                          "scouting/multicast/enabled" => false })
+    net = Asterism.connect(ARGV[0], node: "livenode", app: "demo")
+    net.status(tables: 1)
+    net.define_type("mygame/point", [ [ "x", "int" ], [ "y", "int" ] ], desc: "a point")
+    net.define_type("mygame/board.strokes", [ [ "pts", "mygame/point[]" ], [ "color", "str" ] ])
+    imu = net.publish("imu", type: :vector3, unit: "m/s2", ts: true)
+    strokes = net.publish("board1/strokes", type: "mygame/board.strokes")
+    cam = net.publish("camera", type: :image, encoding: "image/jpeg")
     seen = []
-    Asterism.subscribe("*/*/played") { |v, info| seen << [ v, info.seq, info.time ] }
+    net.subscribe("*/*/played") { |v, info| seen << [ v, info.seq, info.time ] }
+    # The second application of the same node (a game host's spectate).
+    spec = Asterism.connect(ARGV[0], node: "livenode", app: "spectate")
+    spec.define_type("mygame/state", [ [ "turn", "int" ], [ "seats", "str[]" ] ])
+    table = spec.publish("t1/state", type: "mygame/state")
+    spec.status(watchers: 0)
     STDOUT.puts "ready"
     STDOUT.flush
     loop do
-      Asterism.poll
+      Asterism.poll_all
       r, = IO.select([ STDIN ], nil, nil, 0.002)
       next unless r
       line = STDIN.gets
@@ -35,17 +45,20 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
         3.times { |i| imu.put([ 0.1 * i, 0.0, 9.8 ]) }
         strokes.put([ [ [ 1, 2 ], [ 3, 4 ] ], "red" ])
         cam.put("\xFF\xD8\xFF\xE0jpeg".b)
-      when "status" then Asterism.status(tables: 2)
+        table.put([ 1, %w[a b] ])
+      when "status" then net.status(tables: 2)
       when "extra"
-        Asterism.define_type("mygame/extra", [ [ "v", :vector3 ] ])
-        Asterism.publish("extra", type: "mygame/extra")
+        net.define_type("mygame/extra", [ [ "v", :vector3 ] ])
+        net.publish("extra", type: "mygame/extra")
       when "seen"
         STDOUT.puts JSON.generate(seen)
       end
       STDOUT.puts "done"
       STDOUT.flush
     end
-    Asterism.close
+    spec.close
+    net.close
+    router.close
   RUBY
 
   setup do
@@ -54,14 +67,15 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     incs = %w[asterism asterism-zenoh].flat_map { |g| Gem.loaded_specs.fetch(g).full_require_paths.flat_map { [ "-I", _1 ] } }
     @app = IO.popen([ RbConfig.ruby, *incs, "-e", APP, @loc ], "r+")
     assert_equal "ready", @app.gets&.strip
-    @z = Asterism::Zenoh.open(@loc, mode: :peer)
+    @z = Asterism::Zenoh.open(@loc)
     @runner = Bridge::Runner.new(locator: @loc, logger: Logger.new(nil))
     @runner.instance_variable_set(:@z, @z)
     @runner.define_singleton_method(:say) { |_t| nil }
     @subs = [ @z.subscribe(Bridge::Runner::STATUSES) { @runner.send(:status_notice, _1) },
               @z.subscribe(Bridge::Runner::PUBS) { @runner.send(:pubs_notice, _1) } ]
     @z.start
-    @runner.instance_variable_get(:@asterism_keys)["asterism/livenode/demo"] = true
+    # The tokens the bridge follows (asterism/**): the two applications.
+    @z.liveliness_get("asterism/livenode/*", timeout: 2.0).each { @runner.instance_variable_get(:@asterism_keys)[_1] = true }
     @dir = Rails.root.join("tmp", "app-profiles-live-#{Process.pid}")
     FileUtils.mkdir_p(@dir)
   end
@@ -125,6 +139,36 @@ class Bridge::AppProfilesLiveTest < ActiveSupport::TestCase
     g = Bridge::Graph.build(asterism: %w[asterism/livenode/demo], app_profiles: profiles.to_graph).to_h
     app = g["nodes"].find { _1["id"] == "a_app:livenode/demo" }["data"]
     assert_equal %w[board1/strokes camera extra imu], app["pubs"].map { _1["name"] }
+  end
+
+  test "the second connection of the node is an application of its own: token, profile, topics, in the graph" do
+    keys = @runner.instance_variable_get(:@asterism_keys).keys
+    assert_equal %w[asterism/livenode/demo asterism/livenode/spectate], keys.sort, "an application token each"
+    assert_equal %w[livenode/demo livenode/spectate], @runner.send(:asterism_apps).sort
+    @runner.send(:sync_app_profiles)
+    work
+    got = profiles.to_graph["livenode/spectate"]
+    assert_equal({ "watchers" => 0 }, got["status"])
+    assert_equal({ "t1/state" => { "t" => "mygame/state" } }, got["pubs"])
+    assert_equal %w[mygame/state], got["types"].keys, "its own types, not the other connection's"
+    refute profiles.to_graph.dig("livenode/demo", "pubs", "t1/state"), "the other application does not declare it"
+    decl, defs = profiles.topic("asterism/livenode/spectate/t1/state")
+    assert_equal [ "mygame/state", %w[mygame/state] ], [ decl["t"], defs.keys ], "what a recording of it takes"
+    g = Bridge::Graph.build(asterism: keys, app_profiles: profiles.to_graph).to_h
+    app = g["nodes"].find { _1["id"] == "a_app:livenode/spectate" } || flunk("no spectate application")
+    assert_equal "a_node:livenode", app["parent"]
+    assert_equal [ "t1/state" ], app["data"]["pubs"].map { _1["name"] }
+    assert_equal({ "watchers" => 0 }, app["data"]["status"])
+    assert_equal 2, g["nodes"].count { _1["kind"] == "a_app" && _1["parent"] == "a_node:livenode" }
+  end
+
+  test "the node's profile, asked on the bridge's connection" do
+    net = Asterism.connect(@loc, node: "console", app: "console")
+    @runner.instance_variable_set(:@net, net)
+    @runner.send(:fetch_profile, "livenode", nil)
+    assert_equal "cruby", @runner.instance_variable_get(:@profiles).to_graph.dig("livenode", "kind")
+  ensure
+    net&.close
   end
 
   test "a recording of the topics: encoding, sequence, sender's time, schema; and its playback" do

@@ -1,8 +1,8 @@
 # The Terminal's commands in the bridge (docs/terminal.md): each command
 # line typed on a Terminal page (a TerminalCommand row) runs here with the
 # asterism gem's command line (Asterism::CLI), on the bridge's own
-# connection (CLI.new(net: Asterism.net)): the console's node, certificate
-# and ACL, no second session. Its output goes to that page alone
+# connection (CLI.new(net: the bridge's Asterism::Connection)): the
+# console's node, certificate and ACL, no second session. Its output goes to that page alone
 # (ConsoleChannel.send_terminal), in colour and at the page's width (the
 # output answers tty? and winsize as a terminal does).
 #
@@ -139,8 +139,10 @@ module Bridge
 
     # cli: makes the command line (out:, err:, stop:, permit:); the tests give
     # a stand-in. say: the bridge's log.
-    def initialize(say:, cli: nil)
+    # net: a callable giving the bridge's connection (nil while it has none).
+    def initialize(say:, cli: nil, net: -> { })
       @say = say
+      @net = net
       @cli = cli || method(:default_cli)
       @entries = {} # row id => Entry
       @done = Queue.new
@@ -359,7 +361,7 @@ module Bridge
     # The command line on the bridge's connection. Never without one: a
     # command line given no connection would open its own.
     def default_cli(out:, err:, stop:, permit:)
-      net = ::Asterism.net or raise ::Asterism::Disconnected, "the bridge is not connected"
+      net = @net.call or raise ::Asterism::Disconnected, "the bridge is not connected"
       ::Asterism::CLI.new(out: out, err: err, env: {}, net: net, stop: stop, permit: permit)
     end
   end

@@ -173,11 +173,15 @@ name, `wasm-<handle>`) takes part like a member's machine:
   (asterism gem, CRuby only, `require "asterism/transfer"`): the receiver
   of the kind "file" with a Family mruby machine's rules, and an inbox
   answering at `<node>/transfer/inbox` on a Zenoh connection beside the
-  application `Asterism.connect` made. Asterism's object layer is one
-  application per process (the bridge's is `console/console`); the
-  machines send to `<node>/transfer/inbox`, so the endpoint declares that
-  application's and object's tokens and answers their calls and meta with
-  the object layer's encoding, on the bridge's reading session. The graph
+  application `Asterism.connect` made (the bridge's is `console/console`);
+  the machines send to `<node>/transfer/inbox`, so the endpoint declares
+  that application's and object's tokens and answers their calls and meta
+  with the object layer's encoding, on the bridge's reading session. (Since
+  Asterism wire protocol 2 a program may hold several connections, one
+  application each, so a second connection `console/transfer` could expose
+  the inbox instead; the bridge keeps the endpoint, which costs no second
+  session and no second place at the router.) The senders' calls go out
+  on the bridge's connection (`Sender.new(..., net:)`). The graph
   shows the console with two applications, `console` and `transfer`.
 - `Bridge::Transfers` (`lib/bridge/transfers.rb`): the inbox in
   `storage/transfers/` (notes of a file coming in under `work/`: a bridge

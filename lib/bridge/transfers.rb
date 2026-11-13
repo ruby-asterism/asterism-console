@@ -45,8 +45,11 @@ module Bridge
 
     # from: the senders allowed, a callable giving node IDs (or patterns
     # with *); by default the registry's marks.
-    def initialize(conn:, node:, say:, from: -> { RelayPeer.file_senders })
+    # conn: the bridge's Zenoh connection (the inbox's endpoint); net: its
+    # Asterism connection (the senders' calls go out on it).
+    def initialize(conn:, node:, say:, net: nil, from: -> { RelayPeer.file_senders })
       @conn = conn
+      @net = net
       @node = node
       @say = say
       @from_source = from
@@ -299,7 +302,8 @@ module Bridge
       log = @log
       to = "#{row.node}/transfer/inbox"
       e[:thread] = Thread.new do
-        s = (@sender_class || Asterism::Transfer::Sender).new(to, "file", path.to_s, name: row.name, meta: meta, sha256: row.sha256)
+        s = (@sender_class || Asterism::Transfer::Sender).new(to, "file", path.to_s, net: @net, name: row.name, meta: meta,
+                                                              sha256: row.sha256)
         s.logger = log
         e[:sender] = s
         until s.done?

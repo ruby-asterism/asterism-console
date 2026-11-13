@@ -48,8 +48,8 @@
 #     them.
 #
 # Two sessions: a plain Zenoh one for reading, and the object layer's
-# (Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for meta
-# and calls. Puma never loads Asterism.
+# (@net = Asterism.connect, node ASTERISM_CONSOLE_NODE / app "console") for
+# meta and calls. Puma never loads Asterism.
 #
 # Both sessions take the same zenoh configuration (Runner.zenoh_config):
 # ASTERISM_ZENOH_CONFIG, a JSON5 file, or for TLS ASTERISM_TLS_CA (the CA
@@ -166,7 +166,7 @@ module Bridge
     def run
       require "asterism"
       Types.setup
-      @objects ||= Objects.new
+      @objects ||= Objects.new(-> { @net })
       trap_signals
       start_watch
       until @stop
@@ -218,8 +218,7 @@ module Bridge
       opts = @config ? { config: @config } : {}
       @z = Asterism::Zenoh.open(@locator, **opts)
       own_profile
-      Asterism.connect(@locator, node: @node_id, app: @app, **opts)
-      @net = Asterism.net
+      @net = Asterism.connect(@locator, node: @node_id, app: @app, **opts)
       @net.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
       @net.start
       @z.on_error { |e, where| say "bridge: #{where}: #{e.class}: #{e.message}" }
@@ -350,8 +349,8 @@ module Bridge
           heartbeat
           next_beat = now + HEARTBEAT_EVERY
         end
-        unless @z.running? && Asterism.connected?
-          say "bridge: connection lost (#{Asterism.lost_reason || 'zenoh session closed'})"
+        unless @z.running? && @net.connected?
+          say "bridge: connection lost (#{@net.lost_reason || 'zenoh session closed'})"
           break
         end
         sleep TICK
@@ -812,16 +811,18 @@ module Bridge
     # --------------------------------------------------------------- profiles
 
     # This console's profile (V2.5): kind console and its icon, kept in the
-    # icon store so its own node shows it too.
+    # icon store so its own node shows it too. Set as the program's defaults
+    # before the connection (asterism protocol 2: a node's profile belongs to
+    # the program), so the connection puts it once, as it connects.
     def own_profile
       icon = File.binread(CONSOLE_ICON)
-      pr = Asterism.profile(kind: :console, icon: icon)
+      pr = Asterism.profile_defaults(kind: :console, icon: icon)
       w, h, hash = Asterism::Profile.png_info(icon)
       @profiles.keep_icon(hash, icon, w, h)
       @own_profile = Profiles.summary(pr)
     rescue SystemCallError, ArgumentError, ActiveRecord::ActiveRecordError => e
       say "bridge: own profile: #{e.class}: #{e.message}"
-      @own_profile = Profiles.summary(Asterism.profile(kind: :console))
+      @own_profile = Profiles.summary(Asterism.profile_defaults(kind: :console))
     end
 
     # The Asterism nodes here now (from their liveliness tokens), this
@@ -865,11 +866,12 @@ module Bridge
     # Asks a node for its profile without the icon (or takes its notice),
     # and once more with the icon when the store does not have it.
     def fetch_profile(node, told)
-      pr = told || Asterism.profile_of(node, icon: false, timeout: GET_TIMEOUT)
+      net = @net or raise Asterism::Disconnected, "the bridge is not connected"
+      pr = told || net.profile_of(node, icon: false, timeout: GET_TIMEOUT)
       hash = pr && pr["icon_hash"]
       kept = false
       if hash && !@profiles.icon?(hash)
-        full = Asterism.profile_of(node, timeout: GET_TIMEOUT)
+        full = net.profile_of(node, timeout: GET_TIMEOUT)
         if full && full["icon"] && full["icon_hash"] == hash
           w, h, = Asterism::Profile.png_info(full["icon"])
           @profiles.keep_icon(hash, full["icon"], w, h)
@@ -1089,7 +1091,7 @@ module Bridge
     # ASTERISM_TRANSFERS=0 leaves them out.
     def start_transfers
       return if ENV["ASTERISM_TRANSFERS"] == "0"
-      @transfers = Transfers.new(conn: @z, node: @node_id, say: method(:say)).start
+      @transfers = Transfers.new(conn: @z, net: @net, node: @node_id, say: method(:say)).start
       @receivers = Receivers.new(say: method(:say)).start
     rescue SystemCallError, ArgumentError => e
       say "bridge: files: not started: #{e.class}: #{e.message}"
@@ -1110,7 +1112,7 @@ module Bridge
             "connection (needs 0.13.0 or newer)"
         return
       end
-      @terminal = Terminal.new(say: method(:say)).start
+      @terminal = Terminal.new(say: method(:say), net: -> { @net }).start
     rescue ActiveRecord::ActiveRecordError => e
       say "bridge: terminal: not started: #{e.message}"
       @terminal = nil
@@ -1216,7 +1218,8 @@ module Bridge
       @log_subs.each_value { _1.close rescue nil }
       @log_subs.clear
       @logs.clear
-      Asterism.close
+      @net&.close
+      @net = nil
       @z&.close
       @z = nil
       say "bridge: closed"

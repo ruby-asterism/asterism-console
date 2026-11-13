@@ -110,7 +110,7 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
   end
 
   def machine_sends(from, name: "photo.bin", **opts)
-    s = self.class.sender_through(@conn, from).new("console/transfer/inbox", "file", @src, name: name, **opts)
+    s = self.class.sender_through(@conn, from).new("console/transfer/inbox", "file", @src, net: nil, name: name, **opts)
     s.logger = nil
     run_sender(s)
   end
@@ -190,6 +190,27 @@ class Bridge::TransfersTest < ActiveSupport::TestCase
     assert_equal "denied", wait_for(row3, "denied", "failed").status
   ensure
     FileUtils.rm_rf(Rails.root.join("tmp/transfer-machine-#{Process.pid}"))
+  end
+
+  test "the senders' calls go out on the bridge's Asterism connection" do
+    @t.close
+    net = Object.new
+    @t = Bridge::Transfers.new(conn: @conn, net: net, node: "console", say: ->(text) { @said << text }).start
+    used = []
+    @t.sender_class = Class.new(self.class.sender_through(Conn.new, "console", hang: true)) do
+      define_method(:initialize) do |*args, **kw|
+        used << kw[:net]
+        super(*args, **kw)
+      end
+    end
+    FileUtils.mkdir_p(FileTransfer.outbox)
+    row = FileTransfer.create!(direction: "send", status: "pending", node: "fmruby-a", name: "x.bin", size: @bytes.bytesize,
+                               sha256: Digest::SHA256.hexdigest(@bytes), stored: SecureRandom.hex(12))
+    FileUtils.cp(@src, row.outbox_path)
+    wait_for(row, "sending")
+    row.cancel!
+    wait_for(row, "cancelled", "failed")
+    assert_equal [ net ], used
   end
 
   test "cancel: the sender stops and tells the machine" do

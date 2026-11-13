@@ -86,7 +86,7 @@ record of who typed what. This note is the design and how it was checked.
       |                                         v
       +-- Action Cable "console:terminal:<page>" <-- bin/bridge: Bridge::Terminal
                 (output, started, done, complete)       Terminal::Line again, then
-                                                        Asterism::CLI.new(net: Asterism.net,
+                                                        Asterism::CLI.new(net: <bridge's connection>,
                                                           stop:, permit:).run(words)
 ```
 
@@ -101,7 +101,7 @@ record of who typed what. This note is the design and how it was checked.
 - **The bridge** (`lib/bridge/terminal.rb`) picks up pending rows on every
   tick (0.1 s), reads the line again with the call permissions of that
   moment, and runs it on a thread of its own with the gem's command line
-  on the object layer's connection (`Asterism.net`). The command line asks
+  on the object layer's connection (the bridge's `Asterism::Connection`). The command line asks
   `permit:` once it has parsed the options its own way (an
   `Asterism::CLI::Plan`: the command, read or call, the object and the
   method), and that answer decides: the row records the plan's object and

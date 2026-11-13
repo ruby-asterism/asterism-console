@@ -1,9 +1,15 @@
 # What runs the page's meta and call requests on the object layer, through
 # Asterism's public API (a proxy per path and time limit) rather than the
-# module's internal Asterism.meta / Asterism.call. Time limits in seconds.
-# The tests pass a stand-in with the same two methods.
+# connection's internal meta / call. Time limits in seconds. The tests pass
+# a stand-in with the same two methods.
 module Bridge
   class Objects
+    # net: the bridge's connection (an Asterism::Connection), or a callable
+    # giving it (the bridge connects again after losing its router).
+    def initialize(net)
+      @net = net
+    end
+
     # {"methods" => [{"name" => name, "arity" => n}, ...]} (protocol 1),
     # fetched again on every request
     # (the object may have been exposed again since). The page wants the
@@ -24,7 +30,9 @@ module Bridge
     private
 
     def proxy(path, timeout)
-      Asterism[path, timeout: timeout]
+      net = @net.is_a?(Proc) ? @net.call : @net
+      raise Asterism::Disconnected, "the bridge is not connected" unless net
+      net[path, timeout: timeout]
     end
   end
 end

@@ -11,12 +11,12 @@ class Bridge::ObjectsTest < ActiveSupport::TestCase
   end
 
   setup do
-    Asterism.connect(nil, node: "objtest", app: "t", mode: :peer, listen: "tcp/127.0.0.1:0", check_timeout: 0.2)
-    Asterism.expose("screen", Screen.new, methods: %i[say to_s])
-    @objects = Bridge::Objects.new
+    @net = Asterism.connect(nil, node: "objtest", app: "t", mode: :peer, listen: "tcp/127.0.0.1:0", check_timeout: 0.2)
+    @net.expose("screen", Screen.new, methods: %i[say to_s])
+    @objects = Bridge::Objects.new(-> { @net })
   end
 
-  teardown { Asterism.close }
+  teardown { @net&.close }
 
   test "meta, with the arities the page shows" do
     m = @objects.meta("objtest/t/screen", timeout: 1.0)["methods"]
@@ -32,6 +32,11 @@ class Bridge::ObjectsTest < ActiveSupport::TestCase
     e = assert_raises(Asterism::RemoteError) { @objects.call("objtest/t/screen", "instance_eval", [ "1" ], {}, timeout: 1.0) }
     assert_equal "NoMethodError", e.remote_class
     assert_raises(ArgumentError) { @objects.call("objtest/t/screen", "to_ary", [], {}, timeout: 1.0) }
+  end
+
+  test "the connection given as it is, and none" do
+    assert_equal "hi/", Bridge::Objects.new(@net).call("objtest/t/screen", "say", [ "hi" ], {}, timeout: 1.0)
+    assert_raises(Asterism::Disconnected) { Bridge::Objects.new(-> { }).meta("objtest/t/screen", timeout: 1.0) }
   end
 
   test "an object nobody exposes" do

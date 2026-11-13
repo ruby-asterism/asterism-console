@@ -19,7 +19,7 @@
 #       "cert_name", "self", "nodes" (ids of the nodes on that session) }.
 #   - ROS 2 nodes inside an Asterism node (G1b): a ROS 2 node whose session
 #     also carries one Asterism node (a board running Asterism and a ROS 2
-#     node on one connection, Asterism.session) gets that Asterism node as
+#     node on one connection, net.session) gets that Asterism node as
 #     its parent and data "in_node"; it has no "attach" edge of its own (the
 #     Asterism node's stands for the session), and Bridge::Groups leaves it
 #     out of the machines.

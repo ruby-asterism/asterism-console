@@ -37,8 +37,12 @@ def log(text)
 end
 
 class Board
-  def initialize(name) = @name = name
-  def move(x, y) = "#{@name} took #{x},#{y} for #{Asterism.current_call&.from}"
+  def initialize(name, net)
+    @name = name
+    @net = net
+  end
+
+  def move(x, y) = "#{@name} took #{x},#{y} for #{@net.current_call&.from}"
 end
 
 how = if opt[:credentials]
@@ -51,7 +55,7 @@ else
 end
 Asterism.connect(opt[:router], node: opt[:node], app: opt[:app], **how) do |net|
   opt[:node] = net.node_id
-  net.expose("board", Board.new(opt[:node]), methods: { move: 2 })
+  net.expose("board", Board.new(opt[:node], net), methods: { move: 2 })
   net.on_join { |n| log("joined: #{n}") }
   net.on_leave { |n| log("left: #{n}") }
   net.start

@@ -584,7 +584,8 @@ even on a LAN. What it does, and what it assumes:
   uPlot (vendored by `bin/importmap pin`, its CSS in `vendor/assets`).
 - **The Terminal** (`Bridge::Terminal`): `TerminalCommand` rows, picked
   up every tick and run with the asterism gem's command line on the object
-  layer's connection (`Asterism::CLI.new(net: Asterism.net)`), a thread
+  layer's connection (`Asterism::CLI.new(net: net)`, the bridge's
+  `Asterism::Connection`), a thread
   each; the output goes on the page's own stream
   (`ConsoleChannel` with `stream: "terminal"`, its token), sent by the main
   thread (docs/terminal.md).
