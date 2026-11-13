@@ -5,8 +5,14 @@
 #   ros(sample)    a sample of a ROS 2 data key (<domain>/<name>/<type>/<hash>):
 #                  the CDR payload as it came; publish_time and sequence from
 #                  the rmw_zenoh attachment
-#   key(expr, sample)  a sample of an Asterism key: the payload as it came;
-#                  publish_time from the sample's Zenoh timestamp, when it has one
+#   key(expr, sample)  a sample of an Asterism key (protocol 2, docs/protocol.md
+#                  9-12 of the asterism gem): the payload as it came; the
+#                  channel's message encoding is the sample's encoding
+#                  ("msgpack" when it has none), its schema the topic's
+#                  declared type (and the definitions of an application's
+#                  own type, Bag::Channels); sequence the attachment's
+#                  number, publish_time the sender's time of the attachment,
+#                  else the router's timestamp
 #   graph(...)     the network structure: a snapshot when the recording starts
 #                  and every SNAPSHOT_EVERY seconds of changes, a diff on
 #                  every change in between
@@ -29,7 +35,11 @@ module Bridge
 
     # qos: a block that gives the QoS profiles (Bag::Qos.parse Hashes) of a
     # topic id's publishers, for the channel's offered_qos_profiles.
-    def initialize(id:, path:, max_bytes:, max_seconds:, structure: false, clock: nil, wall_ns: nil, &qos)
+    # declarations: a key -> [declaration, {type name => definition}] or
+    # nil (Bridge::AppProfiles#topic): what the application declared for
+    # the topic on that key, read when its channel is made.
+    def initialize(id:, path:, max_bytes:, max_seconds:, structure: false, clock: nil, wall_ns: nil,
+                   declarations: nil, &qos)
       @id = id
       @path = path.to_s
       @max_bytes = max_bytes
@@ -38,6 +48,7 @@ module Bridge
       @clock = clock || -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) }
       @wall_ns = wall_ns || -> { Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond) }
       @qos = qos || ->(_tid) { [] }
+      @declarations = declarations || ->(_key) { nil }
       @lock = Mutex.new
       @channels = {} # key => channel id
       @dropped = 0
@@ -78,13 +89,15 @@ module Bridge
       end
     end
 
-    # A sample of an Asterism key (receiving thread).
+    # A sample of an Asterism key (receiving thread). A key whose values
+    # change encoding gets a channel per encoding.
     def key(expr, sample)
-      write("key:#{sample.key}", sample.payload, sample_time(sample)) do
-        args = -> { { topic: sample.key.to_s, message_encoding: "msgpack",
-                      schema: [ Bag::Channels::MSGPACK_SCHEMA, "", "" ],
-                      metadata: { "asterism_key_expr" => expr, Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s } } }
-        [ args, nil, nil ]
+      key = sample.key.to_s
+      enc = Bag::Channels.message_encoding(sample.respond_to?(:encoding) ? sample.encoding : nil)
+      seq, ms = Bag::Channels.attachment(sample.attachment)
+      write("key:#{key} #{enc}", sample.payload, sample_time(sample)) do
+        args = -> { key_channel_args(expr, key, enc) }
+        [ args, ms && ms * 1_000_000, seq ]
       end
     end
 
@@ -190,6 +203,17 @@ module Bridge
       sid = @writer.add_schema(name: name, encoding: enc, data: data)
       @writer.add_channel(topic: args[:topic], message_encoding: args[:message_encoding], schema_id: sid,
                           metadata: args[:metadata])
+    end
+
+    def key_channel_args(expr, key, enc)
+      decl, types = begin
+        @declarations.call(key)
+      rescue StandardError
+        nil # not known: an untyped channel
+      end
+      meta = { "asterism_key_expr" => expr, Bag::Channels::PROTOCOL_KEY => ::Asterism::PROTOCOL.to_s }
+      meta[Bag::Channels::DECLARATION_KEY] = JSON.generate(decl) if decl
+      { topic: key, message_encoding: enc, schema: Bag::Channels.key_schema(enc, decl, types), metadata: meta }
     end
 
     def ros_channel_args(tid, name, domain, type, hash)

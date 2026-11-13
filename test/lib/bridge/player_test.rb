@@ -83,6 +83,49 @@ class Bridge::PlayerTest < ActiveSupport::TestCase
     assert_in_delta 0.15, span, 0.08
   end
 
+  test "protocol 2 keys: the recorded encoding and attachment (sequence, and the sender's time when declared)" do
+    path = @dir.join("p2.mcap").to_s
+    t0 = @t0
+    File.open(path, "wb") do |f|
+      w = MCAP::Writer.new(f, profile: "ros2")
+      meta = ->(decl, protocol = "2") do
+        { "asterism_key_expr" => "asterism/linux/demo/**", "asterism_protocol" => protocol,
+          "asterism_declaration" => JSON.generate(decl) }
+      end
+      imu = w.add_channel(topic: "asterism/linux/demo/imu", message_encoding: "msgpack",
+                          schema_id: w.add_schema(name: "asterism/vector3", encoding: "", data: ""),
+                          metadata: meta.({ "t" => 2, "ts" => true }))
+      cam = w.add_channel(topic: "asterism/linux/demo/camera", message_encoding: "image/jpeg",
+                          schema_id: w.add_schema(name: "asterism/image", encoding: "", data: ""),
+                          metadata: meta.({ "t" => 4, "e" => 17 }))
+      old = w.add_channel(topic: "asterism/linux/demo/old", message_encoding: "msgpack",
+                          schema_id: w.add_schema(name: "asterism/msgpack", encoding: "", data: ""),
+                          metadata: { "asterism_key_expr" => "asterism/linux/demo/**", "asterism_protocol" => "1" })
+      w.add_message(channel_id: imu, log_time: t0, publish_time: 1_791_400_000_123_000_000, sequence: 41,
+                    data: MessagePack.pack([ 1, 2, 3 ]))
+      w.add_message(channel_id: cam, log_time: t0 + 1, publish_time: t0, sequence: 5, data: "\xFF\xD8jpeg".b)
+      w.add_message(channel_id: old, log_time: t0 + 2, data: MessagePack.pack(1))
+      w.finish
+    end
+    puts_seen = []
+    pl = Bridge::Player.new(playback_id: 2, path: path, speed: 100.0, session: @session,
+                            put: ->(k, b, **opts) { puts_seen << [ k, b, opts ] })
+    pl.define_singleton_method(:wait) { |_s| nil }
+    pl.run
+    assert_nil pl.error
+    assert_equal({}, pl.skipped, "a JPEG topic is sent too")
+    assert_equal 3, pl.sent
+    by = puts_seen.to_h { [ _1[0], _1 ] }
+    imu = by["asterism/linux/demo/imu"]
+    refute imu[2].key?(:encoding), "MessagePack goes without an encoding"
+    assert_equal [ 41, 1_791_400_000_123 ], MessagePack.unpack(imu[2][:attachment])
+    cam = by["asterism/linux/demo/camera"]
+    assert_equal "image/jpeg", cam[2][:encoding]
+    assert_equal [ 5 ], MessagePack.unpack(cam[2][:attachment]), "no ts declared: the number alone"
+    assert_equal "\xFF\xD8jpeg".b, cam[1]
+    assert_equal({}, by["asterism/linux/demo/old"][2], "a protocol 1 recording: as it was")
+  end
+
   test "from a time, only some channels; stop" do
     pl = player(channel_ids: [ 2 ], start_ns: @t0 + 300_000_000)
     pl.define_singleton_method(:wait) { |_s| nil }

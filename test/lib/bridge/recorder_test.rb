@@ -65,6 +65,56 @@ class Bridge::RecorderTest < ActiveSupport::TestCase
     r&.close
   end
 
+  test "Asterism keys of protocol 2: encoding, sequence, sender's time, the declared type as the schema" do
+    decls = {
+      "asterism/linux/demo/imu" => [ { "t" => 2, "u" => "m/s2", "ts" => true }, {} ],
+      "asterism/linux/demo/board1/strokes" => [ { "t" => "mygame/board.strokes" },
+                                                 { "mygame/board.strokes" => { "f" => [ [ "pts", "mygame/point[]" ] ] },
+                                                   "mygame/point" => { "f" => [ [ "x", "int" ], [ "y", "int" ] ], "d" => "a point" } } ],
+      "asterism/linux/demo/camera" => [ { "t" => 4, "e" => 17 }, {} ]
+    }
+    rec = recorder(declarations: ->(key) { decls[key] }).open
+    stamp = Stamp.new(Time.at(1_791_450_000, 250, :usec))
+    sample = ->(key, payload, att, enc: "zenoh/bytes", ts: stamp) do
+      Asterism::Zenoh::Sample.new(key: key, payload: payload, attachment: att && MessagePack.pack(att), encoding: enc, timestamp: ts)
+    end
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.1, 0, 9.8 ]), [ 7, 1_791_440_000_123 ]))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/imu", MessagePack.pack([ 0.2, 0, 9.8 ]), [ 8, 1_791_440_000_223 ]))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/board1/strokes", MessagePack.pack([ [ 1, 2 ] ]), [ 3 ]))
+    jpeg = "\xFF\xD8\xFF\xE0jpeg".b
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/camera", jpeg, [ 0 ], enc: "image/jpeg"))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/plain", MessagePack.pack(1), nil, ts: nil))
+    assert rec.key("asterism/linux/demo/**", sample.("asterism/linux/demo/text", "hello", [ 1 ], enc: "text/plain"))
+    rec.finish
+    r = MCAP::Reader.new(@dir.join("r.mcap").to_s)
+    assert r.verify!
+    by = r.info["channels"].to_h { [ _1["topic"], _1 ] }
+    imu = by["asterism/linux/demo/imu"]
+    assert_equal [ "msgpack", "asterism/vector3", "" ], imu.values_at("message_encoding", "schema", "schema_encoding")
+    assert_equal({ "t" => 2, "u" => "m/s2", "ts" => true }, JSON.parse(imu["metadata"]["asterism_declaration"]))
+    assert_equal "2", imu["metadata"]["asterism_protocol"]
+    strokes = by["asterism/linux/demo/board1/strokes"]
+    assert_equal [ "msgpack", "mygame/board.strokes", "asterism/types" ], strokes.values_at("message_encoding", "schema", "schema_encoding")
+    schema = r.schemas.values.find { _1.name == "mygame/board.strokes" }
+    assert_equal %w[mygame/board.strokes mygame/point], JSON.parse(schema.data).keys.sort, "the type and the one its field names"
+    assert_equal [ "image/jpeg", "asterism/image" ], by["asterism/linux/demo/camera"].values_at("message_encoding", "schema")
+    assert_equal [ "msgpack", "asterism/msgpack" ], by["asterism/linux/demo/plain"].values_at("message_encoding", "schema")
+    refute by["asterism/linux/demo/plain"]["metadata"].key?("asterism_declaration")
+    assert_equal [ "text/plain", "asterism/untyped" ], by["asterism/linux/demo/text"].values_at("message_encoding", "schema")
+    msgs = r.each_message.map { |m, ch, _| [ ch.topic, m ] }
+    imu_msgs = msgs.select { _1[0] == "asterism/linux/demo/imu" }.map(&:last)
+    assert_equal [ 7, 8 ], imu_msgs.map(&:sequence)
+    assert_equal [ 1_791_440_000_123_000_000, 1_791_440_000_223_000_000 ], imu_msgs.map(&:publish_time), "the sender's time"
+    stroke = msgs.find { _1[0] == "asterism/linux/demo/board1/strokes" }[1]
+    assert_equal [ 3, 1_791_450_000_000_250_000 ], [ stroke.sequence, stroke.publish_time ], "no sender's time: the router's"
+    cam = msgs.find { _1[0] == "asterism/linux/demo/camera" }[1]
+    assert_equal jpeg, cam.data, "the bytes as they came"
+    plain = msgs.find { _1[0] == "asterism/linux/demo/plain" }[1]
+    assert_equal [ 0, plain.log_time ], [ plain.sequence, plain.publish_time ], "no attachment, no timestamp: the log time"
+  ensure
+    r&.close
+  end
+
   test "the size limit: the message that would pass it is not written, and the reason is told" do
     rec = Bridge::Recorder.new(id: 2, path: @dir.join("s.mcap"), max_bytes: 4000, max_seconds: 60).open
     n = 0

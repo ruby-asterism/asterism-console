@@ -10,7 +10,11 @@
 #     number, the time it is sent and the console's GID (from its token).
 #     The type name and hash come from the channel: its schema name and its
 #     topic_type_hash (rosbag2 writes it too), else the bundled type's hash.
-#   Asterism keys (msgpack): put on the recorded key as they are.
+#   Asterism keys (msgpack, or a topic's own encoding): put on the recorded
+#     key as they are, with the recorded encoding (none for msgpack) and,
+#     for a protocol 2 recording, the attachment of protocol 2: the
+#     recorded sequence number and, for a topic declared with "ts", the
+#     recorded publish time in ms.
 #   The network structure (and anything else): not sent.
 #
 # The payloads are sent as recorded (the CDR bytes are not decoded), so a
@@ -36,7 +40,8 @@ module Bridge
     attr_reader :sent, :skipped, :error
 
     # session: an Asterism::Zenoh::Session (the bridge's), put: how an
-    # Asterism key's payload is put (key, bytes).
+    # Asterism key's payload is put (key, bytes, encoding:, attachment:;
+    # the options left out when there is none).
     def initialize(playback_id:, path:, speed:, channel_ids: [], start_ns: nil, session:, put:, logger: nil)
       @id = playback_id
       @path = path.to_s
@@ -92,7 +97,8 @@ module Bridge
       chosen = reader.channels.values.select { |c| @want.empty? || @want.include?(c.id) }
       chosen.each do |c|
         @skipped[c.topic] = "the network structure is not sent" if c.message_encoding == "json" && c.topic == Bag::Channels::GRAPH_TOPIC
-        @skipped[c.topic] ||= "#{c.message_encoding} messages are not sent" unless %w[cdr msgpack].include?(c.message_encoding)
+        next if c.message_encoding == "cdr" || Bag::Channels.key?(channel_hash(c))
+        @skipped[c.topic] ||= "#{c.message_encoding} messages are not sent"
       end
       ids = chosen.map(&:id).reject { |id| @skipped.key?(reader.channels[id].topic) }
       idx = reader.index
@@ -142,10 +148,30 @@ module Bridge
         if (pub = @publishers[cid])
           pub.publish(m.data)
         else
-          @put.call(reader.channels[cid].topic, m.data)
+          c = reader.channels[cid]
+          @put.call(c.topic, m.data, **key_options(c, m))
         end
         @sent += 1
       end
+    end
+
+    # A channel as Bag::Channels reads it (a Hash).
+    def channel_hash(c)
+      { "topic" => c.topic, "message_encoding" => c.message_encoding, "metadata" => c.metadata }
+    end
+
+    # The put's options of a key channel's message: its encoding (none for
+    # msgpack) and, recorded with protocol 2, the attachment [seq] or
+    # [seq, ms] (a topic declared with "ts").
+    def key_options(c, m)
+      opts = {}
+      opts[:encoding] = c.message_encoding unless c.message_encoding == "msgpack"
+      if c.metadata[Bag::Channels::PROTOCOL_KEY].to_i >= 2
+        att = [ m.sequence ]
+        att << m.publish_time / 1_000_000 if Bag::Channels.declaration(channel_hash(c))["ts"] == true
+        opts[:attachment] = MessagePack.pack(att)
+      end
+      opts
     end
 
     def wait(seconds)

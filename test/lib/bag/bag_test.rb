@@ -71,6 +71,31 @@ class BagTest < ActiveSupport::TestCase
     refute Bag::View.new(fresh).protocol0?
   end
 
+  test "a protocol 2 key that streams pictures: a key channel, its message the picture" do
+    path = tmp("jpeg.mcap")
+    jpeg = "\xFF\xD8\xFF\xC0\x00\x11\x08\x00\x10\x00\x20\x03".b + ("\x00" * 8).b
+    File.open(path, "wb") do |f|
+      w = MCAP::Writer.new(f, profile: "ros2")
+      c = w.add_channel(topic: "asterism/linux/demo/camera", message_encoding: "image/jpeg",
+                        schema_id: w.add_schema(name: "asterism/image", encoding: "", data: ""),
+                        metadata: { "asterism_key_expr" => "asterism/linux/demo/**", "asterism_protocol" => "2",
+                                    "asterism_declaration" => JSON.generate("t" => 4, "e" => 17) })
+      w.add_message(channel_id: c, log_time: T0, sequence: 3, data: jpeg)
+      w.finish
+    end
+    v = Bag::View.new(path)
+    assert_equal [ [ "key", "asterism/image" ] ], v.channels.map { _1.values_at("kind", "schema") }
+    m = v.message(v.channels[0]["id"], T0)
+    assert_equal [ "image/jpeg", 3 ], m.values_at("format", "sequence")
+    assert_equal [ "image/jpeg", 32, 16 ], m["image"].values_at("mime", "width", "height")
+    assert_equal({ "t" => 4, "e" => 17 }, Bag::Channels.declaration(v.channels[0]))
+    assert_equal [ "msgpack", "image/png" ], [ Bag::Channels.message_encoding("zenoh/bytes"), Bag::Channels.message_encoding("image/png") ]
+    assert_equal [ [ 5, 12 ], [ 5, nil ], [ nil, nil ], [ nil, nil ] ],
+                 [ [ 5, 12 ], [ 5 ], [ -1 ], "x" ].map { Bag::Channels.attachment(MessagePack.pack(_1)) }
+  ensure
+    v&.close
+  end
+
   test "a bin in an Asterism channel is shown as hex" do
     assert_equal({ "icon" => "0x6869", "name" => "hi" }, Bag::Decode.safe({ "icon" => "hi".b, "name" => "hi" }, bin: true))
   end

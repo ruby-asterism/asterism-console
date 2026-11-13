@@ -1138,7 +1138,7 @@ module Bridge
         return
       end
       pl = Player.new(playback_id: pb.id, path: rec.path, speed: pb.speed, channel_ids: pb.channel_ids,
-                      start_ns: pb.start_ns, session: @z.session, put: ->(key, bytes) { @z.put(key, bytes) },
+                      start_ns: pb.start_ns, session: @z.session, put: ->(key, bytes, **opts) { @z.put(key, bytes, **opts) },
                       logger: ->(text) { say(text) })
       @players[pb.id] = pl.start
       pb.update!(status: "running", started_at: Time.current)

@@ -55,13 +55,14 @@ module Bag
       @info ||= sync { @reader.info }
     end
 
-    # The channels with what kind each is: "ros" (cdr), "key" (msgpack),
-    # "graph" (the network structure), "other".
+    # The channels with what kind each is: "ros" (cdr), "key" (an Asterism
+    # key: msgpack, or a topic's own encoding), "graph" (the network
+    # structure), "other".
     def channels
       @channels ||= info["channels"].map do |c|
         kind = if Channels.graph?(c) then "graph"
         elsif Channels.ros?(c) then "ros"
-        elsif Channels.msgpack?(c) then "key"
+        elsif Channels.key?(c) then "key"
         else "other"
         end
         c.merge("kind" => kind, "type" => kind == "ros" ? c["schema"] : nil)

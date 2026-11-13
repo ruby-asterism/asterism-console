@@ -10,6 +10,8 @@
 #             a bin as hex). Not read when the channel was recorded with
 #             protocol 0 (Bag::Channels.protocol0?): an error says so
 #   json      JSON (the network structure)
+#   image/jpeg, image/png  an Asterism topic that streams pictures as they
+#             are (protocol 2): the picture ("image") when it is one
 #   anything else, or what does not decode: hex
 #
 # value: what the page shows as the message (JSON-safe: binary strings as
@@ -68,8 +70,24 @@ module Bag
         end
       else
         out.merge!(Bridge::Payload.describe(bytes).slice("format", "text"))
+        out["format"] = enc if Channels.key?(channel)
+        if (img = picture(enc, bytes))
+          out["image"] = img
+          out["text"] = "(#{img['bytes']} bytes, #{img['mime']})"
+        end
       end
       out
+    end
+
+    # The picture of an Asterism value with an image encoding (protocol 2:
+    # the bytes as they are), as Bridge::Payload.image gives one, or nil.
+    def picture(enc, bytes)
+      mime = enc.to_s.split(";").first
+      return nil unless %w[image/jpeg image/png].include?(mime)
+      b = bytes.b
+      return nil if b.empty? || b.bytesize > Bridge::Payload::MAX_IMAGE
+      w, h = mime == "image/jpeg" ? Bridge::Payload.jpeg_size(b) : Bridge::Payload.png_size(b)
+      { "mime" => mime, "data" => [ b ].pack("m0"), "bytes" => b.bytesize, "width" => w, "height" => h }
     end
 
     # The decoded message as a Hash (raises Types::Unknown for a type that
