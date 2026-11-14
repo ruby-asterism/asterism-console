@@ -8,6 +8,22 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.4.1
+
+What an update needs: nothing but the update; no migration, nothing in
+nginx, `.env` or the roles. The update's setup writes the router's
+configuration and restarts the router. docs/install.md, "From 0.4.0 to
+0.4.1".
+
+- The console's own profile reaches others through the cloud router: its
+  certificate gets, on its own node's key only
+  (`asterism/<console node>/@profile`, `ASTERISM_CONSOLE_NODE`), the
+  queryable, the replies and the put, and the others' queries to it. Until
+  now it could only read the nodes' profiles, so another member (`asterism
+  node list`, a board) saw the console without its kind, name and icon (an
+  omission since 0.3.3). It still cannot answer or put another node's
+  profile.
+
 ## 0.4.0
 
 What an update needs: **every node moves to Asterism wire protocol 2 with

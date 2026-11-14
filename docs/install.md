@@ -1394,6 +1394,18 @@ profiles, their topics and types):
   spectator's spectate lines (docs/rooms.md of that version) must be put
   back by hand, then Apply.
 
+From 0.4.0 to 0.4.1 (the console's own profile reaches others through the
+cloud router):
+
+- `./update.sh 0.4.1`. No migration, no change to nginx, `.env` or the
+  roles. The router's configuration gets the console's own profile
+  (`asterism/<console node>/@profile`: its queryable, replies and put, the
+  others' queries to it); the update's setup writes it and restarts the
+  router, as Apply does.
+- **Check**: `asterism node list` with a member's certificate shows the
+  console with its kind (`console`).
+- Going back to 0.4.0 needs nothing but `./update.sh 0.4.0`.
+
 ## 21. When something is wrong
 
 - **The console does not start**: `docker compose logs console`.
