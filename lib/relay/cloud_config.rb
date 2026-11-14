@@ -70,7 +70,11 @@
 # The console's certificate gets a rule of its own for asterism/*/@profile:
 # from it the query and the subscription, to it the replies and the puts
 # (the graph's names, marks and icons, Bridge::Profiles). Nobody else gets
-# it.
+# it. The console both reads all the nodes' profiles and publishes its own
+# (0.4.1: kind console, its name and icon): on its own node's key only,
+# asterism/<console node>/@profile (settings "console_node"), from it the
+# queryable, the replies and the put, to it the queries. It cannot answer
+# or put another node's profile.
 #
 # The applications' own profiles (asterism protocol 2: an application
 # answers asterism/<node>/<app>/@profile and puts its status and its
@@ -184,6 +188,11 @@ module Relay
     PROFILES = "asterism/*/@profile".freeze
     PROFILES_IN = %w[declare_subscriber query].freeze
     PROFILES_OUT = %w[put reply].freeze
+    # The console's own profile (0.4.1), on its own node's key only: from
+    # it the queryable, the replies and the put (as it connects), to it the
+    # queries of the others.
+    OWN_PROFILE_IN = %w[declare_queryable reply put].freeze
+    OWN_PROFILE_OUT = %w[query].freeze
     # The applications' own profiles the console reads (protocol 2): the
     # same, for asterism/*/*/@profile (queries, ** does not match @profile
     # either) and the puts on asterism/*/*/@status and asterism/*/*/@pubs.
@@ -415,14 +424,22 @@ module Relay
       "subscribers_out"
     end
 
-    # The console's reading of the nodes' profiles (asterism/<node>/@profile):
+    # The console's reading of the nodes' profiles (asterism/<node>/@profile)
+    # and the publishing of its own (asterism/<console node>/@profile only):
     # the rules (pushed onto rules) and their ids.
     def profile_rules(rules, id)
-      rules << { "id" => "#{id}__profiles_in", "messages" => PROFILES_IN, "flows" => %w[ingress],
-                 "permission" => "allow", "key_exprs" => [ PROFILES ] }
-      rules << { "id" => "#{id}__profiles_out", "messages" => PROFILES_OUT, "flows" => %w[egress],
-                 "permission" => "allow", "key_exprs" => [ PROFILES ] }
-      [ "#{id}__profiles_in", "#{id}__profiles_out" ]
+      own = [ "asterism/#{@settings['console_node']}/@profile" ]
+      list = [
+        [ "profiles_in", PROFILES_IN, %w[ingress], [ PROFILES ] ],
+        [ "profiles_out", PROFILES_OUT, %w[egress], [ PROFILES ] ],
+        [ "own_profile_in", OWN_PROFILE_IN, %w[ingress], own ],
+        [ "own_profile_out", OWN_PROFILE_OUT, %w[egress], own ]
+      ]
+      list.map do |suffix, messages, flows, keys|
+        rid = "#{id}__#{suffix}"
+        rules << { "id" => rid, "messages" => messages, "flows" => flows, "permission" => "allow", "key_exprs" => keys }
+        rid
+      end
     end
 
     # The console's reading of the applications' own profiles (protocol 2:

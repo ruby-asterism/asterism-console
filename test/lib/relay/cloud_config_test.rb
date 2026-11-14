@@ -35,7 +35,8 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     h = config.to_h
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
     assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out subscribers_out], pol["zenohd_home"]
-    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
+    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__own_profile_in
+                    console__own_profile_out console__app_profiles_in
                     console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
                     console__shared_out subscribers_out], pol["console"]
     assert_equal %w[viewer_ro_in viewer_ro_out subscribers_out], pol["viewer"]
@@ -112,6 +113,24 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal %w[console], users
     assert_empty Relay::CloudConfig.new(PEERS, { "console" => "other" }).access_control["rules"]
       .select { _1["key_exprs"].include?(Relay::CloudConfig::PROFILES) }, "only the console's certificate"
+  end
+
+  test "the console publishes its own profile (0.4.1), on its own node's key only" do
+    acl = Relay::CloudConfig.new(PEERS, { "console_node" => "hub" }).access_control
+    own = "asterism/hub/@profile"
+    %w[declare_queryable reply put].each { assert AclEvaluator.allowed?(acl, "console", _1, "ingress", own), _1 }
+    assert AclEvaluator.allowed?(acl, "console", "query", "egress", own), "the others' queries come to it"
+    %w[declare_queryable reply put delete].each do |m|
+      refute AclEvaluator.allowed?(acl, "console", m, "ingress", "asterism/games/@profile"), "not another node's: #{m}"
+      refute AclEvaluator.allowed?(acl, "console", m, "ingress", "asterism/*/@profile"), "not all nodes': #{m}"
+    end
+    refute AclEvaluator.allowed?(acl, "console", "query", "egress", "asterism/games/@profile")
+    refute AclEvaluator.allowed?(acl, "console", "delete", "ingress", own)
+    %w[viewer zenohd-home].each { refute AclEvaluator.allowed?(acl, _1, "declare_queryable", "ingress", own), _1 }
+    rule = acl["rules"].find { _1["id"] == "console__own_profile_in" }
+    assert_equal [ own ], rule["key_exprs"]
+    assert_equal [ "asterism/console/@profile" ],
+                 config.access_control["rules"].find { _1["id"] == "console__own_profile_in" }["key_exprs"], "the default node"
   end
 
   test "read and write, read only, the admin space" do
@@ -345,7 +364,8 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
   test "the console watches the rooms (0.2.1): liveliness only, nothing written, nothing called" do
     acl = Relay::CloudConfig.new(PEERS, ROOMS).access_control
     pol = acl["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__app_profiles_in
+    assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__own_profile_in
+                    console__own_profile_out console__app_profiles_in
                     console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
                     console__shared_out console__rooms_in console__rooms_out subscribers_out], pol["console"]
     allowed = []
