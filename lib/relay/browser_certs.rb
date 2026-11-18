@@ -83,13 +83,18 @@ module Relay
 
     # What the router's configuration takes (Relay::CloudConfig's
     # "browser_certs"): each user with a good certificate, its name and its
-    # lists of whom its browser receives files from.
+    # lists of whom its browser receives files from, and the roles picked
+    # for it (0.4.2; "roles" only when there are some, so a console without
+    # picks makes the same configuration as before).
     def config_entries(env = ENV, at: Time.now)
       d = dir(env)
-      User.where.not(handle: nil).order(:handle).filter_map do |u|
+      User.where.not(handle: nil).includes(:browser_roles).order(:handle).filter_map do |u|
         name = name_for(u, env)
         next unless name && good?(d, name, at)
-        { "name" => name, "receives" => u.receives_config, "receivers_managed" => u.managed_receivers? }
+        entry = { "name" => name, "receives" => u.receives_config, "receivers_managed" => u.managed_receivers? }
+        roles = u.browser_roles.map(&:name)
+        entry["roles"] = roles unless roles.empty?
+        entry
       end
     rescue ActiveRecord::ActiveRecordError
       []

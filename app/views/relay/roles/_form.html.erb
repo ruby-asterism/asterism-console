@@ -49,7 +49,8 @@
     <%= f.text_area :watch_templates, rows: 2, placeholder: "asterism/**",
                     data: { role_form_target: "watch", label: "Watch" } %></label>
   <label class="check wide"><%= f.check_box :for_browsers %> Browsers have this role (every ws/ session;
-    <code>${node}</code> is <code><%= Relay::Settings.cloud_settings["browser_nodes"] %></code>)</label>
+    <code>${node}</code> is <code><%= Relay::Settings.cloud_settings["browser_nodes"] %></code>). For some users'
+    browsers only, leave this off and pick the role on Members &gt; Browsers &gt; Edit</label>
   <p class="hint wide">A template without <code>${node}</code> is the same for every row. For calls under the
     caller's own name only, put <code>asterism/*/&lt;app&gt;/*/call/${node}</code> under Ask (with
     <code>asterism/*/&lt;app&gt;/*/meta</code> and <code>asterism/*/@profile</code> when the app needs them), not the

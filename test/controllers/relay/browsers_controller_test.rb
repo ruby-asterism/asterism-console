@@ -66,10 +66,45 @@ class Relay::BrowsersControllerTest < ActionDispatch::IntegrationTest
     assert_select "input[type=checkbox][value=wasm-pat]", 2, "a member may receive from the browser (both kinds)"
   end
 
+  test "an admin picks roles for one user's browser: its certificate's subjects get them, nobody else" do
+    tutor = RelayRole.create!(name: "tutor", ask_templates: "asterism/*/tutor/helper/call/${node}",
+                              read_templates: "asterism/*/tutor/helper\nasterism/*/tutor/helper/call/${node}")
+    Relay::BrowserCerts.ensure!(@signer.ca_pem)
+    before = Relay::Applier.config_for.body
+    user = users(:user)
+    sign_in_as(users(:admin))
+    get edit_relay_browser_path(user)
+    assert_select "input[type=checkbox][name='user[browser_role_ids][]'][value='#{tutor.id}']"
+    assert_select "input[type=checkbox][name='user[browser_role_ids][]'][value='#{relay_roles(:match).id}']", 0,
+                  "a role every browser has is not picked per user"
+    patch relay_browser_path(user), params: { user: { browser_role_ids: [ "", tutor.id.to_s ] } }
+    assert_redirected_to relay_browsers_path
+    assert_equal [ "tutor" ], user.reload.browser_roles.map(&:name)
+    entry = Relay::BrowserCerts.config_entries.find { _1["name"] == "wasm-pat" }
+    assert_equal [ "tutor" ], entry["roles"]
+    config = Relay::Applier.config_for
+    refute_equal before, config.body, "the router's configuration changes (the banner asks for an apply)"
+    rules = config.to_h.dig("access_control", "rules")
+    assert(rules.any? { _1["key_exprs"] == [ "asterism/*/tutor/helper/call/wasm-pat" ] && _1["permission"] == "allow" })
+    refute(rules.any? { _1["key_exprs"].any? { |k| k.include?("tutor/helper/call/wasm-$*") } }, "nothing for the ws/ pages")
+    get relay_browsers_path
+    assert_select "#browser-pat td code", "tutor"
+    get relay_role_path(tutor)
+    assert_select "h3 a", "wasm-pat"
+    patch relay_browser_path(user), params: { user: { browser_role_ids: [ "" ] } }
+    assert_empty user.reload.browser_roles
+    assert_equal before, Relay::Applier.config_for.body, "taken off again: as before"
+    patch relay_browser_path(user), params: { user: { browser_role_ids: [ "", tutor.id.to_s ] } }
+    tutor.destroy!
+    assert_empty user.reload.browser_roles, "a role removed leaves the users too"
+  end
+
   test "a user removed takes its browser's certificate with it" do
     Relay::BrowserCerts.ensure!(@signer.ca_pem)
     assert cert?("wasm-pat")
+    users(:user).browser_roles << RelayRole.create!(name: "tutor", ask_templates: "asterism/*/tutor/helper/call/${node}")
     users(:user).destroy!
     refute cert?("wasm-pat")
+    assert_equal 0, RelayUserRole.count, "its roles go with it"
   end
 end

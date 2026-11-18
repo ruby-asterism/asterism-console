@@ -138,6 +138,14 @@
 # subject (the pages without a certificate) is refused every transfer key
 # (asterism/*/transfer and below): files only with a verified name.
 #
+# A user's own roles (0.4.2, "browser_certs" => [{..., "roles" => [names]}],
+# RelayUserRole): the roles an admin picked for one user go, with ${node}
+# its own name, to that user's certificate subjects only, on top of the
+# roles marked for browsers (their calls in the second subject, under its
+# own name). The shared ws/ subject never gets them, so a page without the
+# user's certificate cannot reach what they open, under any name. An entry
+# without "roles" makes the same rules as before.
+#
 # Subscribers' declarations towards publishers (asterism protocol 2): a
 # topic's values go out through a declared publisher, which sends only
 # while it knows a matching subscriber, and the router hands it the
@@ -505,6 +513,13 @@ module Relay
 
     def browser_role_names = @roles.values.select { _1["for_browsers"] }.map { _1["name"] }
 
+    # A user's browser with a certificate: the roles of every browser and
+    # the ones picked for that user (0.4.2), sorted.
+    def browser_cert_role_names(b)
+      own = Array(b["roles"]).map(&:to_s).select { @roles.key?(_1) }
+      (browser_role_names + own).uniq.sort
+    end
+
     # A user's browser with a certificate (T8): its roles with ${node} its
     # own name and no call under another name (subject id), the calls its
     # roles allow and its sends, as itself (subject id_calls, tls). See the
@@ -512,7 +527,8 @@ module Relay
     def browser_cert_rules(b, rules, subjects, policies, shared)
       name = b["name"]
       id = "browser__#{self.class.ident(name)}"
-      mine = role_rules(rules, shared, id, browser_role_names, [ name ])
+      roles = browser_cert_role_names(b)
+      mine = role_rules(rules, shared, id, roles, [ name ])
       rules << { "id" => "#{id}__no_calls", "messages" => %w[query], "flows" => %w[ingress], "permission" => "deny",
                  "key_exprs" => [ ALL_CALLS ] }
       mine << "#{id}__no_calls"
@@ -522,7 +538,7 @@ module Relay
       end
       subjects << { "id" => id, "cert_common_names" => [ name ] }
       policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
-      calls = browser_calls(name)
+      calls = browser_calls(name, roles)
       mine = []
       unless calls.empty?
         rules << { "id" => "#{id}__calls", "messages" => %w[query], "flows" => %w[ingress], "permission" => "allow",
@@ -536,10 +552,10 @@ module Relay
       policies << { "id" => "#{id}_calls", "rules" => mine, "subjects" => [ "#{id}_calls" ] }
     end
 
-    # The calls the browsers' roles let a page make (their ask lines that
-    # are calls), with the caller made the page's own name.
-    def browser_calls(name)
-      @roles.values.select { _1["for_browsers"] }.flat_map do |role|
+    # The calls the roles (default: the browsers') let a page make (their
+    # ask lines that are calls), with the caller made the page's own name.
+    def browser_calls(name, role_names = browser_role_names)
+      role_names.filter_map { @roles[_1] }.flat_map do |role|
         self.class.expand(Array(role.dig("templates", "ask")), [ name ]).filter_map do |key|
           base = key[%r{\A(.*/call)/[^/]+\z}, 1] or next
           "#{base}/#{name}"

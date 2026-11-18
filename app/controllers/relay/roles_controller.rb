@@ -7,7 +7,7 @@ module Relay
     layout "plain"
 
     def index
-      @roles = RelayRole.includes(:peers).order(:name)
+      @roles = RelayRole.includes(:peers, :users).order(:name)
       @browsers = Relay::Settings.cloud_settings["browsers"]
     end
 
@@ -24,6 +24,12 @@ module Relay
                                          "nodes" => [ settings["browser_nodes"] ])
       end
       @browsers_listen = settings["browsers"]
+      # The users whose own browser has it (0.4.2), as their certificate's
+      # subject would get it.
+      @users = @role.users.where.not(handle: nil).order(:handle).map do |u|
+        name = Relay::BrowserNode.base(u)
+        [ u, name, config.expansion_for("name" => name, "roles" => [ @role.name ], "nodes" => [ name ]) ]
+      end
     end
 
     def new

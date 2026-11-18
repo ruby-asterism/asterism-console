@@ -5,14 +5,15 @@ module Relay
   # user's own page once an apply has put it in the router's ACL. An admin
   # sees which are in the ACL and which wait for the apply, makes the
   # missing ones, and chooses whom each browser receives files from (the
-  # same lists as a member row's, ReceiverLists).
+  # same lists as a member row's, ReceiverLists) and the roles of its own
+  # (0.4.2, RelayUserRole: for the page with the user's certificate only).
   class BrowsersController < ApplicationController
     require_admin
     before_action :set_user, only: %i[ edit update ]
     layout "plain"
 
     def index
-      @users = User.where.not(handle: nil).order(:handle).to_a
+      @users = User.where.not(handle: nil).includes(:browser_roles).order(:handle).to_a
       @config = Relay::BrowserCerts.current_config
       @seen = Relay::Presence.seen(GraphState.current.graph)
     end
@@ -22,7 +23,10 @@ module Relay
 
     def update
       if @user.update(receivers_params)
-        redirect_to relay_browsers_path, notice: "Saved #{Relay::BrowserNode.base(@user)}'s lists. Apply to change the cloud router."
+        roles = @user.browser_roles.map(&:name)
+        Rails.logger.info("browsers: #{Relay::BrowserNode.base(@user)}: roles #{roles.empty? ? '(none)' : roles.join(', ')} " \
+                          "(by #{current_user.log_name})")
+        redirect_to relay_browsers_path, notice: "Saved #{Relay::BrowserNode.base(@user)}'s lists and roles. Apply to change the cloud router."
       else
         render :edit, status: :unprocessable_content
       end
@@ -47,7 +51,8 @@ module Relay
 
     def receivers_params
       params.expect(user: [ :receive_files_from_more, :receive_checkpoints_from_more,
-                            { receive_files_from_picked: [] }, { receive_checkpoints_from_picked: [] } ])
+                            { receive_files_from_picked: [] }, { receive_checkpoints_from_picked: [] },
+                            { browser_role_ids: [] } ])
     end
   end
 end

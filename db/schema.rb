@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_13_600000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -288,6 +288,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_600000) do
     t.index ["name"], name: "index_relay_roles_on_name", unique: true
   end
 
+  create_table "relay_user_roles", force: :cascade do |t|
+    t.integer "user_id", null: false
+    t.integer "relay_role_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["relay_role_id"], name: "index_relay_user_roles_on_relay_role_id"
+    t.index ["user_id", "relay_role_id"], name: "index_relay_user_roles_on_user_id_and_relay_role_id", unique: true
+    t.index ["user_id"], name: "index_relay_user_roles_on_user_id"
+  end
+
   create_table "released_handles", force: :cascade do |t|
     t.string "handle", null: false
     t.integer "user_id"
@@ -454,6 +464,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_13_600000) do
   add_foreign_key "relay_certificates", "users", column: "revoked_by_id"
   add_foreign_key "relay_peer_roles", "relay_peers"
   add_foreign_key "relay_peer_roles", "relay_roles"
+  add_foreign_key "relay_user_roles", "relay_roles"
+  add_foreign_key "relay_user_roles", "users"
   add_foreign_key "remembered_browsers", "users"
   add_foreign_key "room_invites", "users", column: "created_by_id"
   add_foreign_key "room_invites", "users", column: "revoked_by_id"

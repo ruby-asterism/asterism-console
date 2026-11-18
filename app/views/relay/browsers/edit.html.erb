@@ -14,6 +14,21 @@
         sends when receiving is on there (the Receiving app, or <code>areceive on</code> in its Shell). The page takes the
         list, and receives, only while the door connects it with the user's certificate.</p>
     </fieldset>
+    <fieldset class="wide roles">
+      <legend>Roles of this browser (<%= link_to "what they allow", relay_roles_path %>)</legend>
+      <% every = RelayRole.where(for_browsers: true).order(:name).pluck(:name) %>
+      <% picks = RelayRole.where(for_browsers: false).order(:name) %>
+      <p class="hint">Every browser has <%= every.empty? ? "no role" : every.map { tag.code(_1) }.to_sentence.html_safe %>
+        (the roles marked for browsers). The roles ticked here are this user's on top of those, with <code>${node}</code>
+        its name <code><%= name %></code>: the router gives them only to the page the door connects with the user's
+        certificate, never to the other browsers or to a page that comes through the shared connection.</p>
+      <% if picks.empty? %><p class="hint">No other roles yet.</p><% end %>
+      <%= f.collection_check_boxes :browser_role_ids, picks, :id, :name do |b| %>
+        <label class="check role-pick"><%= b.check_box %>
+          <span><strong><%= b.text %></strong>
+            <span class="role-desc"><%= b.object.description.presence || tag.span("no description", class: "hint") %></span></span></label>
+      <% end %>
+    </fieldset>
     <div class="wide"><%= f.submit "Save" %> <%= link_to "Back", relay_browsers_path %></div>
   <% end %>
 </section>

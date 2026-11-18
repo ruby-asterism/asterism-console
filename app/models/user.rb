@@ -17,6 +17,11 @@
 # certificate (Relay::BrowserCerts, made when the handle is chosen; a
 # handle given up takes its certificate's files with it).
 #
+# A user's browser may have roles of its own (0.4.2, browser_roles): an
+# admin picks them on Members > Browsers, and the router gives them only to
+# the page the door connects with the user's certificate, on top of the
+# roles every browser has (RelayRole#for_browsers).
+#
 # TOTP (a second factor) is optional per user: the user turns it on from
 # the account page (the secret is shown once, to type into an authenticator
 # app) and confirms it with a code. A code is accepted once (otp_last_step).
@@ -44,6 +49,8 @@ class User < ApplicationRecord
   has_many :created_invitations, class_name: "Invitation", foreign_key: :created_by_id, dependent: :nullify
   has_many :created_room_invites, class_name: "RoomInvite", foreign_key: :created_by_id, dependent: :nullify
   has_many :revoked_room_invites, class_name: "RoomInvite", foreign_key: :revoked_by_id, dependent: :nullify
+  has_many :relay_user_roles, dependent: :destroy
+  has_many :browser_roles, -> { order(:name) }, through: :relay_user_roles, source: :relay_role
 
   normalizes :email_address, with: ->(e) { e.strip.downcase }
   normalizes :handle, with: ->(h) { h.strip.downcase.presence }

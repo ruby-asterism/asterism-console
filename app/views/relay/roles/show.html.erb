@@ -15,7 +15,7 @@
 
 <section class="card">
   <h2>What it becomes</h2>
-  <% if @rows.empty? && !@browsers %>
+  <% if @rows.empty? && !@browsers && @users.empty? %>
     <p class="hint">No row has this role.</p>
   <% end %>
   <% @rows.each do |peer, expansion| %>
@@ -26,6 +26,11 @@
   <% if @browsers %>
     <h3>Browsers <span class="hint">every ws/ session, one subject</span></h3>
     <%= render "relay/roles/expansion", expansion: @browsers %>
+  <% end %>
+  <% @users.each do |u, name, expansion| %>
+    <h3><%= link_to name, edit_relay_browser_path(u) %> <span class="hint">a user's own browser: the page with the
+      user's certificate only</span></h3>
+    <%= render "relay/roles/expansion", expansion: expansion %>
   <% end %>
 </section>
 

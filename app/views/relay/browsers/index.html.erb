@@ -8,12 +8,13 @@
      cloud router sees that page as a subject of its own: it writes and calls as its own name only, and may send and
      receive files with the members and browsers chosen below. A page the user opens later takes the name over: the earlier
      page goes on through the shared connection of every browser, as does a page opened before the apply and a page without
-     a pass from this console; there the router cannot tell them apart and no file goes.</p>
+     a pass from this console; there the router cannot tell them apart and no file goes. Roles picked for a user (Edit)
+     go to that user's own page only, on top of the roles every browser has.</p>
   <% if @users.empty? %>
     <p class="hint">No user has a handle yet.</p>
   <% else %>
     <table class="list">
-      <thead><tr><th>Node</th><th>Certificate until</th><th>Router's ACL</th><th>Receives files from</th>
+      <thead><tr><th>Node</th><th>Certificate until</th><th>Router's ACL</th><th>Roles of its own</th><th>Receives files from</th>
                  <th>Receives apps (checkpoint) from</th><th>Now</th><th></th></tr></thead>
       <tbody>
         <% @users.each do |u| %>
@@ -26,6 +27,7 @@
             <td><% if good && Relay::BrowserCerts.applied?(name, @config) %><span class="badge ok">in the ACL</span>
                 <% elsif good %><span class="badge warn">waiting to apply</span>
                 <% else %><span class="hint">-</span><% end %></td>
+            <td><%= u.browser_roles.any? ? safe_join(u.browser_roles.map { tag.code(_1.name) }, ", ") : tag.span("-", class: "hint") %></td>
             <td><%= receivers_text(u, "file") %></td>
             <td><%= receivers_text(u, "checkpoint") %>
               <% if u.managed_receivers? %><br><span class="hint">on the page:</span> <%= receivers_delivery(u) %><% end %></td>

@@ -3,7 +3,10 @@
 # roles allow, with ${node} in a template expanded to each node the row
 # speaks for (RelayPeer#node_list: the boards behind a home router, or the
 # row's own name). The browsers (the ws/ subject) take the roles marked
-# for_browsers, with ${node} expanded to the browsers' node pattern. A role
+# for_browsers, with ${node} expanded to the browsers' node pattern; a
+# user's own browser (the page with the user's certificate) also takes the
+# roles picked for that user (RelayUserRole, 0.4.2), never the shared ws/
+# subject. A role
 # is permissions only: the apps a browser page starts are a list of their
 # own (BrowserApp, 0.3.12; each role had one before).
 #
@@ -25,6 +28,10 @@ class RelayRole < ApplicationRecord
 
   has_many :peer_roles, class_name: "RelayPeerRole", dependent: :destroy
   has_many :peers, through: :peer_roles, source: :relay_peer
+  # Users whose own browser has this role (0.4.2; the page with the user's
+  # certificate only).
+  has_many :user_roles, class_name: "RelayUserRole", dependent: :destroy
+  has_many :users, through: :user_roles
 
   validates :name, format: { with: NAME, message: "is lower case letters, digits, - and _" }, uniqueness: true
   validate :templates_are_keys
