@@ -410,7 +410,11 @@ apps it may start are a list of their own, kept by an admin under
 Admin > Studio apps (a path, an optional label and order; 0.3.12): the
 user picks "Nothing" or one of them, and the console opens no other.
 Browsers get the roles marked "Browsers have this role": a role says what
-a browser may read and write, not what it opens. Without the setting there is no button and a
+a browser may read and write, not what it opens. A role for some users'
+browsers only (0.4.2): leave that mark off and tick the role for those
+users on Admin > Members > Browsers > Edit; only the page the door connects
+with that user's certificate gets it (docs/g1_5.md, "Browsers the router
+tells apart"). Without the setting there is no button and a
 pass is shown with its node, without a link. The browser build refuses a
 link with a pass but no node.
 
@@ -1405,6 +1409,23 @@ cloud router):
 - **Check**: `asterism node list` with a member's certificate shows the
   console with its kind (`console`).
 - Going back to 0.4.0 needs nothing but `./update.sh 0.4.0`.
+
+From 0.4.1 to 0.4.2 (roles for some users' browsers):
+
+- `./update.sh 0.4.2`. One migration that adds a table (the roles picked
+  for users' browsers, empty); no role, row or user changes, and nothing
+  in nginx or `.env`. Until a role is picked for a user, the router's
+  configuration is the same as 0.4.1's (the update's setup writes it and
+  restarts the router as usual).
+- **Use**: Admin > Members > Browsers, Edit a user, tick a role under
+  "Roles of this browser", Save, Apply. Only that user's own page (the one
+  the door connects with the user's certificate, "in the ACL" on the
+  Browsers page) gets it; the other browsers and the pages that come
+  through the shared `ws/` subject do not.
+- Going back to 0.4.1: `./update.sh 0.4.1` runs on the migrated database
+  (0.4.1 does not read the new table, so the picks have no effect until
+  0.4.2 again), then Apply. To drop the table too, restore the update's
+  backup (`./update.sh 0.4.1 --restore <it>`, section 16).
 
 ## 21. When something is wrong
 

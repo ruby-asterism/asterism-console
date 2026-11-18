@@ -8,6 +8,25 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.4.2
+
+What an update needs: nothing but the update; one migration that adds a
+table (empty), nothing in nginx, `.env` or the roles. Until a role is
+picked for a user, the router's configuration is the same as 0.4.1's.
+docs/install.md, "From 0.4.1 to 0.4.2".
+
+- Roles for some users' browsers: on Members > Browsers > Edit an admin
+  ticks roles for one user (the roles not marked "Browsers have this
+  role"). The router gives them only to the page the door connects with
+  that user's certificate (`wasm-<handle>`), with `${node}` its own name and
+  its calls under its own name; never to the other browsers or to the
+  shared `ws/` subject, so a page that comes through `ws/` cannot reach
+  what they open under any name. The Browsers page lists each user's
+  roles, a role's page what it becomes for each such browser. For
+  asterism-tutor (Family mruby's AI helper), whose role `tutor` a parent
+  gives to some browsers only. The roles every browser has, and what a
+  page through `ws/` may do, are as before.
+
 ## 0.4.1
 
 What an update needs: nothing but the update; no migration, nothing in
