@@ -12,7 +12,7 @@
 # ASTERISM_REF=<commit> takes asterism from its git repository at that
 # commit (ASTERISM_GIT: another URL; docs/install.md, "Building the image
 # yourself").
-ARG RUBY_VERSION=3.4.11
+ARG RUBY_VERSION=3.4.13
 ARG ASTERISM_GEMS=rubygems
 ARG ASTERISM_GIT=https://github.com/ruby-asterism/asterism.git
 ARG ASTERISM_REF=

@@ -8,6 +8,14 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.4.3
+
+- The image is built on Ruby 3.4.13 (`ruby:3.4.13-slim`; `.ruby-version` too),
+  for the Regexp and String case conversion fixes announced on 2026-11-18
+  (heap overflows, a double free and out-of-bounds reads in Ruby
+  3.4.0-3.4.12). No change in the console itself, no migration:
+  `./update.sh 0.4.3`.
+
 ## 0.4.2
 
 What an update needs: nothing but the update; one migration that adds a

@@ -1410,6 +1410,12 @@ cloud router):
   console with its kind (`console`).
 - Going back to 0.4.0 needs nothing but `./update.sh 0.4.0`.
 
+From 0.4.2 to 0.4.3 (Ruby 3.4.13):
+
+- `./update.sh 0.4.3`. The image runs Ruby 3.4.13 (security fixes in Regexp
+  and String case conversion); nothing else changes: no migration, nothing
+  in nginx or `.env`. Going back: `./update.sh 0.4.2`.
+
 From 0.4.1 to 0.4.2 (roles for some users' browsers):
 
 - `./update.sh 0.4.2`. One migration that adds a table (the roles picked
