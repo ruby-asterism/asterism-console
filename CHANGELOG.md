@@ -8,6 +8,18 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## 0.4.4
+
+- The router of `deploy/vps` is zenohd 1.10.2 (`eclipse/zenoh:1.10.2`; it was
+  1.10.1). 1.10.2 builds on rustls 0.23.45, which no longer accepts TLS 1.3
+  handshake messages sent at the wrong encryption level (GHSA-2mjx-qc3c-rqvc);
+  the router's mTLS port is what the outside reaches. Its configuration keys
+  are those of 1.10.1 (DEFAULT_CONFIG.json5 differs in comments only), so the
+  file the console generates is unchanged. Checked with zenoh-pico devices'
+  simulation, the tutor's and the chat's tests against a local 1.10.2.
+- No change in the console itself. An update restarts the router: the nodes
+  reconnect by themselves.
+
 ## 0.4.3
 
 - The image is built on Ruby 3.4.13 (`ruby:3.4.13-slim`; `.ruby-version` too),

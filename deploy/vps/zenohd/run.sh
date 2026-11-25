@@ -1,5 +1,5 @@
 #!/bin/sh
-# The router of deploy/vps: zenohd 1.10.1 on the configuration the console
+# The router of deploy/vps: zenohd 1.10.2 on the configuration the console
 # generates from its registry (/generated/cloud.json5). The console's apply
 # writes that file, then /generated/restart.request (bin/relay_restart_request);
 # this loop sees the request change and restarts zenohd, so the console

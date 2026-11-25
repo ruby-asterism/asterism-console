@@ -1410,6 +1410,13 @@ cloud router):
   console with its kind (`console`).
 - Going back to 0.4.0 needs nothing but `./update.sh 0.4.0`.
 
+From 0.4.3 to 0.4.4 (zenohd 1.10.2):
+
+- `./update.sh 0.4.4`. The router's image becomes `eclipse/zenoh:1.10.2`
+  (a fix in its TLS library), so the router restarts and the nodes
+  reconnect; no migration, nothing in nginx or `.env`. Going back:
+  `./update.sh 0.4.3` (the router goes back to 1.10.1 with it).
+
 From 0.4.2 to 0.4.3 (Ruby 3.4.13):
 
 - `./update.sh 0.4.3`. The image runs Ruby 3.4.13 (security fixes in Regexp
