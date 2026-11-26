@@ -24,6 +24,16 @@ import { createConsumer } from "@rails/actioncable"
 // a session that ended meanwhile is told back. A change of the machine's
 // system area is asked about first (y/N); y sends the line again,
 // confirmed.
+//
+// Files in a machine (docs/terminal.md, "Files: get and put"): get <file>
+// ends with a "download" message, a link this browser follows once (the
+// file is saved). put [<folder>] opens the file chooser (the browser lets a
+// page open it only from the user's key or click, so it opens as Enter is
+// pressed), and files dropped on the Terminal are put the same way (into the
+// folder of a put typed on the line, else where the session is): the files
+// go up to the console (POST /terminal/uploads, its progress shown), then
+// the line is sent with the upload's token. A file of the same name there
+// is asked about (y/N), and y sends the line again with the same upload.
 
 const LEASE_EVERY = 10000
 const HISTORY_MAX = 200
@@ -33,7 +43,7 @@ const WAITING_NOTE_MS = 4000
 
 export default class extends Controller {
   static targets = ["screen", "state"]
-  static values = { available: Boolean, user: String }
+  static values = { available: Boolean, user: String, level: String, fileMax: Number }
 
   async connect() {
     this.page = randomToken()
@@ -63,6 +73,7 @@ export default class extends Controller {
     window.addEventListener("resize", this.onResize)
     this.term.onData((d) => this.input(d))
     window.consoleTerminal = this
+    this.setupFiles()
 
     if (!this.availableValue) {
       this.term.write("\x1b[31mThe Terminal needs the asterism gem 0.13.0 or newer (its command line on the " +
@@ -95,6 +106,7 @@ export default class extends Controller {
     clearTimeout(this.waitTimer)
     window.removeEventListener("resize", this.onResize)
     if (this.onHide) window.removeEventListener("pagehide", this.onHide)
+    this.xhr?.abort()
     this.release()
     this.subscription?.unsubscribe()
     this.consumer?.disconnect()
@@ -207,6 +219,11 @@ export default class extends Controller {
   }
 
   interrupt() {
+    if (this.running === "choosing") return this.chosen([])
+    if (this.running === "uploading") {
+      this.xhr?.abort()
+      return
+    }
     if (this.running) {
       this.term.write("^C\r\n")
       post(`/terminal/commands/${this.running}/stop`, {})
@@ -227,8 +244,10 @@ export default class extends Controller {
     this.completing = null
     this.hpos = this.history.length
     let confirmed = false
+    let upload = ""
     if (this.confirming) {
       const asked = this.confirming.line
+      upload = this.confirming.upload || ""
       this.confirming = null
       if (!/^\s*y(es)?\s*$/i.test(line)) {
         this.term.write("\x1b[2m(not sent)\x1b[0m\r\n")
@@ -239,12 +258,19 @@ export default class extends Controller {
     } else {
       if (!line.trim()) return this.prompt()
       this.remember(line)
+      // put: the file chooser, now (while the key press lets it open)
+      if (this.remote && firstWord(line) === "put" && this.levelValue === "write") return this.choose(line)
     }
+    return this.send(line, { confirmed, upload })
+  }
+
+  // Sends a line (the page's answer and the bridge's messages follow).
+  async send(line, { confirmed = false, upload = "" } = {}) {
     this.running = "sending"
     let res, body
     try {
       res = await post("/terminal/commands", { page: this.page, line: line, cols: this.term.cols,
-                                               remote: this.remote?.node || "", confirmed: confirmed })
+                                               remote: this.remote?.node || "", confirmed: confirmed, upload: upload })
       body = await res.json().catch(() => ({}))
     } catch {
       this.running = null
@@ -267,7 +293,7 @@ export default class extends Controller {
     this.place(body)
     if (body.status === "empty") return this.prompt()
     const why = body.reason || body.error || `the console answered ${res.status}`
-    this.term.write(`\x1b[31m${this.who(body)}: ${why}\x1b[0m\r\n`)
+    this.term.write(`\x1b[31m${said(this.who(body), why)}\x1b[0m\r\n`)
     this.prompt()
   }
 
@@ -403,13 +429,18 @@ export default class extends Controller {
         if (msg.status === "stopped") {
           this.term.write(`\x1b[2m(${msg.reason || "stopped"})\x1b[0m\r\n`)
         } else if (["denied", "expired"].includes(msg.status) && !msg.output_bytes) {
-          this.term.write(`\x1b[31m${who}: ${msg.reason}\x1b[0m\r\n`)
+          this.term.write(`\x1b[31m${said(who, msg.reason)}\x1b[0m\r\n`)
         } else if (msg.status === "failed" && msg.reason && !msg.output_bytes) {
-          this.term.write(`\x1b[31m${who}: ${msg.reason}\x1b[0m\r\n`)
+          this.term.write(`\x1b[31m${said(who, msg.reason)}\x1b[0m\r\n`)
         }
         this.place(msg)
-        if (msg.status === "asked" && msg.confirm) this.confirming = { line: msg.line, question: msg.confirm }
+        if (msg.status === "asked" && msg.confirm) {
+          this.confirming = { line: msg.line, question: msg.confirm, upload: msg.upload || "" }
+        }
         this.prompt()
+        break
+      case "download":
+        if (msg.id === this.running) this.download(msg)
         break
       case "complete":
         this.completed(msg)
@@ -423,6 +454,118 @@ export default class extends Controller {
     if (msg.remote_node) return msg.remote_node
     if (msg.command === "remote") return "remote"
     return this.remote?.node || "asterism"
+  }
+
+  // ------------------------------------------------------- get and put
+
+  setupFiles() {
+    this.fileInput = document.createElement("input")
+    this.fileInput.type = "file"
+    this.fileInput.multiple = true
+    this.fileInput.hidden = true
+    this.element.appendChild(this.fileInput)
+    this.fileInput.addEventListener("change", () => this.chosen([...this.fileInput.files]))
+    this.fileInput.addEventListener("cancel", () => this.chosen([]))
+    this.onDragOver = (ev) => {
+      if (!ev.dataTransfer?.types?.includes("Files")) return
+      ev.preventDefault()
+      ev.dataTransfer.dropEffect = "copy"
+    }
+    this.onDrop = (ev) => {
+      if (!ev.dataTransfer?.files?.length) return
+      ev.preventDefault()
+      this.dropped([...ev.dataTransfer.files])
+    }
+    this.screenTarget.addEventListener("dragover", this.onDragOver)
+    this.screenTarget.addEventListener("drop", this.onDrop)
+  }
+
+  // put typed: the chooser opens; chosen() goes on.
+  choose(line) {
+    this.running = "choosing"
+    this.putLine = line
+    this.fileInput.value = ""
+    this.term.write("\x1b[2m(choose the files to put; Ctrl-C: none)\x1b[0m\r\n")
+    this.fileInput.click()
+  }
+
+  chosen(files) {
+    if (this.running !== "choosing") return
+    this.running = null
+    if (files.length === 0) {
+      this.term.write("\x1b[2m(no file chosen)\x1b[0m\r\n")
+      return this.prompt()
+    }
+    this.upload(this.putLine, files)
+  }
+
+  // Files dropped on the Terminal: put, into the folder of a put on the
+  // line (else where the session is).
+  dropped(files) {
+    if (this.running || this.confirming) return this.term.write("\x07")
+    const typed = this.buf.join("")
+    if (!this.remote) {
+      this.term.write("\r\n\x1b[33mfiles go into a machine: remote <node> first, then drop them (or put)\x1b[0m\r\n")
+      this.prompt()
+      return this.edit(() => { this.buf = [...typed]; this.cur = this.buf.length })
+    }
+    const line = firstWord(typed) === "put" ? typed : "put"
+    this.edit(() => { this.buf = [...line]; this.cur = this.buf.length })
+    this.term.write("\r\n")
+    this.remember(line)
+    if (this.levelValue !== "write") return this.send(line)
+    this.upload(line, files)
+  }
+
+  // The files up to the console, then the line with their token.
+  upload(line, files) {
+    const big = files.find((f) => f.size > this.fileMaxValue)
+    if (big) {
+      this.term.write(`\x1b[31mput: ${big.name}: over ${Math.floor(this.fileMaxValue / 1048576)} MB (the console's limit)\x1b[0m\r\n`)
+      return this.prompt()
+    }
+    const total = files.reduce((n, f) => n + f.size, 0)
+    const form = new FormData()
+    form.append("page", this.page)
+    for (const f of files) form.append("files[]", f, f.name)
+    this.running = "uploading"
+    const xhr = this.xhr = new XMLHttpRequest()
+    xhr.open("POST", "/terminal/uploads")
+    xhr.setRequestHeader("X-CSRF-Token", csrf())
+    xhr.setRequestHeader("Accept", "application/json")
+    xhr.upload.onprogress = (ev) => {
+      this.term.write(`\r\x1b[Kup to the console: ${kb(ev.loaded)} / ${kb(ev.lengthComputable ? ev.total : total)}`)
+    }
+    const end = (text) => {
+      this.xhr = null
+      this.running = null
+      this.term.write("\r\x1b[K")
+      if (text) this.term.write(text + "\r\n")
+    }
+    xhr.onload = () => {
+      let body = {}
+      try { body = JSON.parse(xhr.responseText) } catch { /* not JSON */ }
+      if (xhr.status === 201 && body.upload) {
+        end(`\x1b[2m${files.length} file${files.length === 1 ? "" : "s"} (${kb(total)}) at the console; to ${this.remote?.node}\x1b[0m`)
+        return this.send(line, { upload: body.upload })
+      }
+      end(`\x1b[31m${this.who({})}: ${body.error || `the console answered ${xhr.status}`}\x1b[0m`)
+      this.prompt()
+    }
+    xhr.onerror = () => { end("\x1b[31mput: the upload to the console failed\x1b[0m"); this.prompt() }
+    xhr.onabort = () => { end("\x1b[2m(stopped before the files reached the console)\x1b[0m"); this.prompt() }
+    xhr.send(form)
+  }
+
+  // get's file: the browser saves it (the link works once).
+  download(msg) {
+    const a = document.createElement("a")
+    a.href = msg.url
+    a.download = msg.name || ""
+    a.hidden = true
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   // --------------------------------------------------------------- the page
@@ -474,6 +617,21 @@ function unescapeWord(s) {
     out += c
   }
   return out
+}
+
+// A refusal with who it is from, unless it says so itself.
+function said(who, why) {
+  return String(why).startsWith(`${who}: `) ? why : `${who}: ${why}`
+}
+
+// The first word of a line (blanks part words).
+function firstWord(line) {
+  return line.trim().split(/[ \t]+/)[0] || ""
+}
+
+function kb(n) {
+  if (n < 1024) return `${n} bytes`
+  return n >= 10485760 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`
 }
 
 function commonPrefix(list) {

@@ -86,8 +86,10 @@ class TerminalRemoteControllerTest < ActionDispatch::IntegrationTest
     assert_match(/node: not a command of this remote shell/, body["reason"])
     run_line("remote fmruby-bbbbbb", remote: "fmruby-aaaaaa")
     assert_match(/you are in fmruby-aaaaaa \(exit leaves it first\)/, response.parsed_body["reason"])
-    run_line("get a.txt", remote: "fmruby-aaaaaa")
-    assert_match(/not in this version of the console/, response.parsed_body["reason"])
+    body = run_line("get a.txt", remote: "fmruby-aaaaaa")
+    assert_response :created
+    assert_equal [ "get", "read", "read" ], TerminalCommand.find(body["id"]).then { [ _1.command, _1.effect, _1.method_name ] }
+    TerminalCommand.update_all(status: "ok")
 
     users(:user).update!(rshell_access: "none")
     body = run_line("exit", remote: "fmruby-aaaaaa")

@@ -19,7 +19,9 @@
 # <node>/transfer/rshell, method_name exec_read or exec_write). confirmed:
 # the user answered y to the question about the system's area. A change
 # outside the user's areas that was not confirmed ends "asked" (nothing
-# sent; the page asks).
+# sent; the page asks). get and put (the console's file commands) keep what
+# they carried in files (files_value): each file's path on the machine, its
+# size and how it ended.
 class TerminalCommand < ApplicationRecord
   KINDS = %w[run complete].freeze
   ACTIVE = %w[pending running stopping].freeze
@@ -48,6 +50,15 @@ class TerminalCommand < ApplicationRecord
 
   def argv_value
     argv.present? ? JSON.parse(argv) : []
+  end
+
+  # get and put (the remote shell): {"upload" => the put's token while it
+  # waits, "files" => [{"name", "path", "size", "result"}]}.
+  def files_value
+    v = files.present? ? JSON.parse(files) : {}
+    v.is_a?(Hash) ? v : {}
+  rescue JSON::ParserError
+    {}
   end
 
   def active?

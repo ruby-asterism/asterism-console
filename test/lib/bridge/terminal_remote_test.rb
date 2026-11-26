@@ -32,7 +32,35 @@ class Bridge::TerminalRemoteTest < ActiveSupport::TestCase
     TerminalSession.renew(page: PAGE, user: users(:user))
   end
 
-  teardown { @terminal.close }
+  teardown do
+    @terminal.close
+    FileUtils.rm_rf(@files_dir) if @files_dir
+    ENV.delete("ASTERISM_RSHELL_FILES_DIR")
+  end
+
+  # get and put keep their files in a directory of their own here.
+  def files_dir
+    @files_dir ||= Dir.mktmpdir("rshell_files").tap { ENV["ASTERISM_RSHELL_FILES_DIR"] = _1 }
+  end
+
+  Upload = Struct.new(:original_filename, :path, :size)
+
+  # The files a page chose for put, as Rails keeps them: the token.
+  def uploaded(files, user: users(:user))
+    files_dir
+    dir = Dir.mktmpdir("up", @files_dir)
+    ups = files.map do |name, data|
+      path = File.join(dir, name.tr("/", "_"))
+      File.binwrite(path, data)
+      Upload.new(name, path, data.bytesize)
+    end
+    TerminalFiles.new_put(user_id: user.id, page: PAGE, files: ups)
+  end
+
+  def put_line(text, token, **kw)
+    finished(TerminalCommand.create!(user: users(:user), page: PAGE, line: text, kind: "run", cols: 100, remote: NODE,
+                                     files: JSON.generate("upload" => token), **kw))
+  end
 
   def typed(line, page: PAGE, user: users(:user), kind: "run", remote: nil, command: nil, confirmed: false)
     TerminalCommand.create!(user: user, page: page, line: line, kind: kind, cols: 100, remote: remote,
@@ -245,6 +273,182 @@ class Bridge::TerminalRemoteTest < ActiveSupport::TestCase
     assert_equal "denied", r.status
     assert_match(/may not use the remote shell/, r.reason)
     assert_empty @machine.calls
+  end
+
+  test "get: the file's bytes to the console's place, a link for the page, once for its user" do
+    files_dir
+    bin = (0..255).map(&:chr).join.b * 100 # 25600 bytes, every byte
+    @machine.files["/home/pic.png"] = bin
+    users(:user).update!(rshell_access: "read")
+    enter
+    r = line("get pic.png")
+    assert_equal [ "ok", 0, "get", "read" ], [ r.status, r.exit_code, r.command, r.effect ]
+    assert_equal [ 0, 8192, 16384, 24576 ], @machine.calls.select { _1[0] == "read" }.map(&:last)
+    d = messages.find { _1["type"] == "download" && _1["id"] == r.id }
+    assert_equal "pic.png", d["name"]
+    token = d["url"].delete_prefix("/terminal/files/")
+    assert_match(/get \/home\/pic.png: 25 KB \(25600 bytes\); the browser saves it as pic.png/, output(r))
+    assert_equal [ { "path" => "/home/pic.png", "size" => 25600, "got" => 25600, "result" => "ok" } ], r.files_value["files"]
+    assert_nil TerminalFiles.take_get(token, users(:admin)), "another user's link"
+    f = TerminalFiles.take_get(token, users(:user))
+    assert_equal [ "pic.png", bin ], [ f["name"], f["data"] ]
+    assert_nil TerminalFiles.take_get(token, users(:user)), "once"
+  end
+
+  test "get refuses a folder, a secret, a file over the limit, with the reason" do
+    files_dir
+    enter
+    r = line("get apps")
+    assert_equal "denied", r.status
+    assert_match(%r{/home/apps: not a file}, r.reason)
+    assert_match(/kept from the remote shell/, line("get /home/asterism/config.toml").reason)
+    @machine.files["/home/big.bin"] = "x" * 20
+    rs = Bridge::RemoteShell.new(call: @rshell.instance_variable_get(:@call))
+    s = @terminal.instance_variable_get(:@remotes)[PAGE]
+    e = assert_raises(Bridge::RemoteShell::Refused) { rs.get(s, "big.bin", to: File.join(files_dir, "x"), out: StringIO.new, max: 10) }
+    assert_match(/over the console's limit/, e.message)
+    assert_empty Dir.children(File.join(files_dir, "get")), "no place left behind"
+    refute messages.any? { _1["type"] == "download" }
+  end
+
+  test "get stopped by Ctrl-C keeps nothing" do
+    files_dir
+    @machine.files["/home/large.bin"] = "y" * 200_000
+    enter
+    slow = @rshell.instance_variable_get(:@call)
+    @terminal.instance_variable_set(:@rshell, Bridge::RemoteShell.new(call: ->(*a, **k) { sleep 0.01; slow.call(*a, **k) }))
+    r = typed("get large.bin", remote: NODE)
+    run_until { @machine.calls.count { _1[0] == "read" } >= 3 }
+    r.update!(status: "stopping")
+    @terminal.sync
+    finished(r)
+    assert_equal "stopped", r.status
+    assert_match(/stopped at/, output(r))
+    assert_empty Dir.children(File.join(files_dir, "get"))
+  end
+
+  test "put: the uploaded files into where the session is, piece by piece" do
+    bin = (0..255).map(&:chr).join.b * 80 # 20480 bytes
+    token = uploaded([ [ "a.bin", bin ], [ "かな.txt", "かな\n" ] ])
+    enter
+    r = put_line("put", token)
+    assert_equal [ "ok", 0, "put", "write" ], [ r.status, r.exit_code, r.command, r.effect ]
+    assert_equal bin, @machine.files["/home/a.bin"]
+    assert_equal "かな\n".b, @machine.files["/home/かな.txt"]
+    assert_equal [ 0, 8192, 16384 ], @machine.calls.select { _1[0] == "write_chunk" }.first(3).map { _1[1] }
+    assert_equal %w[/home/a.bin /home/かな.txt], r.files_value["files"].map { _1["path"] }
+    assert_match(%r{put /home/a.bin: 20 KB \(20480 bytes\)}, output(r))
+    assert_nil TerminalFiles.put_files(token, users(:user)), "the upload goes once sent"
+  end
+
+  test "put into a folder given, or as the file given; several files want a folder" do
+    enter
+    assert_equal "ok", put_line("put apps", uploaded([ [ "x.txt", "x" ] ])).status
+    assert_equal "x", @machine.files["/home/apps/x.txt"]
+    assert_equal "ok", put_line("put renamed.txt", uploaded([ [ "y.txt", "y" ] ])).status
+    assert_equal "y", @machine.files["/home/renamed.txt"]
+    r = put_line("put one.txt", uploaded([ [ "p.txt", "p" ], [ "q.txt", "q" ] ]))
+    assert_equal "denied", r.status
+    assert_match(/not a folder on #{NODE} \(2 files go into a folder\)/, r.reason)
+  end
+
+  test "put: a name there is asked about; y sends it again with the same upload and writes over" do
+    enter
+    token = uploaded([ [ "notes.txt", "new\n" ] ])
+    r = put_line("put", token)
+    assert_equal "asked", r.status
+    d = done(r)
+    assert_match(%r{/home/notes.txt is there already \(written over\)\. Go on\? \(y/N\)}, d["confirm"])
+    assert_equal token, d["upload"]
+    assert_equal "hello\n", @machine.files["/home/notes.txt"], "not sent"
+    r = put_line("put", token, confirmed: true)
+    assert_equal "ok", r.status
+    assert_equal "new\n", @machine.files["/home/notes.txt"]
+    assert_equal true, @machine.calls.find { _1[0] == "write_begin" }[3]
+  end
+
+  test "put into the system's area is asked about too" do
+    enter
+    r = put_line("put /etc", uploaded([ [ "z.toml", "z" ] ]))
+    assert_equal "asked", r.status
+    assert_match(/\/etc is in the system's area/, done(r)["confirm"])
+  end
+
+  test "put: the machine's refusals per file, a read-only user, another user's upload, an older machine" do
+    enter
+    @machine.read_only << "/home/ro"
+    r = put_line("put /home/ro/", uploaded([ [ "a.txt", "a" ] ]))
+    assert_equal [ "failed", 1 ], [ r.status, r.exit_code ]
+    assert_match(/read-only here/, output(r))
+    assert_equal [ "refused" ], r.files_value["files"].map { _1["result"] }
+    assert_equal "write_cancel", @machine.calls.last[0]
+    r = put_line("put", uploaded([ [ "b.txt", "b" ] ], user: users(:admin)))
+    assert_match(/no files came with the line/, r.reason)
+    users(:user).update!(rshell_access: "read")
+    r = put_line("put", uploaded([ [ "c.txt", "c" ] ]))
+    assert_match(/put: changes the machine; you may only read/, r.reason)
+    users(:user).update!(rshell_access: "write")
+    line("exit")
+    @machine.version = 2
+    enter
+    r = put_line("put", uploaded([ [ "d.txt", "d" ] ]))
+    assert_match(/remote shell is version 2; put needs 3/, r.reason)
+  end
+
+  test "put stopped by Ctrl-C: the machine drops its piece file" do
+    token = uploaded([ [ "large.bin", "z" * 200_000 ] ])
+    enter
+    slow = @rshell.instance_variable_get(:@call)
+    @terminal.instance_variable_set(:@rshell, Bridge::RemoteShell.new(call: ->(*a, **k) { sleep 0.01; slow.call(*a, **k) }))
+    r = TerminalCommand.create!(user: users(:user), page: PAGE, line: "put", kind: "run", cols: 100, remote: NODE,
+                                files: JSON.generate("upload" => token))
+    run_until { @machine.calls.count { _1[0] == "write_chunk" } >= 3 }
+    r.update!(status: "stopping")
+    @terminal.sync
+    finished(r)
+    assert_equal "stopped", r.status
+    assert_equal "write_cancel", @machine.calls.last[0]
+    assert_nil @machine.pending
+    refute @machine.files.key?("/home/large.bin")
+  end
+
+  test "Tab offers get and put as the first word; their arguments are the machine's paths" do
+    enter
+    t = typed("g", kind: "complete", remote: NODE)
+    run_until { !TerminalCommand.exists?(t.id) }
+    assert_equal [ "get" ], messages.select { _1["type"] == "complete" }.last["candidates"]
+    t = typed("p", kind: "complete", remote: NODE)
+    run_until { !TerminalCommand.exists?(t.id) }
+    assert_equal %w[ps put pwd], messages.select { _1["type"] == "complete" }.last["candidates"]
+    t = typed("get my", kind: "complete", remote: NODE)
+    run_until { !TerminalCommand.exists?(t.id) }
+    assert_equal [ "my\\ file.txt" ], messages.select { _1["type"] == "complete" }.last["candidates"]
+  end
+
+  test "a long cp: the progress on one line, Ctrl-C asks the machine to stop" do
+    enter
+    waits = 0
+    base = @rshell.instance_variable_get(:@call)
+    call = lambda do |node, method, *args, timeout:|
+      case method
+      when "exec_write"
+        { "out" => "cp: a -> b: copying 1 MB\n", "code" => 0, "cwd" => "/home", "more" => 25, "wait" => true }
+      when "more"
+        waits += 1
+        if waits < 3
+          { "out" => "", "more" => 25, "wait" => true, "code" => nil, "progress" => { "done" => waits * 4096, "total" => 1_048_576 } }
+        else
+          { "out" => "cp: a -> b (1048576 bytes)\n", "more" => nil, "wait" => false, "code" => 0 }
+        end
+      else base.call(node, method, *args, timeout: timeout)
+      end
+    end
+    @terminal.instance_variable_set(:@rshell, Bridge::RemoteShell.new(call: call, sleep: ->(_) { }))
+    @terminal.instance_variable_get(:@remotes)[PAGE].version = 3
+    r = line("cp a b")
+    assert_equal "ok", r.status
+    assert_includes output(r), "\r\e[K  4 KB / 1024 KB"
+    assert output(r).end_with?("\r\e[Kcp: a -> b (1048576 bytes)\n")
   end
 
   test "a machine whose transfer app is not running is not called (the call would only wait)" do

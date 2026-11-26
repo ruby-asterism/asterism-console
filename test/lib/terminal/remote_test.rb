@@ -41,13 +41,25 @@ class Terminal::RemoteTest < ActiveSupport::TestCase
     assert_match(/may not use/, check("ls", level: "bogus").reason)
   end
 
-  test "words the machine did not name, and the console's reserved ones, are not sent" do
+  test "words the machine did not name are not sent" do
     assert_match(/run: not a command of this remote shell/, check("run 1+1").reason)
     assert_match(/irb: not a command/, check("irb").reason)
-    assert_match(/get: not in this version of the console/, check("get a.txt").reason)
-    assert_match(/put: not in this version of the console/, check("put a.txt").reason)
-    l = Terminal::Remote.check("get a", commands: COMMANDS.merge("get" => "read"), level: "write")
-    assert_match(/not in this version/, l.reason, "kept for the console even when a machine names it")
+  end
+
+  test "get and put are the console's: get reads, put changes; their usage" do
+    l = check("get a.txt", level: "read")
+    assert_equal [ true, "get", "read", "read" ], [ l.ok?, l.kind, l.effect, l.method_name ]
+    l = Terminal::Remote.check("get a", commands: COMMANDS.merge("get" => "write"), level: "read")
+    assert l.ok?, "the console's even when a machine names it"
+    assert_match(/usage: get <file/, check("get").reason)
+    assert_match(/usage: get <file/, check("get a b").reason)
+    l = check("put", cwd: "/home")
+    assert_equal [ true, "put", "write", "write_begin", [] ], [ l.ok?, l.kind, l.effect, l.method_name, l.system_paths ]
+    assert_match(/put: changes the machine; you may only read/, check("put", level: "read").reason)
+    assert_match(/usage: put/, check("put a b").reason)
+    assert_equal [ "/usr/share" ], check("put ../usr/share", cwd: "/home").system_paths
+    assert_equal [ "/" ], check("put", cwd: "/").system_paths
+    assert_equal 'a\ \"b\\\\', Terminal::Remote.escape('a "b\\')
   end
 
   test "lines the machine would not take" do

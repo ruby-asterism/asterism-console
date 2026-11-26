@@ -3,7 +3,10 @@
 # doc/remote_shell/report/r1.md, 2 tells them, kill / open as r2's brief):
 # a few files in memory, the output in 8 KB pieces with more, kill's "asked"
 # and its result through more, Tab, one session, the callers let in, and its
-# refusals raised as ArgumentError (the caller hears "raised"). Plain Ruby:
+# refusals raised as ArgumentError (the caller hears "raised"); R4: read
+# gives a file's bytes as they are, write_begin / write_chunk / write_end /
+# write_cancel put one into a hidden piece first (pending), stat says
+# whether a path is there. Plain Ruby:
 # the bridge's tests call it directly, the live test exposes it from a node in
 # another process (caller: :from).
 class FakeRShell
@@ -15,10 +18,13 @@ class FakeRShell
             "cp" => "write", "mv" => "write", "rm" => "write", "mkdir" => "write", "kill" => "write",
             "open" => "write" }.freeze
   METHODS = { "open" => 0, "exec_read" => 2, "exec_write" => 2, "more" => 2, "complete" => 3, "read" => 4,
+              "write_begin" => 4, "write_chunk" => 3, "write_end" => 1, "write_cancel" => 1, "stop" => 1,
               "close" => 1 }.freeze
+  READ_MAX = 8192
+  WRITE_MAX = 8192
 
-  attr_reader :calls, :closed, :files
-  attr_accessor :allow, :kill_waits
+  attr_reader :calls, :closed, :files, :pending
+  attr_accessor :allow, :kill_waits, :version, :read_only
 
   def initialize(node = "fmruby-aaaaaa", allow: %w[console])
     @node = node
@@ -30,6 +36,9 @@ class FakeRShell
     @calls = []
     @closed = []
     @kill_waits = 2
+    @version = 3
+    @read_only = []
+    @pending = nil # put: {path, size, data}
   end
 
   def open(from: nil)
@@ -39,7 +48,7 @@ class FakeRShell
     end
     @s = { id: @next, from: from, cwd: "/home", text: nil, wait: nil }
     @next += 1
-    { "id" => @s[:id], "cwd" => "/home", "version" => { "os" => "test", "board" => "test", "rshell" => 2 },
+    { "id" => @s[:id], "cwd" => "/home", "version" => { "os" => "test", "board" => "test", "rshell" => @version },
       "commands" => TABLE, "out_max" => OUT_MAX, "total_max" => 65536, "idle_ms" => 300000 }
   end
 
@@ -85,10 +94,63 @@ class FakeRShell
     { "word" => start, "items" => items, "cut" => false }
   end
 
-  # get's reads (R4): the stand-in has no files to give.
+  # get's reads (R4): up to READ_MAX bytes from pos.
   def read(id, path, pos, len, from: nil)
+    s = session(id, from)
+    @calls << [ "read", path, pos ]
+    p = full(s, path)
+    raise ArgumentError, "#{p}: kept from the remote shell (keys and passwords)" if p.start_with?("/home/asterism")
+    data = @files[p]
+    raise ArgumentError, "#{p}: not a file" unless data.is_a?(String)
+    raise ArgumentError, "len: 1 to #{READ_MAX}" unless len.between?(1, READ_MAX)
+    { "data" => data.b.byteslice(pos, len).to_s, "pos" => pos, "size" => data.bytesize }
+  end
+
+  def write_begin(id, path, size, overwrite, from: nil)
+    s = session(id, from)
+    @calls << [ "write_begin", path, size, overwrite ]
+    @pending = nil
+    p = full(s, path)
+    raise ArgumentError, "#{p}: kept from the remote shell (keys and passwords)" if p.start_with?("/home/asterism")
+    raise ArgumentError, "#{p}: read-only here" if @read_only.any? { p.start_with?(_1) }
+    raise ArgumentError, "#{p}: a directory there" if @files.key?("#{p}/")
+    raise ArgumentError, "#{p}: already there (overwrite to write over it)" if @files.key?(p) && overwrite != true
+    @pending = { path: p, size: size, data: +"".b }
+    { "path" => p, "size" => size, "pos" => 0, "piece" => WRITE_MAX }
+  end
+
+  def write_chunk(id, pos, data, from: nil)
     session(id, from)
-    raise ArgumentError, "#{path}: not a file"
+    w = @pending or raise ArgumentError, "no file is coming in (write_begin first; it may have been dropped)"
+    @calls << [ "write_chunk", pos, data.bytesize ]
+    cur = w[:data].bytesize
+    return cur if pos > cur || pos + data.bytesize <= cur
+    w[:data] << data.b.byteslice(cur - pos..)
+    w[:data].bytesize
+  end
+
+  def write_end(id, from: nil)
+    session(id, from)
+    w = @pending or raise ArgumentError, "no file is coming in"
+    raise ArgumentError, "#{w[:path]}: #{w[:data].bytesize} of #{w[:size]} bytes are in" if w[:data].bytesize != w[:size]
+    @calls << [ "write_end", w[:path] ]
+    @files[w[:path]] = w[:data]
+    @pending = nil
+    { "path" => w[:path], "size" => w[:size] }
+  end
+
+  def write_cancel(id, from: nil)
+    session(id, from)
+    @calls << [ "write_cancel" ]
+    @pending = nil
+    true
+  end
+
+  def stop(id, from: nil)
+    s = session(id, from)
+    @calls << [ "stop" ]
+    s[:wait] = nil
+    true
   end
 
   def close(id, from: nil)
@@ -135,6 +197,12 @@ class FakeRShell
       path = words[1].start_with?("/") ? words[1] : "#{s[:cwd]}/#{words[1]}"
       text = @files[path]
       text ? answer(s, text, 0) : answer(s, "cat: #{path}: no such file\n", 1)
+    when "stat"
+      path = full(s, words[1])
+      if @files.key?("#{path}/") then answer(s, "#{path}\n  type: directory\n", 0)
+      elsif @files.key?(path) then answer(s, "#{path}\n  type: file\n", 0)
+      else answer(s, "stat: #{path}: no such file or directory\n", 1)
+      end
     when "rm"
       path = File.expand_path(words[1], s[:cwd])
       @files.delete(path) ? answer(s, "", 0) : answer(s, "rm: #{path}: no such file\n", 1)
@@ -145,6 +213,10 @@ class FakeRShell
       { "out" => text, "code" => 0, "cwd" => s[:cwd], "more" => text.bytesize, "cut" => false, "wait" => true }
     else answer(s, "", 0)
     end
+  end
+
+  def full(s, path)
+    File.expand_path(path.to_s, s[:cwd])
   end
 
   def answer(s, text, code)

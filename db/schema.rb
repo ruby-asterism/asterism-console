@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_26_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_27_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -409,6 +409,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_26_100000) do
     t.datetime "updated_at", null: false
     t.string "remote"
     t.boolean "confirmed", default: false, null: false
+    t.text "files"
     t.index ["created_at"], name: "index_terminal_commands_on_created_at"
     t.index ["kind", "status"], name: "index_terminal_commands_on_kind_and_status"
     t.index ["user_id"], name: "index_terminal_commands_on_user_id"

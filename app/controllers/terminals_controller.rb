@@ -7,6 +7,8 @@
 #   POST /terminal/commands           a line typed (Enter)
 #   POST /terminal/commands/:id/stop  Ctrl-C
 #   POST /terminal/complete           Tab
+#   POST /terminal/uploads            the files chosen for put (multipart)
+#   GET  /terminal/files/:token       the file a get brought (its user, once)
 #
 # The page's token is its user's: another user's token is refused, and the
 # output goes on a stream only that user may take (ConsoleChannel).
@@ -80,6 +82,33 @@ class TerminalsController < ApplicationController
     render json: cmd.reload.as_payload
   end
 
+  # put's files (docs/terminal.md, "Files: get and put"): the page uploads
+  # what was chosen (or dropped) and then sends the line with the token.
+  def upload
+    page = params[:page].to_s
+    return render(json: { "error" => "this page is not open (reload it)" }, status: :forbidden) unless
+      TerminalSession.owned?(page, current_user)
+    unless current_user.rshell_access == "write"
+      return render(json: { "error" => "put: changes the machine; you may only read with the remote shell (an admin " \
+                                       "chooses, under Users)" }, status: :forbidden)
+    end
+    unless TerminalSession.live.find_by(page: page, user: current_user)&.remote_node
+      return render(json: { "error" => "put: this page is in no machine (remote <node> first)" }, status: :conflict)
+    end
+    TerminalFiles.sweep
+    token = TerminalFiles.new_put(user_id: current_user.id, page: page, files: Array(params[:files]))
+    render json: { "upload" => token }, status: :created
+  rescue ArgumentError => e
+    render json: { "error" => "put: #{e.message}" }, status: :unprocessable_content
+  end
+
+  # The file of a get, for the user who asked, once (then it is gone).
+  def download
+    f = TerminalFiles.take_get(params[:token], current_user)
+    return head(:not_found) unless f
+    send_data f["data"], filename: f["name"], type: "application/octet-stream", disposition: "attachment"
+  end
+
   def complete
     page = params[:page].to_s
     return head(:forbidden) unless TerminalSession.owned?(page, current_user)
@@ -141,9 +170,10 @@ class TerminalsController < ApplicationController
     return unless may_start(page, line.ok?)
     cmd = TerminalCommand.create!(
       user: current_user, page: page, kind: "run", line: params[:line].to_s, argv: JSON.generate(line.words),
-      command: line.exit? ? "exit" : line.name, effect: line.exit? ? "close" : line.kind, remote: node, cols: cols,
+      command: line.exit? ? "exit" : line.name, effect: line.exit? ? "close" : line.effect, remote: node, cols: cols,
       path: Terminal::Remote.path(node), method_name: line.method_name,
       confirmed: ActiveModel::Type::Boolean.new.cast(params[:confirmed]) == true,
+      files: (JSON.generate("upload" => params[:upload].to_s) if line.kind == "put" && params[:upload].present?),
       status: line.ok? ? "pending" : "denied", reason: line.reason, finished_at: (Time.current unless line.ok?)
     )
     render json: cmd.as_payload.merge("remote" => remote_state(remote)), status: line.ok? ? :created : :forbidden

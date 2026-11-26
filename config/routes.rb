@@ -61,6 +61,10 @@ Rails.application.routes.draw do
     post :complete
     post :commands, action: :run
     post "commands/:id/stop", action: :stop, as: :stop
+    # The remote shell's put (the files the page chose) and get (the file
+    # brought from a machine, once, for its user).
+    post :uploads, action: :upload
+    get "files/:token", action: :download, as: :file, format: false
   end
   # The icons of the nodes' profiles (V2.5).
   get "icons/:hash", to: "icons#show", as: :icon, format: false

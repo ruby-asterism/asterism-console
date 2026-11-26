@@ -9,8 +9,11 @@
 # "read" | "write"}); a line goes to exec_read or exec_write by that table.
 # The console keeps no table of its own: a word the machine did not name is
 # not sent ("not a command of this remote shell"). exit leaves (the
-# console's word, never sent); get and put are kept for the console's own
-# file commands (not in this version).
+# console's word, never sent); get and put are the console's own file
+# commands (R4): get <path> brings a file of the machine to the browser
+# (Bridge::RemoteShell#get, the machine's read), put [<path>] takes the
+# files the page chose and writes them on the machine (#put, write_begin /
+# write_chunk / write_end). get only reads (a "read" user may), put changes.
 #
 # Who may do what is per user (User#rshell_access): none (no remote shell
 # at all), read (the read commands only), write (every command).
@@ -26,8 +29,11 @@ module Terminal
     LEVEL_TEXT = { "none" => "no remote shell", "read" => "read only", "write" => "read and change" }.freeze
     # The console's own words: never sent to the machine.
     EXIT = "exit".freeze
-    # Kept for the console's file commands (R4): refused in this version.
-    RESERVED = %w[get put].freeze
+    # The console's file commands: kind and usage.
+    FILE_COMMANDS = { "get" => "get <file on the machine>", "put" => "put [<folder or file on the machine>]" }.freeze
+    # The machine's version of the remote shell that has the writes put
+    # needs (write_begin and the others).
+    PUT_VERSION = 3
     # The user's areas: a change outside them is asked about first.
     USER_AREAS = %w[/home /app /mnt/sd /tmp].freeze
     # What the machine takes in one line (RShell::LINE_MAX).
@@ -50,8 +56,12 @@ module Terminal
       def ok? = reason.nil?
       def empty? = words.empty? && reason.nil?
       def exit? = kind == EXIT
-      def write? = kind == "write"
-      def method_name = { "read" => "exec_read", "write" => "exec_write", "exit" => "close" }[kind]
+      def write? = kind == "write" || kind == "put"
+      def file? = kind == "get" || kind == "put"
+      def method_name = { "read" => "exec_read", "write" => "exec_write", "exit" => "close", "get" => "read",
+                          "put" => "write_begin" }[kind]
+      # The kind of the record: get reads, put writes.
+      def effect = { "get" => "read", "put" => "write" }.fetch(kind, kind)
       def asks? = !system_paths.to_a.empty?
     end
 
@@ -75,8 +85,17 @@ module Terminal
       unless LEVELS.include?(level.to_s) && level.to_s != "none"
         return l.tap { _1.reason = "you may not use the remote shell (an admin chooses who may, under Users)" }
       end
-      if RESERVED.include?(name)
-        return l.tap { _1.reason = "#{name}: not in this version of the console (files go through the Files page for now)" }
+      if (usage = FILE_COMMANDS[name])
+        args = words[1..]
+        if (name == "get" && args.size != 1) || (name == "put" && args.size > 1)
+          return l.tap { _1.reason = "usage: #{usage}" }
+        end
+        if name == "put" && level.to_s != "write"
+          return l.tap { _1.reason = "put: changes the machine; you may only read with the remote shell (an admin chooses, under Users)" }
+        end
+        l.kind = name
+        l.system_paths = [ resolve(cwd, args[0].to_s) ].reject { user_area?(_1) } if name == "put" && cwd
+        return l
       end
       kind = Hash(commands)[name]
       unless %w[read write].include?(kind)
@@ -115,6 +134,12 @@ module Terminal
         s == ".." ? kept.pop : kept << s
       end
       kept.empty? ? "/" : "/#{kept.join('/')}"
+    end
+
+    # A word as it is typed for the machine (RShell.escape): a blank, a
+    # quote and a backslash get a backslash.
+    def self.escape(s)
+      s.to_s.gsub(/[ \t"\\]/) { "\\#{_1}" }
     end
 
     # The machine's RShell.split_line: [words, whether a quote is left

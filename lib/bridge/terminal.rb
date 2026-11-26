@@ -40,6 +40,15 @@
 # session; so do the page closing (the bridge writes the exit row), the
 # machine ending it, and the bridge stopping. A bridge that starts clears
 # the copies (what it held is gone). Tab in a machine asks its complete.
+#
+# get and put (the console's file commands in a machine, docs/terminal.md
+# "Files: get and put"): get brings the file into TerminalFiles and, when
+# it is whole, tells the page to download it (a link only its user may take,
+# once); put sends the files the page uploaded (the row's files: the
+# upload's token), after asking (y/N, the page sends the line again with the
+# same upload) when a file of the same name is there or the place is in the
+# system's area. Both show their progress on one line and stop on Ctrl-C;
+# what they carried goes into the row's files (the record).
 module Bridge
   class Terminal
     MAX_RUNNING = TerminalCommand::MAX_RUNNING
@@ -50,6 +59,8 @@ module Bridge
     CHUNK = 64 * 1024
     # How long a stopped command's thread is waited for when the bridge stops.
     JOIN = 3.0
+    # How often the files of get and put that nobody took are looked for.
+    SWEEP_EVERY = 30
 
     # What a command prints: an IO for the command line (write, puts, print,
     # flush; a terminal of the page's width), filled by its thread and
@@ -206,6 +217,10 @@ module Bridge
       @entries.each_value { |e| stop(e.id, "stopped: the page was closed") unless live.include?(e.page) }
       (@remotes.keys - live).each { leave(_1, "the page was closed") }
       @closers.reject! { !_1.alive? }
+      if !@swept_at || mono - @swept_at > SWEEP_EVERY
+        @swept_at = mono
+        TerminalFiles.sweep
+      end
       TerminalCommand.where(status: "pending").where(created_at: ...TerminalCommand::EXPIRE_AFTER.ago).find_each do |r|
         if r.kind == "complete"
           r.delete
@@ -435,10 +450,12 @@ module Bridge
                            remote: s&.state)
       end
       line = ::Terminal::Remote.check(row.line, commands: s.commands, level: level, cwd: s.cwd)
-      row.update!(command: line.exit? ? "exit" : line.name, effect: line.exit? ? "close" : line.kind,
+      row.update!(command: line.exit? ? "exit" : line.name, effect: line.exit? ? "close" : line.effect,
                   path: ::Terminal::Remote.path(s.node), method_name: line.method_name)
       return run_remote(row, :exit) { @rshell.close(s) } if line.exit?
       return deny_remote(row, "#{line.reason} (checked by the bridge)", remote: s.state) unless line.ok? && !line.empty?
+      return start_get(row, s, line) if line.kind == "get"
+      return start_put(row, s, line) if line.kind == "put"
       if line.asks? && !row.confirmed?
         why = "changes the system's area (#{line.system_paths.join(', ')}): asked first"
         row.update!(status: "asked", reason: why, finished_at: Time.current, effect: line.kind,
@@ -470,6 +487,7 @@ module Bridge
         res = case what
               when :open then { code: 0, session: v }
               when :line then { code: v[0], how: v[1] }
+              when :get, :put then { code: v["code"], how: v["how"], files: v }
               else { code: 0 }
               end
         @done << [ e, res ]
@@ -517,7 +535,7 @@ module Bridge
         @remotes.delete(e.page)
         TerminalSession.set_remote(e.page, nil)
         s = nil
-      when :line
+      when :line, :get, :put
         if r[:ended]
           @remotes.delete(e.page)
           TerminalSession.set_remote(e.page, nil)
@@ -527,10 +545,23 @@ module Bridge
         end
       end
       return unless row
+      files = r[:files]
+      return ask_put(e, row, files, s) if e.remote == :put && files && files["asked"]
+      TerminalFiles.drop_put(upload_of(row)) if e.remote == :put
+      if e.remote == :get && files
+        row.files = JSON.generate("files" => [ files.slice("path", "size", "got").merge("result" => files["how"] || "ok") ])
+      elsif e.remote == :put
+        row.files = JSON.generate("files" => Array(files && files["files"]))
+      end
+      if e.remote == :get && files && files["token"] && files["how"].nil?
+        ConsoleChannel.send_terminal(row.page, "download", "id" => row.id, "url" => "/terminal/files/#{files['token']}",
+                                                           "name" => files["name"])
+      end
       status, reason =
         if r[:refused] then [ "denied", r[:refused] ]
         elsif r[:how] == "stopped" then [ "stopped", e.stop_reason || "stopped (Ctrl-C)" ]
         elsif r[:how] == "cut" then [ "failed", "more than #{RemoteShell::MORE_MAX} pieces of output" ]
+        elsif r[:how] == "stalled" then [ "failed", "the machine's progress stopped for #{RemoteShell::STALL} s" ]
         elsif r[:error] then [ "failed", r[:error] ]
         elsif r[:code].nil? && e.stop then [ "stopped", e.stop_reason ]
         elsif r[:code].to_i.zero? then [ "ok", nil ]
@@ -542,6 +573,98 @@ module Bridge
                 "#{" (#{row.exit_code})" if row.exit_code}")
       ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => s&.state))
     end
+
+    # get <path>: the file into the console's place for it, then a link
+    # for the page.
+    def start_get(row, s, line)
+      path = line.words[1]
+      full = ::Terminal::Remote.resolve(s.cwd, path)
+      name = File.basename(full)
+      run_remote(row, :get) do |out, stop|
+        token, to = TerminalFiles.new_get(user_id: row.user_id, page: row.page, node: s.node, name: name, size: 0)
+        begin
+          r = @rshell.get(s, path, to: to, out: out, stop: stop)
+        rescue Exception # rubocop:disable Lint/RescueException -- the place goes whatever happened
+          TerminalFiles.drop_get(token)
+          raise
+        end
+        if r["how"] == "stopped"
+          TerminalFiles.drop_get(token)
+          out.puts "get #{r['path']}: stopped at #{RemoteShell.kb(r['got'])} of #{RemoteShell.kb(r['size'])}"
+          r.merge("code" => nil)
+        else
+          out.puts "get #{r['path']}: #{RemoteShell.sized(r['size'])}; the browser saves it as #{name}"
+          r.merge("code" => 0, "token" => token, "name" => name)
+        end
+      end
+    end
+
+    # put [<path>]: the files the page uploaded, into the folder (the
+    # session's, or path) or as the file path (one file).
+    def start_put(row, s, line)
+      if s.version.to_i < ::Terminal::Remote::PUT_VERSION
+        return deny_remote(row, "put: #{s.node}'s remote shell is version #{s.version.to_i}; put needs " \
+                                "#{::Terminal::Remote::PUT_VERSION} (a newer Family mruby)", remote: s.state)
+      end
+      files = TerminalFiles.put_files(upload_of(row), row.user)
+      unless files
+        return deny_remote(row, "put: no files came with the line (put opens the browser's file chooser, or drop " \
+                                "files on the Terminal; chosen files wait #{TerminalFiles::KEEP / 60} min)", remote: s.state)
+      end
+      arg = line.words[1]
+      dest = ::Terminal::Remote.resolve(s.cwd, arg.to_s)
+      run_remote(row, :put) do |out, stop|
+        folder = arg.nil? || arg.end_with?("/") || @rshell.there(s, [ dest ])[dest] == "directory"
+        if !folder && files.size > 1
+          raise RemoteShell::Refused, "put: #{dest} is not a folder on #{s.node} (#{files.size} files go into a folder)"
+        end
+        targets = files.map { folder ? (dest == "/" ? "/#{_1['name']}" : "#{dest}/#{_1['name']}") : dest }
+        unless row.confirmed?
+          there = @rshell.there(s, targets).select { |_, k| k == "file" }.keys
+          parts = []
+          if line.asks?
+            parts << "#{line.system_paths.join(', ')} #{line.system_paths.size == 1 ? 'is' : 'are'} in the system's " \
+                     "area of #{s.node} (outside /home, /app, /mnt/sd, /tmp)"
+          end
+          parts << "#{there.join(', ')} #{there.size == 1 ? 'is' : 'are'} there already (written over)" if there.any?
+          next { "asked" => "#{parts.join('; ')}. Go on? (y/N) " } if parts.any?
+        end
+        results = []
+        code = 0
+        how = nil
+        files.each_with_index do |f, i|
+          begin
+            r = @rshell.put(s, f["path"], targets[i], size: f["size"], overwrite: row.confirmed?, out: out, stop: stop)
+          rescue RemoteShell::Refused => ex
+            out.puts "\e[31mput #{targets[i]}: #{ex.message.delete_prefix("#{s.node}: ")}\e[0m"
+            results << { "path" => targets[i], "size" => f["size"], "result" => "refused", "reason" => ex.message }
+            code = 1
+            next
+          end
+          if r["how"] == "stopped"
+            out.puts "put #{r['path']}: stopped at #{RemoteShell.kb(r['got'])} of #{RemoteShell.kb(r['size'])} (nothing kept)"
+            results << { "path" => r["path"], "size" => f["size"], "got" => r["got"], "result" => "stopped" }
+            how = "stopped"
+            break
+          end
+          out.puts "put #{r['path']}: #{RemoteShell.sized(r['size'])}"
+          results << { "path" => r["path"], "size" => r["size"], "result" => "ok" }
+        end
+        { "code" => how ? nil : code, "how" => how, "files" => results }
+      end
+    end
+
+    # A put that asks first (a name there, the system's area): the row ends
+    # "asked", the upload stays for the line sent again.
+    def ask_put(e, row, files, s)
+      row.update!(status: "asked", reason: files["asked"].delete_suffix(" Go on? (y/N) "), finished_at: Time.current,
+                  took_ms: ((mono - e.started) * 1000).round(1))
+      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => s&.state,
+                                                                          "confirm" => files["asked"],
+                                                                          "upload" => upload_of(row)))
+    end
+
+    def upload_of(row) = row.files_value["upload"]
 
     def start_remote_complete(row)
       s = @remotes[row.page]
