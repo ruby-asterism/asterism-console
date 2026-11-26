@@ -1410,6 +1410,34 @@ cloud router):
   console with its kind (`console`).
 - Going back to 0.4.0 needs nothing but `./update.sh 0.4.0`.
 
+From 0.4.4 to 0.4.5 (the Terminal's remote shell; the receivers' lists
+reach the machines again):
+
+- `./update.sh 0.4.5`. Two migrations that add columns (nothing existing
+  changes); the update's setup writes the router's configuration with the
+  shared deny `no_rshell_calls` and restarts the router, as Apply does.
+  Nothing in nginx (`client_max_body_size 300m` lets a `put` through).
+  `.env` may set `ASTERISM_RSHELL_FILE_MAX_BYTES` and
+  `ASTERISM_RSHELL_FILE_KEEP_SECONDS` (env.example; unset: 16 MB and
+  600 s).
+- The bridge sends every machine its receivers' lists again (0.4.0 to
+  0.4.4 could not send them): those on the network when it starts at once,
+  the others when their transfer app appears. Nothing to do by hand.
+- **Use** (docs/terminal.md, "The remote shell"): nobody may use the
+  remote shell until an admin picks it for a user (Admin > Users, "Remote
+  shell": read only, or read and change; admins too) and ticks "Remote
+  shell from the console" on the machine's row (Admin > Members; a user's
+  browser under Members > Browsers), then Apply. The machine's owner turns
+  it on in the Receiving app (a Family mruby firmware with the remote
+  shell).
+- **Check**: Terminal, `remote` lists the machines whose remote shell is
+  on; the row on Members shows the list delivered ("has this list").
+- Going back to 0.4.4: `./update.sh 0.4.4` runs on the migrated database
+  (0.4.4 does not read the new columns) and its setup writes the router's
+  configuration without the deny. The lists stop reaching the machines
+  again. To drop the columns too, restore the update's backup
+  (`./update.sh 0.4.4 --restore <it>`).
+
 From 0.4.3 to 0.4.4 (zenohd 1.10.2):
 
 - `./update.sh 0.4.4`. The router's image becomes `eclipse/zenoh:1.10.2`

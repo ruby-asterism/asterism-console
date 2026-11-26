@@ -8,13 +8,36 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
-## Unreleased
+## 0.4.5
 
-What an update needs: two migrations that add columns (users, relay_peers,
-terminal_sessions, terminal_commands; nothing existing changes), and an
-apply: the router's configuration gets a shared deny of the remote shells'
-calls (below). The files of `get` and `put` wait in
-`storage/rshell_files` (under the storage volume, like the transfers).
+What an update needs: nothing but the update (`./update.sh 0.4.5`). Two
+migrations that add columns (users, relay_peers, terminal_sessions,
+terminal_commands; nothing existing changes). The router's configuration
+gets a shared deny of the remote shells' calls (below): the update's setup
+writes it and restarts the router, as Apply does. Nothing in nginx (its
+`client_max_body_size 300m` already lets a `put` through); `.env` may set
+`ASTERISM_RSHELL_FILE_MAX_BYTES` (the largest file of `get` and `put`,
+16 MB when unset) and `ASTERISM_RSHELL_FILE_KEEP_SECONDS` (600). The files
+of `get` and `put` wait in `storage/rshell_files` (under the storage
+volume, like the transfers). Nobody may use the remote shell until an
+admin says so: Admin > Users, "Remote shell", per user, and "Remote shell
+from the console" on each machine's row (Admin > Members) or user's
+browser (Members > Browsers), then Apply. The machines need a Family mruby
+firmware with the remote shell (its `ver` says `remote shell: 3`; no
+firmware release has it yet). docs/install.md, "From 0.4.4 to 0.4.5".
+
+- **Fixed: the receivers' lists reach the machines again.** From 0.4.0 the
+  bridge could not send a machine (or a user's browser) its lists of who
+  may send it files and apps (Members, "Receives files from" / "Receives
+  apps (checkpoint) from"): every send failed with `NoMethodError:
+  undefined method '[]' for module Asterism`, so a machine kept the lists
+  it had before 0.4.0, or none, and the row showed that error instead of
+  "has this list". After the update the bridge sends every list again: to
+  each machine whose transfer app is on the network when the bridge
+  starts, and to the others when their transfer app appears (receiving,
+  sending or the remote shell switched on in the Receiving app). Nothing
+  is to be done by hand; a row that still shows the error belongs to a
+  machine that has not been on the network since.
 
 - The Terminal's remote shell (docs/terminal.md, "The remote shell"):
   `remote <node>` goes into a Family mruby machine whose owner turned its
@@ -36,9 +59,14 @@ calls (below). The files of `get` and `put` wait in
   admins too), read only, read and change.
 - Which machines let the console in: "Remote shell from the console" on a
   member's row (and a user's browser), sent to them with the receivers'
-  lists as the kind `rshell`. The lists sent now always carry `rshell`
-  (empty when not ticked), so every managed machine is sent its list once
-  more after the update.
+  lists as the kind `rshell` (Apply after ticking it: the mark gives the
+  row's transfer keys in the router, as the lists do). The lists sent now
+  always carry `rshell` (empty when not ticked). A machine takes the
+  console's list only over a checked connection (a tls/ router with
+  certificates, or a browser the door connected with its user's
+  certificate).
+- A refusal of the machine names it once in the Terminal (a `get` of a
+  key's place said `<node>: <node>: ...`).
 - The router: every subject other than the console whose rules would let
   it query a machine's `transfer/rshell` gets the shared deny
   `no_rshell_calls`. No call permission covers `<node>/transfer/rshell`
