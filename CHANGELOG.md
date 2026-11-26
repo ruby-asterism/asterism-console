@@ -8,6 +8,28 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: nothing but the update (no migration, nothing in
+nginx or `.env`).
+
+- **Fixed: a short command's output sometimes did not show in the
+  Terminal.** A command that ends quickly (`ls` after `cd` in a machine,
+  `cat`, `node list`) now and then went back to the prompt without its
+  output. The bridge sends a command's output and its end one after the
+  other, but Action Cable hands two messages that come close together to
+  the socket from a pool of threads (Solid Cable's listener posts each to
+  the stream event loop's pool, then to the worker pool), so the page got
+  the end first and dropped the output that came after it. Every message
+  about a command now has its number (`seq`), and the page handles them in
+  that order (one that comes early waits for those before it; a gap not
+  filled in 2 s is passed over). A page or a bridge of 0.4.5 with the
+  other of this version works as before. Measured by hand on a local
+  console: 18 of 900 short commands lost their output before, none of 600
+  after (the messages still came swapped 7 times). Checks: the bridge's
+  tests (the numbers), and `HEADLESS_SCRIPT=terminal_order.js
+  script/headless/run` (the page given swapped messages).
+
 ## 0.4.5
 
 What an update needs: nothing but the update (`./update.sh 0.4.5`). Two

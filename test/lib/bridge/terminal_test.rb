@@ -90,6 +90,20 @@ class Bridge::TerminalTest < ActiveSupport::TestCase
     assert_equal "ok", msgs[2]["status"]
   end
 
+  test "every message about a command is numbered, done last; a Tab's answer too" do
+    c = command("node list")
+    run_until { c.reload.status == "ok" }
+    d = command("ls /") # refused by the bridge: one message
+    run_until { d.reload.status == "denied" }
+    t = command("node l", kind: "complete")
+    run_until { !TerminalCommand.exists?(t.id) }
+    by = stream_messages.group_by { _1["id"] }
+    assert_equal [ [ "started", 1 ], [ "output", 2 ], [ "done", 3 ] ], by[c.id].map { [ _1["type"], _1["seq"] ] }
+    assert_equal [ [ "done", 1 ] ], by[d.id].map { [ _1["type"], _1["seq"] ] }
+    assert_equal [ [ "complete", 1 ] ], by[t.id].map { [ _1["type"], _1["seq"] ] }
+    assert_empty @terminal.instance_variable_get(:@seqs), "a command's number is forgotten once it is done"
+  end
+
   test "a failed command, and one that raises" do
     c = command("status get a/b")
     run_until { c.reload.status != "running" && c.status != "pending" }

@@ -40,6 +40,10 @@ const HISTORY_MAX = 200
 const PROMPT = "\x1b[1;36masterism\x1b[0m> "
 const PROMPT_WIDTH = "asterism> ".length
 const WAITING_NOTE_MS = 4000
+// How long a message that came before one of its command's earlier ones
+// waits for it, and how many commands' messages are kept in order at once.
+const GAP_MS = 2000
+const ORDERS_MAX = 64
 
 export default class extends Controller {
   static targets = ["screen", "state"]
@@ -57,6 +61,7 @@ export default class extends Controller {
     this.saved = null      // the line being typed, while the history is shown
     this.remote = null     // {node, cwd}: the machine the page is in
     this.confirming = null // the line asked about (y/N), while asked
+    this.orders = new Map() // id => {next, held, timer}: the bridge's messages put in order
 
     const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")])
     if (!this.element.isConnected) return
@@ -104,6 +109,7 @@ export default class extends Controller {
   disconnect() {
     clearInterval(this.leaseTimer)
     clearTimeout(this.waitTimer)
+    for (const id of [...this.orders.keys()]) this.dropOrder(id)
     window.removeEventListener("resize", this.onResize)
     if (this.onHide) window.removeEventListener("pagehide", this.onHide)
     this.xhr?.abort()
@@ -407,7 +413,54 @@ export default class extends Controller {
     for (const m of list) this.handle(m)
   }
 
+  // The bridge numbers the messages about one command (seq: 1, 2, ...,
+  // the last "done" or "complete"), and Action Cable may deliver two that
+  // came close together in either order (lib/bridge/terminal.rb,
+  // send_page). They are handled in their order: one that comes early is
+  // kept until those before it are in; a gap not filled within GAP_MS is
+  // passed over (what is kept is handled in its order). A message without
+  // seq (an older bridge) is handled as it comes.
   handle(msg) {
+    if (msg.id == null || !Number.isInteger(msg.seq)) return this.apply(msg)
+    let q = this.orders.get(msg.id)
+    if (!q) {
+      q = { next: 1, held: new Map(), timer: null }
+      this.orders.set(msg.id, q)
+      if (this.orders.size > ORDERS_MAX) this.dropOrder(this.orders.keys().next().value)
+    }
+    if (msg.seq < q.next) return this.apply(msg) // after a gap passed over
+    q.held.set(msg.seq, msg)
+    this.drain(msg.id, q)
+  }
+
+  drain(id, q) {
+    let last = false
+    while (q.held.has(q.next)) {
+      const m = q.held.get(q.next)
+      q.held.delete(q.next)
+      q.next++
+      last = m.type === "done" || m.type === "complete"
+      this.apply(m)
+    }
+    clearTimeout(q.timer)
+    q.timer = null
+    if (q.held.size > 0) {
+      q.timer = setTimeout(() => {
+        q.next = Math.min(...q.held.keys())
+        this.drain(id, q)
+      }, GAP_MS)
+    } else if (last) {
+      this.orders.delete(id)
+    }
+  }
+
+  dropOrder(id) {
+    const q = this.orders.get(id)
+    if (q) clearTimeout(q.timer)
+    this.orders.delete(id)
+  }
+
+  apply(msg) {
     switch (msg.type) {
       case "output":
         if (msg.id === this.running) this.term.write(msg.data)

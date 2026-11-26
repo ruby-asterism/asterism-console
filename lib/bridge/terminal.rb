@@ -61,6 +61,8 @@ module Bridge
     JOIN = 3.0
     # How often the files of get and put that nobody took are looked for.
     SWEEP_EVERY = 30
+    # The messages that end a command's (or a Tab's) messages to its page.
+    LAST_MESSAGES = %w[done complete].freeze
 
     # What a command prints: an IO for the command line (write, puts, print,
     # flush; a terminal of the page's width), filled by its thread and
@@ -177,6 +179,7 @@ module Bridge
       @remotes = {} # page => RemoteShell::Session
       @opening = {} # node => page, while its open is asked
       @closers = []
+      @seqs = {} # row id => the number of its last message to the page
     end
 
     def self.available?
@@ -226,7 +229,7 @@ module Bridge
           r.delete
         else
           r.update!(status: "expired", reason: "the bridge did not pick it up in time", finished_at: Time.current)
-          ConsoleChannel.send_terminal(r.page, "done", r.as_payload)
+          send_page(r.page, "done", r.as_payload)
         end
       end
     end
@@ -299,7 +302,7 @@ module Bridge
         row.update!(status: "denied", reason: line.reason || "an empty line", finished_at: Time.current,
                     command: line.command, effect: line.effect, path: line.path, method_name: line.method_name)
         @say.call("bridge: terminal #{row.id}: #{row.line.inspect} -> denied (checked by the bridge)")
-        ConsoleChannel.send_terminal(row.page, "done", row.as_payload)
+        send_page(row.page, "done", row.as_payload)
         return
       end
       e = Entry.new(id: row.id, page: row.page, user_id: row.user_id, kind: "run", output: Output.new(cols: row.cols),
@@ -315,7 +318,7 @@ module Bridge
       end
       @entries[row.id] = e
       @say.call("bridge: terminal #{row.id}: #{row.user&.email_address}: #{row.line}")
-      ConsoleChannel.send_terminal(row.page, "started", "id" => row.id)
+      send_page(row.page, "started", "id" => row.id)
     end
 
     def start_complete(row)
@@ -356,13 +359,28 @@ module Bridge
       nil
     end
 
+    # A message to a page about one of its commands (or Tabs), with its
+    # number: 1, 2, ... per command, the last one "done" (or "complete").
+    # Action Cable gives two messages that come close together to the
+    # socket from a pool of threads (Solid Cable's listener posts each to
+    # the stream event loop's pool, the channel's handler then to the
+    # worker pool), so the page may get them in either order: a "done"
+    # before the "output" it follows, and the output dropped. The page
+    # puts them back in this order (seq) before it handles them.
+    def send_page(page, type, payload)
+      id = payload["id"]
+      seq = @seqs[id] = @seqs.fetch(id, 0) + 1
+      @seqs.delete(id) if LAST_MESSAGES.include?(type)
+      ConsoleChannel.send_terminal(page, type, payload.merge("seq" => seq))
+    end
+
     def flush_outputs
       @entries.each_value do |e|
         next unless e.kind == "run"
         stop(e.id, "stopped: it printed more than #{MAX_OUTPUT} bytes") if e.output.over?
         next unless e.output.pending?
         data = e.output.take(CHUNK)
-        ConsoleChannel.send_terminal(e.page, "output", "id" => e.id, "data" => data) unless data.empty?
+        send_page(e.page, "output", "id" => e.id, "data" => data) unless data.empty?
       end
     end
 
@@ -374,7 +392,7 @@ module Bridge
         if e.kind == "run"
           while e.output.pending?
             data = e.output.take(CHUNK)
-            ConsoleChannel.send_terminal(e.page, "output", "id" => e.id, "data" => data) unless data.empty?
+            send_page(e.page, "output", "id" => e.id, "data" => data) unless data.empty?
           end
         end
         finish(e)
@@ -388,14 +406,14 @@ module Bridge
       r = e.result || {}
       if e.kind == "complete" && e.remote
         got = r[:remote_items] || {}
-        ConsoleChannel.send_terminal(e.page, "complete", "id" => e.id, "remote" => true, "start" => got["word"],
-                                                         "candidates" => Array(got["items"]))
+        send_page(e.page, "complete", "id" => e.id, "remote" => true, "start" => got["word"],
+                                      "candidates" => Array(got["items"]))
         TerminalCommand.where(id: e.id).delete_all
         return
       end
       if e.kind == "complete"
         cands = r[:code].to_i.zero? ? e.output.string.lines.map(&:chomp).reject(&:empty?).first(200) : []
-        ConsoleChannel.send_terminal(e.page, "complete", "id" => e.id, "word" => r[:word].to_s, "candidates" => cands)
+        send_page(e.page, "complete", "id" => e.id, "word" => r[:word].to_s, "candidates" => cands)
         TerminalCommand.where(id: e.id).delete_all
         return
       end
@@ -418,7 +436,7 @@ module Bridge
       return unless row
       row.update!(attrs)
       @say.call("bridge: terminal #{row.id}: #{row.command} -> #{row.status}#{" (#{row.exit_code})" if row.exit_code}")
-      ConsoleChannel.send_terminal(row.page, "done", row.as_payload)
+      send_page(row.page, "done", row.as_payload)
     end
 
     # ------------------------------------------------------- the remote shell
@@ -460,7 +478,7 @@ module Bridge
         why = "changes the system's area (#{line.system_paths.join(', ')}): asked first"
         row.update!(status: "asked", reason: why, finished_at: Time.current, effect: line.kind,
                     method_name: line.method_name)
-        ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge(
+        send_page(row.page, "done", row.as_payload.merge(
           "remote" => s.state,
           "confirm" => "#{line.system_paths.join(', ')} #{line.system_paths.size == 1 ? 'is' : 'are'} in the " \
                        "system's area of #{s.node} (outside /home, /app, /mnt/sd, /tmp). Go on? (y/N) "
@@ -473,7 +491,7 @@ module Bridge
     def deny_remote(row, why, remote: nil)
       row.update!(status: "denied", reason: why, finished_at: Time.current)
       @say.call("bridge: terminal #{row.id}: #{row.line.inspect} -> denied (#{why})")
-      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => remote))
+      send_page(row.page, "done", row.as_payload.merge("remote" => remote))
     end
 
     # Runs what the block does on a thread of its own (out: the page's
@@ -502,7 +520,7 @@ module Bridge
       end
       @entries[row.id] = e
       @say.call("bridge: terminal #{row.id}: #{row.user&.log_name}: #{row.remote ? "#{row.remote}: " : ''}#{row.line}")
-      ConsoleChannel.send_terminal(row.page, "started", "id" => row.id)
+      send_page(row.page, "started", "id" => row.id)
     end
 
     def list_nodes(out, page)
@@ -556,8 +574,8 @@ module Bridge
         row.files = JSON.generate("files" => Array(files && files["files"]))
       end
       if e.remote == :get && files && files["token"] && files["how"].nil?
-        ConsoleChannel.send_terminal(row.page, "download", "id" => row.id, "url" => "/terminal/files/#{files['token']}",
-                                                           "name" => files["name"])
+        send_page(row.page, "download", "id" => row.id, "url" => "/terminal/files/#{files['token']}",
+                                        "name" => files["name"])
       end
       status, reason =
         if r[:refused] then [ "denied", r[:refused] ]
@@ -573,7 +591,7 @@ module Bridge
                   output_bytes: e.output.total, took_ms: ((mono - e.started) * 1000).round(1), finished_at: Time.current)
       @say.call("bridge: terminal #{row.id}: #{row.remote}: #{row.command} -> #{row.status}" \
                 "#{" (#{row.exit_code})" if row.exit_code}")
-      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => s&.state))
+      send_page(row.page, "done", row.as_payload.merge("remote" => s&.state))
     end
 
     # get <path>: the file into the console's place for it, then a link
@@ -661,9 +679,9 @@ module Bridge
     def ask_put(e, row, files, s)
       row.update!(status: "asked", reason: files["asked"].delete_suffix(" Go on? (y/N) "), finished_at: Time.current,
                   took_ms: ((mono - e.started) * 1000).round(1))
-      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => s&.state,
-                                                                          "confirm" => files["asked"],
-                                                                          "upload" => upload_of(row)))
+      send_page(row.page, "done", row.as_payload.merge("remote" => s&.state,
+                                                       "confirm" => files["asked"],
+                                                       "upload" => upload_of(row)))
     end
 
     def upload_of(row) = row.files_value["upload"]

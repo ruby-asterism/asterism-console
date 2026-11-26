@@ -282,6 +282,20 @@ brackets:
   command's `stop:`. Whatever a command subscribed to or hooked onto the
   connection (watch, echo, hz, get) is released when it ends; the
   connection stays.
+- **The order of the messages**: the bridge sends a command's messages
+  (started, output, download, done; a Tab's complete) in order on its main
+  thread, but Action Cable does not keep that order to the socket: Solid
+  Cable's listener posts each message to the stream event loop's pool of
+  threads, and the channel's handler posts it again to the worker pool, so
+  two messages that come in one poll may leave in either order. A "done"
+  ahead of its "output" used to end the command on the page and drop the
+  output (a short `ls` or `cat` came back empty now and then). So every
+  message about a command carries its number (`seq`: 1, 2, ..., the
+  bridge's `send_page`) and the page handles them in that order: one that
+  comes early is kept until those before it are in, and a gap not filled
+  within 2 s is passed over (the kept ones are handled in order). A message
+  without `seq` (a bridge of 0.4.5) is handled as it comes, and a page of
+  0.4.5 does not look at `seq`.
 - **When the bridge stops** or loses its router, the commands are stopped
   and their rows written; a bridge that starts finishes the rows one left
   running. While no bridge runs, the page is not held by a row nobody will
@@ -324,11 +338,16 @@ The Terminal (VT1, VT2):
   user only), `test/lib/bridge/terminal_test.rb` (the bridge with a stand-in
   command line: output to the page, the row, failures, the plan decides,
   Ctrl-C, a closed page, the limits, Tab, expiry, the bridge stopping and
-  starting, the output buffer) and `test/lib/bridge/terminal_live_test.rb`
+  starting, the output buffer, the messages' numbers) and `test/lib/bridge/terminal_live_test.rb`
   (the real command line on a real connection to a CRuby node over a peer
   link: listing in colour, a call allowed and refused, `--cal`, Ctrl-C on
   `status echo`, Tab).
 - The asterism gem's `test/test_cli.rb` `test_on_a_given_connection`.
+- The order of the messages on the page: `HEADLESS_SCRIPT=terminal_order.js
+  script/headless/run` (a Rails server and a user who may sign in; no
+  bridge): the page's controller is given a command's messages swapped
+  (done before its output, two outputs, a gap that never fills, none
+  numbered, a Tab's answer) and must show them in order.
 - By hand (2026-11-08, WSL): zenohd 1.10.1 in docker, a CRuby node
   (`calcnode/calc/calc` with `add` and `sub`, a status changing every 2 s),
   `bin/rails server` and `bin/bridge`, a user who is not an admin, one call

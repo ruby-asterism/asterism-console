@@ -134,6 +134,16 @@ class Bridge::TerminalRemoteTest < ActiveSupport::TestCase
     assert_equal({ "node" => NODE, "cwd" => "/tmp" }, done(r)["remote"])
   end
 
+  test "a line's messages are numbered in the order they were sent, done last" do
+    enter
+    r = line("cat big.txt")
+    mine = messages.select { _1["id"] == r.id }
+    assert_equal (1..mine.size).to_a, mine.map { _1["seq"] }
+    assert_equal "started", mine.first["type"]
+    assert_equal "done", mine.last["type"]
+    assert_operator mine.count { _1["type"] == "output" }, :>=, 1
+  end
+
   test "write lines go to exec_write; kill's result comes through more" do
     enter
     r = line("rm notes.txt")
@@ -286,6 +296,9 @@ class Bridge::TerminalRemoteTest < ActiveSupport::TestCase
     assert_equal [ 0, 8192, 16384, 24576 ], @machine.calls.select { _1[0] == "read" }.map(&:last)
     d = messages.find { _1["type"] == "download" && _1["id"] == r.id }
     assert_equal "pic.png", d["name"]
+    mine = messages.select { _1["id"] == r.id }
+    assert_equal [ (1..mine.size).to_a, "download", "done" ], [ mine.map { _1["seq"] }, mine[-2]["type"], mine[-1]["type"] ],
+                 "the link is numbered with the output, before the done"
     token = d["url"].delete_prefix("/terminal/files/")
     assert_match(/get \/home\/pic.png: 25 KB \(25600 bytes\); the browser saves it as pic.png/, output(r))
     assert_equal [ { "path" => "/home/pic.png", "size" => 25600, "got" => 25600, "result" => "ok" } ], r.files_value["files"]
