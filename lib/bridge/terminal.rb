@@ -492,7 +492,9 @@ module Bridge
               end
         @done << [ e, res ]
       rescue RemoteShell::Refused => ex
-        e.output.puts "\e[31m#{row.remote || 'remote'}: #{ex.message}\e[0m"
+        # A refusal the machine gave already starts with its name
+        # (Terminal::Remote.explain): say it once.
+        e.output.puts "\e[31m#{row.remote || 'remote'}: #{ex.message.delete_prefix("#{row.remote}: ")}\e[0m"
         @done << [ e, { code: 1, refused: ex.message, ended: ex.ended } ]
       rescue Exception => ex # rubocop:disable Lint/RescueException -- a command must never take the bridge down
         e.output.puts "remote: #{ex.class}: #{ex.message}"

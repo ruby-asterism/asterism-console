@@ -301,7 +301,9 @@ class Bridge::TerminalRemoteTest < ActiveSupport::TestCase
     r = line("get apps")
     assert_equal "denied", r.status
     assert_match(%r{/home/apps: not a file}, r.reason)
-    assert_match(/kept from the remote shell/, line("get /home/asterism/config.toml").reason)
+    secret = line("get /home/asterism/config.toml")
+    assert_match(/kept from the remote shell/, secret.reason)
+    assert_no_match(/#{NODE}: #{NODE}:/, output(secret), "the machine's name once")
     @machine.files["/home/big.bin"] = "x" * 20
     rs = Bridge::RemoteShell.new(call: @rshell.instance_variable_get(:@call))
     s = @terminal.instance_variable_get(:@remotes)[PAGE]
