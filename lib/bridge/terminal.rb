@@ -26,6 +26,20 @@
 # A Tab (a row of kind "complete") runs the command line's __complete on the
 # words before the cursor; the candidates go to the page and the row is
 # removed.
+#
+# The remote shell (docs/terminal.md, "The remote shell"; the rows with
+# remote, and remote alone): remote <node> opens a session on the machine
+# (Bridge::RemoteShell, <node>/transfer/rshell) for the page, kept here
+# (@remotes, page => session; the machine's session number never leaves
+# the bridge) and copied for Rails into the page's TerminalSession (remote).
+# One page at a time per machine: the machine sees one caller, the console.
+# A line in it is read again here (Terminal::Remote: the machine's table,
+# the user's rshell_access of the moment, and the paths: a change outside
+# the user's areas not yet confirmed ends "asked" and the page asks), then
+# sent on the command's thread, its output piece by piece. exit closes the
+# session; so do the page closing (the bridge writes the exit row), the
+# machine ending it, and the bridge stopping. A bridge that starts clears
+# the copies (what it held is gone). Tab in a machine asks its complete.
 module Bridge
   class Terminal
     MAX_RUNNING = TerminalCommand::MAX_RUNNING
@@ -135,17 +149,23 @@ module Bridge
     end
 
     Entry = Struct.new(:id, :page, :user_id, :kind, :thread, :output, :started, :stop, :stop_reason, :result, :plan,
-                       keyword_init: true)
+                       :remote, keyword_init: true)
 
     # cli: makes the command line (out:, err:, stop:, permit:); the tests give
     # a stand-in. say: the bridge's log.
     # net: a callable giving the bridge's connection (nil while it has none).
-    def initialize(say:, cli: nil, net: -> { })
+    # rshell: the machines' remote shells (a Bridge::RemoteShell; the tests
+    # give one with a stand-in call).
+    def initialize(say:, cli: nil, net: -> { }, rshell: nil)
       @say = say
       @net = net
       @cli = cli || method(:default_cli)
+      @rshell = rshell || RemoteShell.new(net: net)
       @entries = {} # row id => Entry
       @done = Queue.new
+      @remotes = {} # page => RemoteShell::Session
+      @opening = {} # node => page, while its open is asked
+      @closers = []
     end
 
     def self.available?
@@ -161,7 +181,13 @@ module Bridge
                      .update_all(status: "stopped", reason: "the bridge stopped while it ran", finished_at: Time.current,
                                  updated_at: Time.current)
       TerminalCommand.where(kind: "complete").delete_all
+      TerminalSession.where.not(remote: nil).update_all(remote: nil, updated_at: Time.current)
       self
+    end
+
+    # The pages in a machine now: {page => node}.
+    def remotes
+      @remotes.transform_values(&:node)
     end
 
     # Every tick of the bridge: the output out, the ended ones written, the
@@ -178,6 +204,8 @@ module Bridge
       stopping.each { stop(_1, "stopped (Ctrl-C)") }
       live = TerminalSession.live_pages
       @entries.each_value { |e| stop(e.id, "stopped: the page was closed") unless live.include?(e.page) }
+      (@remotes.keys - live).each { leave(_1, "the page was closed") }
+      @closers.reject! { !_1.alive? }
       TerminalCommand.where(status: "pending").where(created_at: ...TerminalCommand::EXPIRE_AFTER.ago).find_each do |r|
         if r.kind == "complete"
           r.delete
@@ -205,6 +233,9 @@ module Bridge
         finish(e)
       end
       @entries.clear
+      @remotes.keys.each { leave(_1, "the bridge stopped", timeout: RemoteShell::CLOSE_TIMEOUT) }
+      @closers.each { _1.join(RemoteShell::CLOSE_TIMEOUT + 1) }
+      @closers.clear
     rescue ActiveRecord::ActiveRecordError => e
       @say.call("bridge: terminal: #{e.message}")
     end
@@ -237,7 +268,13 @@ module Bridge
         next unless TerminalCommand.where(id: row.id, status: "pending").update_all(status: "running",
                                                                                      started_at: Time.current).positive?
         row.reload
-        row.kind == "complete" ? start_complete(row) : start_run(row)
+        if row.kind == "complete"
+          row.remote.present? ? start_remote_complete(row) : start_complete(row)
+        elsif row.remote.present? || row.command == "remote"
+          start_remote(row)
+        else
+          start_run(row)
+        end
       end
     end
 
@@ -289,6 +326,9 @@ module Bridge
       when :local
         return "#{plan.key} runs only as a program of its own (asterism #{plan.key}), not in the Terminal"
       when :call
+        if (why = CallPermission.reserved_reason(plan.path))
+          return why
+        end
         unless plan.path && plan.method &&
                CallPermission.allows?(plan.path, plan.method, rows: permissions)
           return "no call permission allows #{plan.path} #{plan.method} (an admin allows calls under Call permissions)"
@@ -331,12 +371,20 @@ module Bridge
 
     def finish(e)
       r = e.result || {}
+      if e.kind == "complete" && e.remote
+        got = r[:remote_items] || {}
+        ConsoleChannel.send_terminal(e.page, "complete", "id" => e.id, "remote" => true, "start" => got["word"],
+                                                         "candidates" => Array(got["items"]))
+        TerminalCommand.where(id: e.id).delete_all
+        return
+      end
       if e.kind == "complete"
         cands = r[:code].to_i.zero? ? e.output.string.lines.map(&:chomp).reject(&:empty?).first(200) : []
         ConsoleChannel.send_terminal(e.page, "complete", "id" => e.id, "word" => r[:word].to_s, "candidates" => cands)
         TerminalCommand.where(id: e.id).delete_all
         return
       end
+      return finish_remote(e, r) if e.remote
       status, reason =
         if r[:refused] then [ "denied", r[:refused] ]
         elsif e.stop then [ "stopped", e.stop_reason ]
@@ -356,6 +404,178 @@ module Bridge
       row.update!(attrs)
       @say.call("bridge: terminal #{row.id}: #{row.command} -> #{row.status}#{" (#{row.exit_code})" if row.exit_code}")
       ConsoleChannel.send_terminal(row.page, "done", row.as_payload)
+    end
+
+    # ------------------------------------------------------- the remote shell
+
+    def start_remote(row)
+      user = row.user
+      level = user&.rshell_access.to_s
+      words = ::Terminal::Remote.split(row.line)[0]
+      if row.command == "remote"
+        node = row.remote.presence
+        return deny_remote(row, "you may not use the remote shell (an admin chooses who may, under Users)") unless user&.rshell?
+        return run_remote(row, :list) { |out| list_nodes(out, row.page) } unless node
+        if (cur = @remotes[row.page])
+          return deny_remote(row, "this page is in #{cur.node} (exit leaves it first)")
+        end
+        other = @remotes.values.find { _1.node == node } || (@opening[node] && :opening)
+        if other
+          whose = other != :opening && other.user_id == row.user_id ? "you are in #{node} on another Terminal page" :
+                    "another user of the console is in #{node} now"
+          return deny_remote(row, "#{whose} (one Terminal page at a time per machine); try again later")
+        end
+        @opening[node] = row.page
+        row.update!(effect: "open", path: ::Terminal::Remote.path(node), method_name: "open")
+        return run_remote(row, :open) { @rshell.open(node, page: row.page, user_id: row.user_id) }
+      end
+      s = @remotes[row.page]
+      unless s && s.node == row.remote
+        return deny_remote(row, "the remote shell on #{row.remote} has ended (remote #{row.remote} opens another)",
+                           remote: s&.state)
+      end
+      line = ::Terminal::Remote.check(row.line, commands: s.commands, level: level, cwd: s.cwd)
+      row.update!(command: line.exit? ? "exit" : line.name, effect: line.exit? ? "close" : line.kind,
+                  path: ::Terminal::Remote.path(s.node), method_name: line.method_name)
+      return run_remote(row, :exit) { @rshell.close(s) } if line.exit?
+      return deny_remote(row, "#{line.reason} (checked by the bridge)", remote: s.state) unless line.ok? && !line.empty?
+      if line.asks? && !row.confirmed?
+        why = "changes the system's area (#{line.system_paths.join(', ')}): asked first"
+        row.update!(status: "asked", reason: why, finished_at: Time.current, effect: line.kind,
+                    method_name: line.method_name)
+        ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge(
+          "remote" => s.state,
+          "confirm" => "#{line.system_paths.join(', ')} #{line.system_paths.size == 1 ? 'is' : 'are'} in the " \
+                       "system's area of #{s.node} (outside /home, /app, /mnt/sd, /tmp). Go on? (y/N) "
+        ))
+        return
+      end
+      run_remote(row, :line) { |out, stop| @rshell.run(s, row.line, line.method_name, out: out, stop: stop) }
+    end
+
+    def deny_remote(row, why, remote: nil)
+      row.update!(status: "denied", reason: why, finished_at: Time.current)
+      @say.call("bridge: terminal #{row.id}: #{row.line.inspect} -> denied (#{why})")
+      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => remote))
+    end
+
+    # Runs what the block does on a thread of its own (out: the page's
+    # output, stop: Ctrl-C / the page closed); what: :list, :open, :exit
+    # or :line.
+    def run_remote(row, what)
+      e = Entry.new(id: row.id, page: row.page, user_id: row.user_id, kind: "run", output: Output.new(cols: row.cols),
+                    started: mono, stop: false, remote: what)
+      e.thread = Thread.new do
+        v = yield(e.output, -> { e.stop })
+        res = case what
+              when :open then { code: 0, session: v }
+              when :line then { code: v[0], how: v[1] }
+              else { code: 0 }
+              end
+        @done << [ e, res ]
+      rescue RemoteShell::Refused => ex
+        e.output.puts "\e[31m#{row.remote || 'remote'}: #{ex.message}\e[0m"
+        @done << [ e, { code: 1, refused: ex.message, ended: ex.ended } ]
+      rescue Exception => ex # rubocop:disable Lint/RescueException -- a command must never take the bridge down
+        e.output.puts "remote: #{ex.class}: #{ex.message}"
+        @done << [ e, { code: 1, error: "#{ex.class}: #{ex.message}" } ]
+      end
+      @entries[row.id] = e
+      @say.call("bridge: terminal #{row.id}: #{row.user&.log_name}: #{row.remote ? "#{row.remote}: " : ''}#{row.line}")
+      ConsoleChannel.send_terminal(row.page, "started", "id" => row.id)
+    end
+
+    def list_nodes(out, page)
+      nodes = @rshell.nodes
+      if nodes.empty?
+        out.puts "No machine has its remote shell on the network now (its owner turns it on in the Receiving app; " \
+                 "the console needs \"Remote shell from the console\" on its row under Members)."
+        return
+      end
+      busy = @remotes.values.to_h { [ _1.node, _1.page ] }
+      nodes.each do |n|
+        note = if busy[n] == page then "  (this page is in it)"
+        elsif busy[n] then "  (another Terminal page is in it)"
+        else ""
+        end
+        out.puts "#{n}#{note}"
+      end
+    end
+
+    def finish_remote(e, r)
+      row = TerminalCommand.find_by(id: e.id)
+      @opening.delete(row.remote) if row && e.remote == :open && @opening[row.remote] == row.page
+      s = @remotes[e.page]
+      case e.remote
+      when :open
+        if (sess = r[:session])
+          @remotes[e.page] = sess
+          s = sess
+          TerminalSession.set_remote(e.page, sess.column)
+        end
+      when :exit
+        @remotes.delete(e.page)
+        TerminalSession.set_remote(e.page, nil)
+        s = nil
+      when :line
+        if r[:ended]
+          @remotes.delete(e.page)
+          TerminalSession.set_remote(e.page, nil)
+          s = nil
+        elsif s
+          TerminalSession.set_remote(e.page, s.column)
+        end
+      end
+      return unless row
+      status, reason =
+        if r[:refused] then [ "denied", r[:refused] ]
+        elsif r[:how] == "stopped" then [ "stopped", e.stop_reason || "stopped (Ctrl-C)" ]
+        elsif r[:how] == "cut" then [ "failed", "more than #{RemoteShell::MORE_MAX} pieces of output" ]
+        elsif r[:error] then [ "failed", r[:error] ]
+        elsif r[:code].nil? && e.stop then [ "stopped", e.stop_reason ]
+        elsif r[:code].to_i.zero? then [ "ok", nil ]
+        else [ "failed", nil ]
+        end
+      row.update!(status: status, exit_code: r[:code], reason: reason, output: TerminalCommand.summary(e.output.head),
+                  output_bytes: e.output.total, took_ms: ((mono - e.started) * 1000).round(1), finished_at: Time.current)
+      @say.call("bridge: terminal #{row.id}: #{row.remote}: #{row.command} -> #{row.status}" \
+                "#{" (#{row.exit_code})" if row.exit_code}")
+      ConsoleChannel.send_terminal(row.page, "done", row.as_payload.merge("remote" => s&.state))
+    end
+
+    def start_remote_complete(row)
+      s = @remotes[row.page]
+      e = Entry.new(id: row.id, page: row.page, user_id: row.user_id, kind: "complete", output: StringIO.new,
+                    started: mono, stop: false, remote: :complete)
+      e.thread = Thread.new do
+        got = s && s.node == row.remote && row.user&.rshell? ? @rshell.complete(s, row.line) : nil
+        @done << [ e, { code: 0, remote_items: got } ]
+      rescue Exception => ex # rubocop:disable Lint/RescueException
+        @done << [ e, { code: 1, error: "#{ex.class}: #{ex.message}" } ]
+      end
+      @entries[row.id] = e
+    end
+
+    # The page left its machine without exit (closed, or the bridge
+    # stops): the machine's session is closed on a thread of its own and the
+    # record gets the exit.
+    def leave(page, why, timeout: RemoteShell::CLOSE_TIMEOUT)
+      s = @remotes.delete(page) or return
+      waiting = @entries.values.select { _1.page == page }.map(&:thread)
+      @closers << Thread.new do
+        waiting.each { _1.join(JOIN) }
+        @rshell.close(s, timeout: timeout)
+      rescue StandardError
+        nil
+      end
+      TerminalSession.set_remote(page, nil)
+      TerminalCommand.create!(user_id: s.user_id, page: page, kind: "run", line: "exit", command: "exit",
+                              effect: "close", remote: s.node, path: ::Terminal::Remote.path(s.node),
+                              method_name: "close", status: "ok", reason: why, cols: 80,
+                              started_at: Time.current, finished_at: Time.current)
+      @say.call("bridge: terminal: #{page}: left #{s.node} (#{why})")
+    rescue ActiveRecord::ActiveRecordError => e
+      @say.call("bridge: terminal: #{e.message}")
     end
 
     # The command line on the bridge's connection. Never without one: a

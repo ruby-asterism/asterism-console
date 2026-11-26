@@ -8,6 +8,33 @@ to an older version across a migration means restoring the backup made
 before the update (from 0.1.3, `deploy/vps/update.sh` takes it and prints
 the command that goes back).
 
+## Unreleased
+
+What an update needs: one migration that adds columns (users, relay_peers,
+terminal_sessions, terminal_commands; nothing existing changes), and an
+apply: the router's configuration gets a shared deny of the remote shells'
+calls (below).
+
+- The Terminal's remote shell (docs/terminal.md, "The remote shell"):
+  `remote <node>` goes into a Family mruby machine whose owner turned its
+  remote shell on, and the lines typed run there (`ls`, `cat`, `ps`, `cp`,
+  `rm`, `kill`, `open`, ...) until `exit` or Ctrl-D; `remote` lists the
+  machines. Tab completes on the machine (names with blanks too), long
+  output comes in pieces, Ctrl-C stops between them, a change outside
+  `/home`, `/app`, `/mnt/sd` and `/tmp` is asked about first (y/N). Every
+  line is in the call log with its machine.
+- Who may, per user: Admin > Users, "Remote shell": none (the default,
+  admins too), read only, read and change.
+- Which machines let the console in: "Remote shell from the console" on a
+  member's row (and a user's browser), sent to them with the receivers'
+  lists as the kind `rshell`. The lists sent now always carry `rshell`
+  (empty when not ticked), so every managed machine is sent its list once
+  more after the update.
+- The router: every subject other than the console whose rules would let
+  it query a machine's `transfer/rshell` gets the shared deny
+  `no_rshell_calls`. No call permission covers `<node>/transfer/rshell`
+  any more (the page's calls and the Terminal's `call` are refused).
+
 ## 0.4.4
 
 - The router of `deploy/vps` is zenohd 1.10.2 (`eclipse/zenoh:1.10.2`; it was

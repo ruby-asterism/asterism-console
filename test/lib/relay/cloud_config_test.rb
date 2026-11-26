@@ -34,12 +34,13 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
     assert_equal %w[console viewer zenohd-home], config.subject_names
     h = config.to_h
     pol = h["access_control"]["policies"].to_h { [ _1["id"], _1["rules"] ] }
-    assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out subscribers_out], pol["zenohd_home"]
+    # rw asterism/** would reach the machines' remote shells: denied (the console's alone)
+    assert_equal %w[zenohd_home_rw admin_relay_in admin_relay_out no_rshell_calls subscribers_out], pol["zenohd_home"]
     assert_equal %w[console_rw admin_read console__profiles_in console__profiles_out console__own_profile_in
                     console__own_profile_out console__app_profiles_in
                     console__app_profiles_out console__app_notices_in console__app_notices_out console__shared_in
                     console__shared_out subscribers_out], pol["console"]
-    assert_equal %w[viewer_ro_in viewer_ro_out subscribers_out], pol["viewer"]
+    assert_equal %w[viewer_ro_in viewer_ro_out no_rshell_calls subscribers_out], pol["viewer"]
     refute pol.key?("idle")
   end
 
@@ -240,7 +241,7 @@ class Relay::CloudConfigTest < ActiveSupport::TestCase
                  rule(h, "fmruby_aaaaaa__files_to_console_answer").values_at("messages", "flows", "key_exprs"),
                  "the replies to its calls reach it"
     assert_equal %w[home_bob__files_to_console_ask home_bob__files_to_console_answer home_bob__files_from_console_rw
-                    subscribers_out],
+                    no_rshell_calls subscribers_out],
                  pol["home_bob"]
     # what zenohd decides: a node calls the console's inbox under its own name only
     acl = h["access_control"]

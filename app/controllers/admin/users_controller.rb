@@ -32,6 +32,21 @@ module Admin
                   alert: "#{user.email_address} is still named in records (certificates, applies): not removed."
     end
 
+    # What the user may do with the remote shell (none, read, write). An
+    # admin chooses it for anybody, themselves included; it takes effect
+    # with the next line typed (Rails and the bridge read it each time).
+    def rshell
+      user = User.find(params[:id])
+      level = params[:rshell_access].to_s
+      unless Terminal::Remote::LEVELS.include?(level)
+        return redirect_to admin_users_path, alert: "#{level.inspect} is not a remote shell permission."
+      end
+      user.update!(rshell_access: level)
+      Rails.logger.info("users: #{user.log_name} rshell=#{level} by #{current_user.log_name}")
+      redirect_to admin_users_path, status: :see_other,
+                  notice: "#{user.email_address}: remote shell #{Terminal::Remote::LEVEL_TEXT[level]}."
+    end
+
     def otp_off
       user = User.find(params[:id])
       user.disable_otp!

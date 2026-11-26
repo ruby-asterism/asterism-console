@@ -570,7 +570,7 @@ module Bridge
       # The page checked the call permissions when it wrote the row; check
       # again here (a row may have been removed since, or written by hand).
       unless req.permitted?
-        req.deny!("no call permission allows it (checked by the bridge)")
+        req.deny!(CallPermission.reserved_reason(req.path) || "no call permission allows it (checked by the bridge)")
         say "bridge: #{req.kind} #{req.path} #{req.method_name} -> denied"
         ConsoleChannel.send_message("request", "request" => req.as_payload)
         return

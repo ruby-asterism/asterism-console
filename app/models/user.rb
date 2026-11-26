@@ -22,6 +22,13 @@
 # the page the door connects with the user's certificate, on top of the
 # roles every browser has (RelayRole#for_browsers).
 #
+# The remote shell (docs/terminal.md, "The remote shell"): rshell_access
+# says what the user may do in a machine from the Terminal: none (the
+# default, for admins too), read (the commands that only look) or write
+# (those that change the machine too). Only an admin chooses it (Users),
+# their own included. rshell_from_console (T8's lists, ReceiverLists): the
+# user's browser lets the console's remote shell in.
+#
 # TOTP (a second factor) is optional per user: the user turns it on from
 # the account page (the secret is shown once, to type into an authenticator
 # app) and confirms it with a code. A code is accepted once (otp_last_step).
@@ -61,6 +68,7 @@ class User < ApplicationRecord
   validates :handle, allow_nil: true, uniqueness: true, length: { in: HANDLE_MIN..HANDLE_MAX },
                      format: { with: HANDLE_FORMAT,
                                message: "may have lower case letters, digits and single hyphens, and starts with a letter" }
+  validates :rshell_access, inclusion: { in: Terminal::Remote::LEVELS }
   validate :handle_not_held, if: -> { handle.present? && will_save_change_to_handle? }
 
   before_update :release_old_handle, if: -> { will_save_change_to_handle? && handle_in_database.present? }
@@ -86,6 +94,9 @@ class User < ApplicationRecord
   def log_name
     handle.present? ? "user #{id} (#{handle})" : "user #{id}"
   end
+
+  def rshell? = rshell_access.to_s != "none"
+  def rshell_write? = rshell_access.to_s == "write"
 
   def otp_enabled?
     otp_enabled_at.present? && otp_secret.present?

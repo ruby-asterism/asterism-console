@@ -32,7 +32,7 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
                              receive_files_from_more: "linux-*")
     RelayPeer.create!(name: "fmruby-zzzzzz", kind: "client") # never chosen: never sent
     sync(%w[fmruby-aaaaaa/transfer fmruby-aaaaaa/shell fmruby-zzzzzz/transfer], 100.0)
-    assert_equal [ [ "fmruby-aaaaaa", { "file" => [ "linux-*" ], "checkpoint" => [], "at" => home.receivers_changed_at.utc.iso8601 } ] ],
+    assert_equal [ [ "fmruby-aaaaaa", { "file" => [ "linux-*" ], "checkpoint" => [], "rshell" => [], "at" => home.receivers_changed_at.utc.iso8601 } ] ],
                  @calls
     got = home.reload.delivered
     assert_equal [ "fmruby-aaaaaa" ], got.keys
@@ -98,7 +98,7 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
     user.update!(receive_files_from_more: "fmruby-aaaaaa")
     users(:admin).update!(receive_files_from_more: "x") # no handle: no browser node, never sent
     sync(%w[wasm-pat/transfer wasm-pat_2/transfer], 10.0)
-    assert_equal [ [ "wasm-pat", { "file" => [ "fmruby-aaaaaa" ], "checkpoint" => [], "at" => user.reload.receivers_changed_at.utc.iso8601 } ] ],
+    assert_equal [ [ "wasm-pat", { "file" => [ "fmruby-aaaaaa" ], "checkpoint" => [], "rshell" => [], "at" => user.reload.receivers_changed_at.utc.iso8601 } ] ],
                  @calls
     assert_equal user.receivers_digest, user.reload.delivered.dig("wasm-pat", "digest")
     assert(@said.any? { _1.include?("wasm-pat has the list of its user (written there)") })

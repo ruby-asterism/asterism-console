@@ -33,7 +33,8 @@ class BridgeRequest < ApplicationRecord
     CallPermission.allows?(path, kind == "call" ? method_name : nil, rows: rows)
   end
 
-  def deny!(reason = "no call permission allows #{kind == 'call' ? "#{path} #{method_name}" : path}")
+  def deny!(reason = CallPermission.reserved_reason(path) ||
+                     "no call permission allows #{kind == 'call' ? "#{path} #{method_name}" : path}")
     update!(status: "denied", error_class: "NotPermitted", error_message: reason, finished_at: Time.current)
   end
 

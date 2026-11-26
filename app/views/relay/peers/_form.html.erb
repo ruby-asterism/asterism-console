@@ -45,6 +45,10 @@
       (the machine takes them only when its <code>/home/asterism/receive.toml</code> has
       <code>[file] from = ["<%= ENV.fetch("ASTERISM_CONSOLE_NODE", "console") %>"]</code>, or the console is ticked
       under "Receives files from" below)</label>
+    <label class="check"><%= f.check_box :rshell_from_console %> Remote shell from the console: its machines let the
+      Terminal's <code>remote &lt;node&gt;</code> in (the console sends them the list, kind <code>rshell</code>, with
+      the lists below; the machine's owner must also turn the remote shell on in its Receiving app). Who may use it
+      is chosen per user under Users.</label>
   </fieldset>
   <fieldset class="wide files receivers">
     <legend>Receives files from (the machines of this row keep the list in their

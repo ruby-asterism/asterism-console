@@ -55,6 +55,7 @@ module RelayHelper
     marks << (long ? "may send files to the console" : "sends to") if peer.files_to_console?
     marks << (long ? "receives files from the console" : "receives from") if peer.files_from_console?
     marks << (long ? "receives from the members chosen (below)" : "takes from members") if peer.receives_any?
+    marks << (long ? "lets the console's remote shell in" : "remote shell") if peer.rshell_from_console?
     return tag.span(long ? "none" : "-", class: "hint") if marks.empty?
     text = marks.join(long ? "; " : ", ")
     long && peer.node_list.any? ? "#{text} (for #{peer.speaks_for.join(', ')})" : text

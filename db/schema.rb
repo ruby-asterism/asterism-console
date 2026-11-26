@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_26_100000) do
   create_table "bridge_requests", force: :cascade do |t|
     t.string "kind"
     t.string "path"
@@ -272,6 +272,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
     t.datetime "receivers_changed_at"
     t.text "receivers_delivered"
     t.boolean "cert_no_expiry", default: false, null: false
+    t.boolean "rshell_from_console", default: false, null: false
     t.index ["name"], name: "index_relay_peers_on_name", unique: true
   end
 
@@ -406,6 +407,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
     t.datetime "finished_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "remote"
+    t.boolean "confirmed", default: false, null: false
     t.index ["created_at"], name: "index_terminal_commands_on_created_at"
     t.index ["kind", "status"], name: "index_terminal_commands_on_kind_and_status"
     t.index ["user_id"], name: "index_terminal_commands_on_user_id"
@@ -417,6 +420,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
     t.datetime "expires_at", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "remote"
     t.index ["page"], name: "index_terminal_sessions_on_page", unique: true
     t.index ["user_id"], name: "index_terminal_sessions_on_user_id"
   end
@@ -435,6 +439,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_19_100000) do
     t.text "receive_checkpoints_from"
     t.datetime "receivers_changed_at"
     t.text "receivers_delivered"
+    t.string "rshell_access", default: "none", null: false
+    t.boolean "rshell_from_console", default: false, null: false
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
     t.index ["handle"], name: "index_users_on_handle", unique: true
   end

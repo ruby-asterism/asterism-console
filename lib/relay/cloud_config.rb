@@ -161,6 +161,20 @@
 # setup writes it with the rest (no migration). Seats and the rooms' hosts
 # have it inside room/<slot>/** already.
 #
+# The remote shell (docs/terminal.md, "The remote shell"): a machine's
+# <node>/transfer/rshell is called by the console alone (its Terminal, with
+# the users' permissions and the record). The machine's own key (its
+# queryable and replies) is inside the transfer keys it has for the lists
+# (receivers_managed: the mark "Remote shell from the console" makes a row
+# managed), and the console's certificate has asterism/** of its own, so no
+# line is added for it. Every other subject whose allows would let it query
+# a remote shell (a role's ask line asterism/*/*/*/call/${node}, rw or ro
+# asterism/**, ...) gets the shared deny no_rshell_calls (queries from it on
+# asterism/*/transfer/rshell and below): a deny wins over an allow inside
+# one subject, so no other node calls a remote shell, whatever its roles
+# say. A browser with a certificate gets it in both its subjects; the shared
+# ws/ subject is refused every transfer key already.
+#
 # A peer that is disabled, or has no valid certificate in the ledger, is
 # left out: its links are refused nothing by TLS (the certificate is still
 # good until it expires; zenohd 1.10.1 has no revocation list), but the ACL
@@ -264,6 +278,11 @@ module Relay
     TRANSFER_KEYS = [ "asterism/*/transfer", "asterism/*/transfer/**" ].freeze
     # Every Asterism call, whoever the caller.
     ALL_CALLS = "asterism/*/*/*/call/**".freeze
+    # The machines' remote shells (see the top of this file): called by the
+    # console only.
+    RSHELL_KEYS = [ "asterism/*/transfer/rshell", "asterism/*/transfer/rshell/**" ].freeze
+    RSHELL_DENY = { "id" => "no_rshell_calls", "messages" => %w[query], "flows" => %w[ingress],
+                    "permission" => "deny", "key_exprs" => RSHELL_KEYS }.freeze
 
     attr_reader :peers, :settings, :roles
 
@@ -394,6 +413,7 @@ module Relay
           mine.concat(rooms_watch_rules(rules, id))
         end
         mine.concat(room_host_rules(rules, id, p["name"])) if room_hosts.include?(p["name"])
+        no_rshell(rules, shared, mine) unless p["name"] == @settings["console"]
         next if mine.empty?
         mine << subscribers_rule(shared)
         subjects << { "id" => id, "cert_common_names" => [ p["name"] ] }
@@ -536,6 +556,7 @@ module Relay
       if b["receivers_managed"]
         mine.concat(section_rules(rules, "#{id}__receives_files", "rw", transfer_keys([ name ])))
       end
+      no_rshell(rules, shared, mine)
       subjects << { "id" => id, "cert_common_names" => [ name ] }
       policies << { "id" => id, "rules" => mine, "subjects" => [ id ] }
       calls = browser_calls(name, roles)
@@ -547,6 +568,7 @@ module Relay
       end
       sends = Array(@sends[name])
       mine.concat(section_rules(rules, "#{id}__sends_files", "ask", sends)) unless sends.empty?
+      no_rshell(rules, shared, mine)
       return if mine.empty?
       subjects << { "id" => "#{id}_calls", "cert_common_names" => [ name ], "link_protocols" => [ "tls" ] }
       policies << { "id" => "#{id}_calls", "rules" => mine, "subjects" => [ "#{id}_calls" ] }
@@ -592,6 +614,46 @@ module Relay
         rules << { "id" => rid, "messages" => messages, "flows" => flows, "permission" => "allow", "key_exprs" => keys }
         rid
       end
+    end
+
+    # Adds the shared deny of the remote shells' calls to a subject's rule
+    # ids (mine) when one of its allows would let it query one (see the top
+    # of this file).
+    def no_rshell(rules, shared, mine)
+      known = (rules + shared.values.grep(Hash)).to_h { [ _1["id"], _1 ] }
+      reaches = mine.any? do |rid|
+        r = known[rid] or next false
+        r["permission"] == "allow" && r["messages"].include?("query") && r["flows"].include?("ingress") &&
+          r["key_exprs"].any? { |k| RSHELL_KEYS.any? { self.class.keys_meet?(k, _1) } }
+      end
+      return unless reaches
+      shared[RSHELL_DENY["id"]] ||= RSHELL_DENY.dup
+      mine << RSHELL_DENY["id"]
+    end
+
+    # Whether two key expressions have a key in common (chunk by chunk: *
+    # one chunk, ** any number, $* inside a chunk any run of characters).
+    # Two chunks that both have $* are taken to meet.
+    def self.keys_meet?(a, b)
+      chunks_meet?(a.split("/"), b.split("/"))
+    end
+
+    def self.chunks_meet?(a, b)
+      return b.all?("**") if a.empty?
+      return a.all?("**") if b.empty?
+      return chunks_meet?(a.drop(1), b) || chunks_meet?(a, b.drop(1)) if a[0] == "**"
+      return chunks_meet?(a, b.drop(1)) || chunks_meet?(a.drop(1), b) if b[0] == "**"
+      chunk_meets?(a[0], b[0]) && chunks_meet?(a.drop(1), b.drop(1))
+    end
+
+    def self.chunk_meets?(x, y)
+      return true if x == y || x == "*" || y == "*"
+      wx = x.include?("$*")
+      wy = y.include?("$*")
+      return true if wx && wy
+      return File.fnmatch?(x.gsub("$*", "*"), y) if wx
+      return File.fnmatch?(y.gsub("$*", "*"), x) if wy
+      false
     end
 
     # The lines of the two marks for files with the console (T4b):

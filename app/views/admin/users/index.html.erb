@@ -3,7 +3,7 @@
 <section class="card">
   <h2>Users</h2>
   <table class="list">
-    <thead><tr><th>Email address</th><th>Handle</th><th>Role</th><th>Two-factor</th><th>Since</th><th></th></tr></thead>
+    <thead><tr><th>Email address</th><th>Handle</th><th>Role</th><th>Two-factor</th><th>Remote shell</th><th>Since</th><th></th></tr></thead>
     <tbody>
       <% @users.each do |u| %>
         <tr>
@@ -11,6 +11,13 @@
           <td><%= u.handle ? tag.code(u.handle) : tag.span("none yet", class: "hint") %></td>
           <td><%= u.admin? ? "admin" : "user" %></td>
           <td><%= u.otp_enabled? ? "on" : "off" %></td>
+          <td>
+            <%= form_with url: rshell_admin_user_path(u), method: :patch, class: "row", data: { turbo: false } do |f| %>
+              <%= f.select :rshell_access, Terminal::Remote::LEVELS.map { [ Terminal::Remote::LEVEL_TEXT[_1], _1 ] },
+                           { selected: u.rshell_access }, "aria-label": "Remote shell of #{u.email_address}" %>
+              <%= f.submit "Set", class: "small" %>
+            <% end %>
+          </td>
           <td class="nowrap"><%= when_text(u.created_at) %></td>
           <td class="row">
             <% unless u == current_user %>
@@ -25,7 +32,12 @@
       <% end %>
     </tbody>
   </table>
-  <p class="hint">Remove signs the user out everywhere. <%= link_to "Every pass", admin_browser_passes_path %>.</p>
+  <p class="hint">Remote shell: what the user may do in a machine from the
+    <%= link_to "Terminal", terminal_path, data: { turbo: false } %> (<code>remote &lt;node&gt;</code>): nothing (the
+    default, admins too), read only (<code>ls</code>, <code>cat</code>, <code>ps</code>, ...), or read and change
+    (<code>cp</code>, <code>mv</code>, <code>rm</code>, <code>kill</code>, <code>open</code>, ...). The machine must let the
+    console in too (its row's "Remote shell from the console" under Members, and its owner's switch).
+    Remove signs the user out everywhere. <%= link_to "Every pass", admin_browser_passes_path %>.</p>
   <% if (b = backup_status) && b["last_ok_name"] %>
     <p class="hint">Last backup: <code><%= b["last_ok_name"] %></code> (<%= iso_when(b["last_ok_at"]) %>)<%= ", next at #{iso_when(b['next_at'])}" if b["next_at"] %>.</p>
   <% end %>

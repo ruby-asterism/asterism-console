@@ -12,6 +12,13 @@
 # A member row (RelayPeer) has them for the nodes it speaks for, a user
 # (T8) for the browser page with the user's certificate (wasm-<handle>).
 # The including class answers receiver_nodes.
+#
+# The remote shell (docs/terminal.md): a mark, rshell_from_console, lets the
+# console's remote shell into its nodes. It goes with the lists as the kind
+# "rshell" (the console's node, or nobody), which the machines keep beside
+# the others (FmrbReceiveConf's [managed.rshell]); a node whose row is not
+# marked is sent an empty one. It is not a sender's list for the inbox:
+# receives_config (the ACL's inbox lines) leaves it out.
 module ReceiverLists
   extend ActiveSupport::Concern
 
@@ -21,6 +28,11 @@ module ReceiverLists
   # match it (FmrbReceiveConf): letters, digits, . _ - and *.
   RECEIVER = /\A[A-Za-z0-9._\-*]{1,64}\z/
   RECEIVERS_MAX = 64
+  # The kind the remote shell's mark is sent as.
+  RSHELL_KIND = "rshell".freeze
+
+  # The node the console calls the machines from (the bridge's).
+  def self.console_node = ENV.fetch("ASTERISM_CONSOLE_NODE", "console")
 
   included do
     # The form's choices (Edit): the nodes ticked and the other lines
@@ -60,9 +72,14 @@ module ReceiverLists
     receivers_changed_at.present?
   end
 
+  # Who may open the remote shell on its nodes: the console, or nobody.
+  def rshell_receivers
+    rshell_from_console? ? [ ReceiverLists.console_node ] : []
+  end
+
   # What the bridge sends its nodes (their transfer app's policy_set).
   def receivers_payload
-    { "file" => receivers("file"), "checkpoint" => receivers("checkpoint"),
+    { "file" => receivers("file"), "checkpoint" => receivers("checkpoint"), RSHELL_KIND => rshell_receivers,
       "at" => receivers_changed_at&.utc&.iso8601 }
   end
 
@@ -97,6 +114,7 @@ module ReceiverLists
     changed = RECEIVE_KINDS.values.any? do |c|
       will_save_change_to_attribute?(c) && ReceiverLists.lines(attribute_in_database(c)) != ReceiverLists.lines(self[c])
     end
+    changed ||= will_save_change_to_attribute?(:rshell_from_console)
     self.receivers_changed_at = Time.current if changed
   end
 

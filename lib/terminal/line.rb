@@ -152,6 +152,9 @@ module Terminal
       unless @path && @method_name
         return refuse("#{@command}: which object and method? (call node/app/object METHOD [ARG...])")
       end
+      if (why = CallPermission.reserved_reason(@path))
+        return refuse(why)
+      end
       rows = permissions || CallPermission.all
       return if CallPermission.allows?(@path, @method_name, rows: rows)
       refuse("no call permission allows #{@path} #{@method_name} (an admin allows calls under Call permissions)")

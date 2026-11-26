@@ -25,7 +25,7 @@ class RelayPeerReceiversTest < ActiveSupport::TestCase
       assert tab5.managed_receivers?, "an emptied list is still managed (it is sent)"
       refute tab5.receives_any?
     end
-    assert_equal({ "file" => [], "checkpoint" => [], "at" => tab5.receivers_changed_at.utc.iso8601 }, tab5.receivers_payload)
+    assert_equal({ "file" => [], "checkpoint" => [], "rshell" => [], "at" => tab5.receivers_changed_at.utc.iso8601 }, tab5.receivers_payload)
   end
 
   test "a line that is not a node ID or a pattern is not saved" do

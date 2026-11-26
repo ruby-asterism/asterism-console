@@ -30,6 +30,7 @@
             <td><%= u.browser_roles.any? ? safe_join(u.browser_roles.map { tag.code(_1.name) }, ", ") : tag.span("-", class: "hint") %></td>
             <td><%= receivers_text(u, "file") %></td>
             <td><%= receivers_text(u, "checkpoint") %>
+              <% if u.rshell_from_console? %><br><span class="badge">remote shell</span><% end %>
               <% if u.managed_receivers? %><br><span class="hint">on the page:</span> <%= receivers_delivery(u) %><% end %></td>
             <td><%= @seen.include?(name) ? tag.span("connected", class: "badge ok") : tag.span("not here", class: "badge") %></td>
             <td><%= link_to "Edit", edit_relay_browser_path(u) %></td>

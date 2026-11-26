@@ -15,6 +15,15 @@ import { createConsumer } from "@rails/actioncable"
 // candidates (the command line's __complete), Enter sends the line, Ctrl-C
 // stops the command (or drops the line), Ctrl-L clears the screen. While a
 // command runs only Ctrl-C is taken.
+//
+// The remote shell (docs/terminal.md): remote <node> goes into a machine
+// (the bridge holds the session); the prompt then says where
+// (<node>:<cwd>$, its width counting wide characters as two), the lines go
+// to the machine, Tab asks the machine, and exit or Ctrl-D (on an empty
+// line) leaves. Every line says where the page believes it is (remote), so
+// a session that ended meanwhile is told back. A change of the machine's
+// system area is asked about first (y/N); y sends the line again,
+// confirmed.
 
 const LEASE_EVERY = 10000
 const HISTORY_MAX = 200
@@ -36,6 +45,8 @@ export default class extends Controller {
     this.history = loadHistory(this.historyKey())
     this.hpos = this.history.length
     this.saved = null      // the line being typed, while the history is shown
+    this.remote = null     // {node, cwd}: the machine the page is in
+    this.confirming = null // the line asked about (y/N), while asked
 
     const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")])
     if (!this.element.isConnected) return
@@ -106,7 +117,15 @@ export default class extends Controller {
     if (d === "\x0b") return this.edit(() => { this.buf.splice(this.cur) })
     if (d === "\x1b[A") return this.recall(-1)
     if (d === "\x1b[B") return this.recall(1)
-    if (d === "\t") return this.tab()
+    if (d === "\t") return this.confirming ? undefined : this.tab()
+    if (d === "\x04") {
+      // Ctrl-D on an empty line leaves the machine
+      if (this.remote && !this.confirming && this.buf.length === 0) {
+        this.edit(() => { this.buf = [..."exit"]; this.cur = 4 })
+        return this.submit()
+      }
+      return
+    }
     if (d === "\x0c") {
       this.term.clear()
       return this.edit(() => {})
@@ -132,10 +151,11 @@ export default class extends Controller {
     const cols = this.term.cols
     let out = ""
     if (this.row > 0) out += `\x1b[${this.row}A`
-    out += "\r\x1b[J" + PROMPT + this.buf.join("")
-    const total = PROMPT_WIDTH + width(this.buf)
+    out += "\r\x1b[J" + this.promptText() + this.buf.join("")
+    const pw = this.promptWidth()
+    const total = pw + width(this.buf)
     const endRow = total > 0 ? Math.floor((total - 1) / cols) : 0
-    const pos = PROMPT_WIDTH + width(this.buf.slice(0, this.cur))
+    const pos = pw + width(this.buf.slice(0, this.cur))
     const row = Math.floor(pos / cols)
     const col = pos % cols
     if (row > endRow) out += "\r\n"
@@ -149,7 +169,28 @@ export default class extends Controller {
     this.buf = []
     this.cur = 0
     this.row = 0
-    this.term.write("\r" + PROMPT)
+    this.term.write("\r" + this.promptText())
+  }
+
+  // The asterism command line's prompt, the machine's (<node>:<cwd>$), or
+  // the question about a change of the system's area.
+  promptText() {
+    if (this.confirming) return `\x1b[33m${this.confirming.question}\x1b[0m`
+    if (this.remote) return `\x1b[1;32m${this.remote.node}\x1b[0m:\x1b[1;34m${this.remote.cwd || ""}\x1b[0m$ `
+    return PROMPT
+  }
+
+  promptWidth() {
+    if (this.confirming) return width([...this.confirming.question])
+    if (this.remote) return width([...`${this.remote.node}:${this.remote.cwd || ""}$ `])
+    return PROMPT_WIDTH
+  }
+
+  // Where the console says the page is ({node, cwd} or null), when it says.
+  place(msg) {
+    if (msg && Object.prototype.hasOwnProperty.call(msg, "remote")) {
+      this.remote = msg.remote && msg.remote.node ? msg.remote : null
+    }
   }
 
   recall(step) {
@@ -175,21 +216,35 @@ export default class extends Controller {
     this.edit(() => { this.cur = this.buf.length })
     this.term.write("^C\r\n")
     this.hpos = this.history.length
+    this.confirming = null
     this.prompt()
   }
 
   async submit() {
-    const line = this.buf.join("")
+    let line = this.buf.join("")
     this.edit(() => { this.cur = this.buf.length })
     this.term.write("\r\n")
     this.completing = null
     this.hpos = this.history.length
-    if (!line.trim()) return this.prompt()
-    this.remember(line)
+    let confirmed = false
+    if (this.confirming) {
+      const asked = this.confirming.line
+      this.confirming = null
+      if (!/^\s*y(es)?\s*$/i.test(line)) {
+        this.term.write("\x1b[2m(not sent)\x1b[0m\r\n")
+        return this.prompt()
+      }
+      line = asked
+      confirmed = true
+    } else {
+      if (!line.trim()) return this.prompt()
+      this.remember(line)
+    }
     this.running = "sending"
     let res, body
     try {
-      res = await post("/terminal/commands", { page: this.page, line: line, cols: this.term.cols })
+      res = await post("/terminal/commands", { page: this.page, line: line, cols: this.term.cols,
+                                               remote: this.remote?.node || "", confirmed: confirmed })
       body = await res.json().catch(() => ({}))
     } catch {
       this.running = null
@@ -209,9 +264,10 @@ export default class extends Controller {
     }
     this.running = null
     this.replayEarly()
+    this.place(body)
     if (body.status === "empty") return this.prompt()
     const why = body.reason || body.error || `the console answered ${res.status}`
-    this.term.write(`\x1b[31masterism: ${why}\x1b[0m\r\n`)
+    this.term.write(`\x1b[31m${this.who(body)}: ${why}\x1b[0m\r\n`)
     this.prompt()
   }
 
@@ -244,6 +300,7 @@ export default class extends Controller {
     if (msg.id !== this.completing) return
     this.completing = null
     if (this.tabLine !== this.buf.slice(0, this.cur).join("")) return
+    if (msg.remote) return this.completedRemote(msg)
     const word = msg.word || ""
     const cands = (msg.candidates || []).filter((c) => c.startsWith(word) && !c.startsWith(":"))
     if (cands.length === 0) return this.term.write("\x07")
@@ -266,6 +323,42 @@ export default class extends Controller {
       const chars = [...add]
       this.buf.splice(this.cur, 0, ...chars)
       this.cur += chars.length
+    })
+  }
+
+  // The machine's candidates (the remote shell): each is the whole word
+  // from start (characters) as it is typed (a blank as "\ "), so the word
+  // typed is replaced rather than extended: one is put in (with a space
+  // after it unless it is a folder, "/"), several put in as much as they
+  // agree on when that is more than what was typed, or are listed.
+  completedRemote(msg) {
+    const before = this.buf.slice(0, this.cur)
+    const start = Math.max(0, Math.min(Number.isInteger(msg.start) ? msg.start : before.length, before.length))
+    const typed = before.slice(start).join("")
+    const items = (msg.candidates || []).filter((c) => typeof c === "string")
+    if (items.length === 0) return this.term.write("\x07")
+    let put
+    if (items.length === 1) {
+      put = items[0] + (items[0].endsWith("/") ? "" : " ")
+    } else {
+      const common = commonPrefix(items)
+      if ([...unescapeWord(common)].length > [...unescapeWord(typed)].length) {
+        put = common
+      } else {
+        const dir = common.lastIndexOf("/") + 1
+        this.edit(() => { this.cur = this.buf.length })
+        this.term.write("\r\n" + columns(items.map((i) => i.slice(dir)), this.term.cols) + "\r\n")
+        const keep = this.buf
+        const at = this.cur
+        this.prompt()
+        this.edit(() => { this.buf = keep; this.cur = at })
+        return
+      }
+    }
+    this.edit(() => {
+      const chars = [...put]
+      this.buf.splice(start, this.cur - start, ...chars)
+      this.cur = start + chars.length
     })
   }
 
@@ -306,19 +399,30 @@ export default class extends Controller {
         this.state("connected")
         // A line the output left open is ended before what follows.
         if (this.term.buffer.active.cursorX > 0) this.term.write("\r\n")
+        const who = this.who(msg)
         if (msg.status === "stopped") {
           this.term.write(`\x1b[2m(${msg.reason || "stopped"})\x1b[0m\r\n`)
         } else if (["denied", "expired"].includes(msg.status) && !msg.output_bytes) {
-          this.term.write(`\x1b[31masterism: ${msg.reason}\x1b[0m\r\n`)
+          this.term.write(`\x1b[31m${who}: ${msg.reason}\x1b[0m\r\n`)
         } else if (msg.status === "failed" && msg.reason && !msg.output_bytes) {
-          this.term.write(`\x1b[31masterism: ${msg.reason}\x1b[0m\r\n`)
+          this.term.write(`\x1b[31m${who}: ${msg.reason}\x1b[0m\r\n`)
         }
+        this.place(msg)
+        if (msg.status === "asked" && msg.confirm) this.confirming = { line: msg.line, question: msg.confirm }
         this.prompt()
         break
       case "complete":
         this.completed(msg)
         break
     }
+  }
+
+  // Who a refusal is from: the machine's name in a machine, the command
+  // line's otherwise.
+  who(msg) {
+    if (msg.remote_node) return msg.remote_node
+    if (msg.command === "remote") return "remote"
+    return this.remote?.node || "asterism"
   }
 
   // --------------------------------------------------------------- the page
@@ -358,6 +462,18 @@ function width(chars) {
   let n = 0
   for (const c of chars) n += /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(c) ? 2 : 1
   return n
+}
+
+// A word as the machine reads it: "..." and backslashes taken away.
+function unescapeWord(s) {
+  let out = ""
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (c === "\\" && i + 1 < s.length) { out += s[++i]; continue }
+    if (c === '"') continue
+    out += c
+  }
+  return out
 }
 
 function commonPrefix(list) {

@@ -18,7 +18,8 @@
       (<code>help</code> lists them). Reading is open to everyone signed in; <code>call</code> runs only
       the methods an admin allowed under Call permissions. Every command is kept in the
       <%= link_to "Call log", calls_path(anchor: "terminal") %>. Tab completes, &uarr;&darr; the history,
-      Ctrl-C stops.</span>
+      Ctrl-C stops. <code>remote &lt;node&gt;</code> goes into a machine (the remote shell, for the users an admin
+      allowed under Users; <code>remote</code> lists the machines), <code>exit</code> or Ctrl-D leaves it.</span>
     <span class="counts" data-terminal-target="state" role="status"></span>
   </nav>
 

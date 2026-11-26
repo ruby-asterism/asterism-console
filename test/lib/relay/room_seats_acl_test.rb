@@ -134,7 +134,8 @@ class Relay::RoomSeatsAclTest < ActiveSupport::TestCase
     pol = plain["policies"].to_h { [ _1["id"], _1["rules"] ] }
     refute pol["games"].any? { _1.include?("room_host") }
     refute pol["console"].any? { _1.include?("rooms") }
-    refute plain["rules"].any? { _1["permission"] == "deny" }
+    refute plain["rules"].any? { _1["permission"] == "deny" && _1["id"] != "no_rshell_calls" },
+           "no deny of the rooms (the remote shells' is another matter)"
   end
 
   test "a seat's two subjects, one certificate; the names read back once" do

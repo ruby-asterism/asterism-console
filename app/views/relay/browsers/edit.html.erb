@@ -14,6 +14,12 @@
         sends when receiving is on there (the Receiving app, or <code>areceive on</code> in its Shell). The page takes the
         list, and receives, only while the door connects it with the user's certificate.</p>
     </fieldset>
+    <fieldset class="wide files">
+      <legend>Remote shell</legend>
+      <label class="check"><%= f.check_box :rshell_from_console %> Remote shell from the console: the page lets the
+        Terminal's <code>remote <%= name %></code> in (sent with the lists; the page's owner must also turn the remote
+        shell on there). Who may use it is chosen per user under Users.</label>
+    </fieldset>
     <fieldset class="wide roles">
       <legend>Roles of this browser (<%= link_to "what they allow", relay_roles_path %>)</legend>
       <% every = RelayRole.where(for_browsers: true).order(:name).pluck(:name) %>

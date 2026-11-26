@@ -50,7 +50,7 @@ module Relay
     end
 
     def receivers_params
-      params.expect(user: [ :receive_files_from_more, :receive_checkpoints_from_more,
+      params.expect(user: [ :receive_files_from_more, :receive_checkpoints_from_more, :rshell_from_console,
                             { receive_files_from_picked: [] }, { receive_checkpoints_from_picked: [] },
                             { browser_role_ids: [] } ])
     end

@@ -10,10 +10,20 @@
 # (no page or route does), and they are kept as long as the call log's rows.
 # A Tab's completion is a row of kind "complete" while it is asked; the
 # bridge answers it and removes it.
+#
+# The remote shell (docs/terminal.md): a row with remote (the machine's
+# node) is a line of the remote shell, not of the asterism command line:
+# remote <node> (command "remote", effect "open"), exit (effect "close";
+# also written by the bridge when the page closes while in a machine), and
+# the lines sent (command: the first word, effect "read" or "write", path
+# <node>/transfer/rshell, method_name exec_read or exec_write). confirmed:
+# the user answered y to the question about the system's area. A change
+# outside the user's areas that was not confirmed ends "asked" (nothing
+# sent; the page asks).
 class TerminalCommand < ApplicationRecord
   KINDS = %w[run complete].freeze
   ACTIVE = %w[pending running stopping].freeze
-  STATUSES = (ACTIVE + %w[ok failed denied stopped expired]).freeze
+  STATUSES = (ACTIVE + %w[ok failed denied stopped expired asked]).freeze
   # A command the bridge has not picked up within this time is dropped.
   EXPIRE_AFTER = 30.seconds
   # What the record keeps of the output (the summary).
@@ -32,6 +42,9 @@ class TerminalCommand < ApplicationRecord
 
   scope :runs, -> { where(kind: "run") }
   scope :active, -> { where(status: ACTIVE) }
+  scope :remote_lines, -> { where.not(remote: nil) }
+
+  def remote? = remote.present?
 
   def argv_value
     argv.present? ? JSON.parse(argv) : []
@@ -50,6 +63,7 @@ class TerminalCommand < ApplicationRecord
   def as_payload
     { "id" => id, "kind" => kind, "line" => line, "command" => command, "effect" => effect, "path" => path,
       "method" => method_name, "status" => status, "exit_code" => exit_code, "reason" => reason,
-      "output_bytes" => output_bytes, "took_ms" => took_ms, "user" => user&.email_address, "at" => created_at&.iso8601 }
+      "output_bytes" => output_bytes, "took_ms" => took_ms, "user" => user&.email_address, "at" => created_at&.iso8601,
+      "remote_node" => remote }
   end
 end

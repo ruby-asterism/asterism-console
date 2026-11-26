@@ -127,6 +127,8 @@ Rails.application.routes.draw do
     namespace :admin, path: "" do
       resources :users, only: %i[index update destroy] do
         delete :otp, on: :member, action: :otp_off
+        # The remote shell's permission (docs/terminal.md).
+        patch :rshell, on: :member
       end
       resources :invitations, only: %i[index create] do
         patch :revoke, on: :member

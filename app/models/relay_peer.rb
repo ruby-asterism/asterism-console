@@ -21,6 +21,10 @@
 # their copy); a row that has one is "managed": its nodes keep their
 # transfer keys in the ACL, so an emptied list still reaches them.
 # receivers_delivered is the bridge's record of what each node got (JSON).
+#
+# rshell_from_console (docs/terminal.md, "The remote shell"): its nodes let
+# the console's remote shell in; sent to them with the lists (ReceiverLists,
+# the kind "rshell").
 class RelayPeer < ApplicationRecord
   KINDS = %w[router client].freeze
   NAME = Relay::CertAuthority::NAME_RE
@@ -128,6 +132,14 @@ class RelayPeer < ApplicationRecord
       "files_to_console" => files_to_console?, "files_from_console" => files_from_console?,
       "receives" => receives_config,
       "receivers_managed" => managed_receivers? }
+  end
+
+  # The nodes that let the console's remote shell in (the enabled rows
+  # marked rshell_from_console, and the users' browsers so marked), sorted.
+  def self.rshell_nodes
+    rows = where(enabled: true, rshell_from_console: true).flat_map(&:speaks_for)
+    users = User.where(rshell_from_console: true).filter_map { Relay::BrowserNode.base(_1) }
+    (rows + users).uniq.sort
   end
 
   # The nodes that may send files to the console (the enabled rows marked
