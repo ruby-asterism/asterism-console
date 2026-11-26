@@ -78,7 +78,7 @@ record of who typed what. This note is the design and how it was checked.
   the call log's rows (there is no expiry for either). Tabs are not
   recorded (they read names only; their rows are removed once answered).
 
-## The remote shell: into a Family mruby machine (R3)
+## The remote shell: into a Family mruby machine (0.4.5)
 
 `remote <node>` in the Terminal goes into a machine: the prompt becomes
 `<node>:<cwd>$ ` and each line typed runs on the machine, a line at a
@@ -117,8 +117,16 @@ router like any other. The machine's side is Family mruby's transfer app
 - **One page at a time per machine**: the machine sees one caller, the
   console, so the console keeps the others out ("another user of the
   console is in ...", "you are in ... on another Terminal page").
+- **A browser build** (a user's page that the door connects with the
+  user's certificate, `wasm-<handle>`; Members > Browsers) is a machine
+  like the others and is listed by `remote` under that name, but only while
+  its page is open: closed, it is "not on the network now", and a page
+  loaded again needs a new pass from the console before it joins. Its files
+  are those the browser keeps for the page (`/home` stays across reloads);
+  `df` shows the browser's estimate of the room left. A line typed after
+  the page closed is refused ("did not answer"); `exit` leaves.
 
-### Files: get and put (R4)
+### Files: get and put (0.4.5)
 
 - **`get <file>`** (read only is enough): the bridge reads the file from
   the machine 8 KB a call (`read`) into the console's place for it
@@ -214,7 +222,7 @@ brackets:
 | `<node>` did not answer open in 10 s | the machine is gone, or the router's ACL does not let the console reach it |
 | the session on `<node>` has ended | not used for 5 minutes, or the machine restarted: the page leaves the machine |
 | not a command of this remote shell | a word the machine did not name |
-| put: ... version 2; put needs 3 | the machine's Family mruby is older than R4 |
+| put: ... version 2; put needs 3 | the machine's Family mruby has an older remote shell (`ver` says `remote shell: 2`) |
 | put: no files came with the line | `put` typed where no file chooser opened (another client), or the chosen files waited more than 10 minutes |
 
 ### How it is built
@@ -290,7 +298,7 @@ brackets:
 
 ## Checks
 
-The remote shell (R3): `test/lib/terminal/remote_test.rb` (the words as
+The remote shell: `test/lib/terminal/remote_test.rb` (the words as
 the machine splits them, the table, the three permissions, the system's
 area, the refusals' words), `test/controllers/terminal_remote_controller_test.rb`
 (remote, the lines in a machine, where the page believes it is, Tab, the
