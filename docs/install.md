@@ -1438,6 +1438,14 @@ reach the machines again):
   again. To drop the columns too, restore the update's backup
   (`./update.sh 0.4.4 --restore <it>`).
 
+From 0.4.5 to 0.4.6 (a short command's output no longer goes missing in
+the Terminal; the Terminal's framed area and one-line note):
+
+- `./update.sh 0.4.6`. No migration, nothing in nginx or `.env`.
+- **Check**: Terminal, a few short commands in a row (`node list`, or `ls`
+  in a machine) all show their output; "More" opens the longer note.
+- Going back to 0.4.5 needs nothing but `./update.sh 0.4.5`.
+
 From 0.4.3 to 0.4.4 (zenohd 1.10.2):
 
 - `./update.sh 0.4.4`. The router's image becomes `eclipse/zenoh:1.10.2`
