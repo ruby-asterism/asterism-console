@@ -1,4 +1,4 @@
-# The Terminal: the asterism command line in the console (VT1, VT2), and the remote shell (R3)
+# The Terminal: the asterism command line in the console (VT1, VT2), and the remote shell (R3, R4)
 
 A page (`/terminal`, "Terminal" in the menu) where a signed-in user types
 the commands of the asterism gem's command line (`asterism node list`,
@@ -96,13 +96,17 @@ router like any other. The machine's side is Family mruby's transfer app
   the apps for `open` and `kill`; one candidate is put in, several as far
   as they agree, or listed. Ctrl-C stops a long output or a wait between
   two calls (one call already on the machine finishes first). The history
-  is the Terminal's. `get` and `put` are kept for the console's file
-  commands (a later version) and refused now.
+  is the Terminal's. `get` and `put` are the console's own words for files
+  (below, "Files: get and put").
 - **Long output** comes 8 KB per call; the bridge asks for the rest
   (`more`) and passes it on as it comes, up to the machine's 64 KB (the
   machine writes the note when it cuts). `kill` and `open` answer that they
   asked; the bridge asks again every 0.25 s until the result is in (the
-  machine gives up after 5 s).
+  machine gives up after 5 s). A `cp` (or an `mv` to another storage) of a
+  file over 64 KB does the same on a machine of version 3: the machine
+  copies a piece at a time and the bridge shows how far it is on one line
+  (`12.0 MB / 64.0 MB`); Ctrl-C asks the machine to stop it (what was
+  copied is deleted). A copy whose progress does not move for 30 s is left.
 - **A change of the system's area**: a line that changes a path outside
   `/home`, `/app`, `/mnt/sd` and `/tmp` (folded from where the session is,
   as the machine folds it: `rm ../etc/x` from `/home` is `/etc/x`) is not
@@ -113,6 +117,45 @@ router like any other. The machine's side is Family mruby's transfer app
 - **One page at a time per machine**: the machine sees one caller, the
   console, so the console keeps the others out ("another user of the
   console is in ...", "you are in ... on another Terminal page").
+
+### Files: get and put (R4)
+
+- **`get <file>`** (read only is enough): the bridge reads the file from
+  the machine 8 KB a call (`read`) into the console's place for it
+  (`TerminalFiles`, `storage/rshell_files/get/`), showing
+  `get <path>: 512 KB / 1024 KB` as it goes. When it is whole the page gets
+  a link and the browser saves the file under its name. The link is the
+  user's who asked, works once (the file is gone once taken), and a file
+  nobody takes goes after 10 minutes. A folder, a secret of the machine
+  (`/home/asterism`, the passwords) and a file over the console's limit
+  are refused with the reason. Ctrl-C stops it between two calls and keeps
+  nothing.
+- **`put [<folder or file>]`** (read and change): Enter opens the browser's
+  file chooser (a page may open it only from the user's key or click), one
+  file or several; files dropped on the Terminal are put the same way (into
+  the folder of a `put` typed on the line, else where the session is). The
+  files go up to the console first (`POST /terminal/uploads`, its progress
+  shown), then the bridge writes each to the machine a piece at a time
+  (`write_begin`, `write_chunk`, `write_end`; the piece the machine names,
+  8 KB at most). The machine writes into a hidden `.<name>.part` and gives
+  it its name only when every byte is in, so nothing half written is seen;
+  Ctrl-C (and a put that stops coming) drops it. Without a path the files
+  go where the session is; a folder (or a path ending in `/`) takes them
+  under their names; one file may be given another name (`put new.txt`).
+- **Asked first**: a file of the same name there (`... is there already
+  (written over). Go on? (y/N)`) and a place outside `/home`, `/app`,
+  `/mnt/sd`, `/tmp` (the system's area). `y` sends the line again with the
+  same upload (nothing is chosen again); `n` sends nothing, and the upload
+  goes after 10 minutes.
+- **The limits**: `ASTERISM_RSHELL_FILE_MAX_BYTES` (16 MB by default) for
+  one file, both ways; 16 files a put. The machine refuses a file that does
+  not fit its free space.
+- **The record**: each `get` and `put` is a row of the call log (the
+  machine, who, the line, how it ended) with what it carried in
+  `terminal_commands.files` (each file's path on the machine, its size,
+  `ok` / `refused` / `stopped`).
+- **The machine** must be of the remote shell's version 3 for `put` (its
+  `open` says); `get` works with every version.
 
 ### Who may
 
@@ -170,7 +213,9 @@ brackets:
 | another user of the console is in `<node>` / you are in `<node>` on another Terminal page | the console's one page per machine |
 | `<node>` did not answer open in 10 s | the machine is gone, or the router's ACL does not let the console reach it |
 | the session on `<node>` has ended | not used for 5 minutes, or the machine restarted: the page leaves the machine |
-| not a command of this remote shell / not in this version of the console | a word the machine did not name / `get`, `put` |
+| not a command of this remote shell | a word the machine did not name |
+| put: ... version 2; put needs 3 | the machine's Family mruby is older than R4 |
+| put: no files came with the line | `put` typed where no file chooser opened (another client), or the chosen files waited more than 10 minutes |
 
 ### How it is built
 

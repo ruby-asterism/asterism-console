@@ -10,10 +10,11 @@ the command that goes back).
 
 ## Unreleased
 
-What an update needs: one migration that adds columns (users, relay_peers,
+What an update needs: two migrations that add columns (users, relay_peers,
 terminal_sessions, terminal_commands; nothing existing changes), and an
 apply: the router's configuration gets a shared deny of the remote shells'
-calls (below).
+calls (below). The files of `get` and `put` wait in
+`storage/rshell_files` (under the storage volume, like the transfers).
 
 - The Terminal's remote shell (docs/terminal.md, "The remote shell"):
   `remote <node>` goes into a Family mruby machine whose owner turned its
@@ -23,6 +24,14 @@ calls (below).
   output comes in pieces, Ctrl-C stops between them, a change outside
   `/home`, `/app`, `/mnt/sd` and `/tmp` is asked about first (y/N). Every
   line is in the call log with its machine.
+- Files in the remote shell (docs/terminal.md, "Files: get and put"):
+  `get <file>` brings a file of the machine to the browser (a link for
+  the user who asked, once); `put [<folder>]` opens the file chooser, and
+  files dropped on the Terminal are put too, written on the machine under
+  a hidden name until whole. A file of the same name is asked about (y/N).
+  At most `ASTERISM_RSHELL_FILE_MAX_BYTES` (16 MB) a file. A long `cp` on
+  the machine shows its progress and stops on Ctrl-C. Both are in the call
+  log with the paths and sizes.
 - Who may, per user: Admin > Users, "Remote shell": none (the default,
   admins too), read only, read and change.
 - Which machines let the console in: "Remote shell from the console" on a
