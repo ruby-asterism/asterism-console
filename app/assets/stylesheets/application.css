@@ -451,9 +451,46 @@ fieldset.roles label.role-pick input { margin-top: 5px; }
 .role-pick .role-desc { display: block; color: var(--text); font-size: 15px; }
 .notice-bar { margin: 8px 0; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn-text); }
 
-/* The Terminal (docs/terminal.md): xterm.js fills the page under the bar.
-   Its own colours (dark, the command line's ANSI colours) in both themes. */
-.terminal-help { align-items: baseline; }
-.terminal-body { display: block; overflow: hidden; background: #14171a; }
-.terminal-wrap { height: 100%; padding: 6px 8px; }
+/* The Terminal (docs/terminal.md): xterm.js in a framed area under the bar,
+   as wide as the window up to about 132 columns (centred), as tall as what is
+   left of it; the terminal fits its columns and rows to the area. Its own
+   colours (dark, the command line's ANSI colours) in both themes. The note
+   above it is one line; More shows the rest. */
+.terminal-page { height: 100vh; height: 100dvh; }
+.terminal-help { flex-wrap: nowrap; gap: 12px; }
+.terminal-tips { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-button {
+  flex: none; padding: 0; border: 0; background: none; color: var(--accent); font-size: 14px; cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
+.terminal-where {
+  flex: none; font-size: 13px; line-height: 20px; padding: 0 8px; border: 1px solid var(--ok); border-radius: 10px;
+  color: var(--ok); white-space: nowrap; margin-left: auto; max-width: 40%; overflow: hidden; text-overflow: ellipsis;
+}
+.terminal-where + .counts { margin-left: 0; }
+.terminal-help .counts { flex: none; white-space: nowrap; }
+.terminal-more { padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.terminal-more p { margin: 0 0 4px; max-width: 980px; }
+.terminal-more p:last-child { margin-bottom: 0; }
+.terminal-body { display: flex; justify-content: center; padding: 14px 20px 20px; background: var(--bg); }
+.terminal-frame {
+  flex: 1 1 auto; min-width: 0; display: flex; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: #14171a;
+  /* 132 columns of the terminal's font, its padding, border and scrollbar */
+  font: 14px ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  max-width: calc(132ch + 24px + 2px + 14px);
+}
+.terminal-wrap { flex: 1 1 auto; min-width: 0; min-height: 0; }
 .terminal-wrap .xterm { height: 100%; }
+/* what is left under the last row (less than a row) in the terminal's colour */
+.terminal-wrap .xterm .xterm-viewport { background-color: #14171a; }
+@media (max-width: 800px) {
+  .terminal-page { height: 100vh; height: 100dvh; }
+  .terminal-page .body { flex-direction: row; }
+  .terminal-help { gap: 10px; }
+  .terminal-help .counts { margin-left: auto; }
+  .terminal-where { max-width: 45%; }
+  .terminal-more { padding: 8px 12px; }
+  .terminal-body { padding: 8px 8px 10px; }
+  .terminal-frame { padding: 6px 6px 6px 8px; border-radius: 6px; }
+}

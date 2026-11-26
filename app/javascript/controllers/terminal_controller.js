@@ -46,7 +46,7 @@ const GAP_MS = 2000
 const ORDERS_MAX = 64
 
 export default class extends Controller {
-  static targets = ["screen", "state"]
+  static targets = ["screen", "state", "where", "more", "moreToggle"]
   static values = { available: Boolean, user: String, level: String, fileMax: Number }
 
   async connect() {
@@ -74,8 +74,14 @@ export default class extends Controller {
     this.term.loadAddon(this.fit)
     this.term.open(this.screenTarget)
     this.fitNow()
+    // The area follows the window and the note above it (More): the
+    // columns and rows follow the area.
     this.onResize = () => this.fitNow()
     window.addEventListener("resize", this.onResize)
+    if (window.ResizeObserver) {
+      this.resizer = new ResizeObserver(() => this.fitNow())
+      this.resizer.observe(this.screenTarget)
+    }
     this.term.onData((d) => this.input(d))
     window.consoleTerminal = this
     this.setupFiles()
@@ -111,6 +117,7 @@ export default class extends Controller {
     clearTimeout(this.waitTimer)
     for (const id of [...this.orders.keys()]) this.dropOrder(id)
     window.removeEventListener("resize", this.onResize)
+    this.resizer?.disconnect()
     if (this.onHide) window.removeEventListener("pagehide", this.onHide)
     this.xhr?.abort()
     this.release()
@@ -208,7 +215,17 @@ export default class extends Controller {
   place(msg) {
     if (msg && Object.prototype.hasOwnProperty.call(msg, "remote")) {
       this.remote = msg.remote && msg.remote.node ? msg.remote : null
+      this.showWhere()
     }
+  }
+
+  // The machine the page is in, beside the connection's state.
+  showWhere() {
+    if (!this.hasWhereTarget) return
+    const node = this.remote?.node
+    this.whereTarget.hidden = !node
+    this.whereTarget.textContent = node ? `in ${node}` : ""
+    this.whereTarget.title = node ? `The lines go to ${node} (exit leaves it)` : ""
   }
 
   recall(step) {
@@ -622,6 +639,15 @@ export default class extends Controller {
   }
 
   // --------------------------------------------------------------- the page
+
+  // More: the rest of the note above the Terminal.
+  toggleMore() {
+    const open = this.moreTarget.hidden
+    this.moreTarget.hidden = !open
+    this.moreToggleTarget.setAttribute("aria-expanded", String(open))
+    this.moreToggleTarget.textContent = open ? "Less" : "More"
+    this.term?.focus()
+  }
 
   fitNow() {
     try { this.fit.fit() } catch { /* not laid out yet */ }

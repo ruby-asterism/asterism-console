@@ -53,6 +53,15 @@ record of who typed what. This note is the design and how it was checked.
   several agree, or lists them; Enter sends the line; Ctrl-C stops the
   command running (or drops the line). The output keeps the command
   line's colours and is laid out at the page's width.
+- **Its layout** (from the version after 0.4.5): the terminal sits in a
+  framed area (rounded corners, a margin left, right and below, a padding
+  around the text), as wide as the window up to 132 columns and centred,
+  as tall as what is left of the window; its columns and rows follow the
+  area (the fit addon, again whenever the area changes), and the bridge is
+  given those columns. Above it, one line: `help`, Tab, the history,
+  Ctrl-C, and "More", which opens the rest of the note (who may run what,
+  the Call log, `remote`, `exit`, `get` and `put`); on the right, the
+  connection's state and, while the page is in a machine, "in <node>".
 - **Streams** (`watch`, `object echo`, `status echo`, `status hz`, a long
   `ping`) run until Ctrl-C, `--duration`, or the page is closed: the
   bridge then stops them (the page leases its token every 10 s and

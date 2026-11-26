@@ -30,6 +30,14 @@ nginx or `.env`).
   tests (the numbers), and `HEADLESS_SCRIPT=terminal_order.js
   script/headless/run` (the page given swapped messages).
 
+- **The Terminal's page**: the terminal sits in a framed area with a
+  margin, as wide as the window up to 132 columns (centred), as tall as
+  what is left of it; its columns and rows still follow the area. The
+  note above it is one line (`help`, Tab, the history, Ctrl-C) with
+  "More" for the rest (who may run what, the Call log, `remote`, `exit`,
+  `get`, `put`), and "in <node>" beside the connection's state while the
+  page is in a machine.
+
 ## 0.4.5
 
 What an update needs: nothing but the update (`./update.sh 0.4.5`). Two
