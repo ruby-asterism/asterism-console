@@ -8,8 +8,12 @@
 # another process (caller: :from).
 class FakeRShell
   OUT_MAX = 8192
-  TABLE = { "pwd" => "read", "cd" => "read", "ls" => "read", "cat" => "read", "ps" => "read", "help" => "read",
-            "rm" => "write", "mkdir" => "write", "kill" => "write", "open" => "write" }.freeze
+  # The machine's whole table (its open's answer, in its order); the
+  # stand-in answers the ones it does not play with nothing (code 0).
+  TABLE = { "pwd" => "read", "cd" => "read", "ls" => "read", "cat" => "read", "head" => "read", "tail" => "read",
+            "stat" => "read", "df" => "read", "free" => "read", "ps" => "read", "ver" => "read", "help" => "read",
+            "cp" => "write", "mv" => "write", "rm" => "write", "mkdir" => "write", "kill" => "write",
+            "open" => "write" }.freeze
   METHODS = { "open" => 0, "exec_read" => 2, "exec_write" => 2, "more" => 2, "complete" => 3, "read" => 4,
               "close" => 1 }.freeze
 
@@ -55,7 +59,8 @@ class FakeRShell
       out = s[:text].byteslice(pos..)
       return { "out" => out, "more" => nil, "cut" => false, "wait" => false, "code" => 0 }
     end
-    page(s, pos)
+    # the machine's more says it is not waiting, and no code yet
+    page(s, pos).merge("wait" => false, "code" => nil)
   end
 
   def complete(id, line, pos, from: nil)

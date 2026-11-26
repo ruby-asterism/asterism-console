@@ -162,7 +162,7 @@ brackets:
 |---|---|
 | you may not use the remote shell | the user's permission is "none" |
 | `rm`: changes the machine; you may only read | the user's permission is "read only" |
-| `<node>` is not on the network now | nothing of the node is there |
+| `<node>` is not on the network now | nothing of the node is there: the machine is off or away, or its remote shell is off and none of its other apps is on the network (a Family mruby machine with every switch of its transfer app off is not on Asterism at all) |
 | the remote shell is off on `<node>` | the machine has no `transfer/rshell` (`no_object`): its owner has not turned it on |
 | `<node>` does not let this console in | the machine's `rshell` list does not have the console: tick the mark and Apply (and wait for the list to reach it) |
 | `<node>` takes the remote shell only over a checked connection | not a `tls/` router with certificates (nor the door) |

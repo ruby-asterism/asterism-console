@@ -83,7 +83,12 @@ module Bridge
 
     # Opens a session on node for page. Raises Refused.
     def open(node, page:, user_id:)
-      raise Refused, "#{node} is not on the network now (nothing of it is there)" unless present?(node)
+      # A Family mruby machine with its remote shell off (and nothing else
+      # of it on Asterism) is not there either: the two cannot be told apart.
+      unless present?(node)
+        raise Refused, "#{node} is not on the network now (nothing of it is there: it is off or away, or its remote " \
+                       "shell is off and nothing else of it is on the network)"
+      end
       unless transfer?(node)
         raise Refused, "the remote shell is off on #{node} (its transfer app, which holds the remote shell, is not " \
                        "running there: its owner turns the remote shell on in the Receiving app)"
