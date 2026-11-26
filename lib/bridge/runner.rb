@@ -1108,7 +1108,7 @@ module Bridge
     def start_transfers
       return if ENV["ASTERISM_TRANSFERS"] == "0"
       @transfers = Transfers.new(conn: @z, net: @net, node: @node_id, say: method(:say)).start
-      @receivers = Receivers.new(say: method(:say)).start
+      @receivers = Receivers.new(say: method(:say), net: -> { @net }).start
     rescue SystemCallError, ArgumentError => e
       say "bridge: files: not started: #{e.class}: #{e.message}"
       @transfers = nil

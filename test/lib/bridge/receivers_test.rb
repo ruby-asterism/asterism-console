@@ -103,4 +103,24 @@ class Bridge::ReceiversTest < ActiveSupport::TestCase
     assert_equal user.receivers_digest, user.reload.delivered.dig("wasm-pat", "digest")
     assert(@said.any? { _1.include?("wasm-pat has the list of its user (written there)") })
   end
+
+  # Without a call stand-in the list goes out on the bridge's connection
+  # (asterism 0.14 has no module-wide Asterism[...]).
+  test "the default call uses the bridge's connection" do
+    inbox = Object.new
+    sent = []
+    inbox.define_singleton_method(:policy_set) { |payload| sent << payload; { "ok" => true, "written" => true } }
+    asked = []
+    net = Object.new
+    net.define_singleton_method(:[]) { |path, timeout:| asked << [ path, timeout ]; inbox }
+    r = Bridge::Receivers.new(say: ->(t) { @said << t }, net: -> { net }).start
+    RelayPeer.create!(name: "fmruby-aaaaaa", kind: "client", rshell_from_console: true)
+    r.sync(%w[fmruby-aaaaaa/transfer], now: 10.0)
+    r.drain
+    r.close
+    assert_equal [ [ "fmruby-aaaaaa/transfer/inbox", Bridge::Receivers::TIMEOUT ] ], asked
+    assert_equal [ "console" ], sent.first["rshell"]
+    assert(@said.none? { _1.include?("not delivered") }, @said.inspect)
+  end
+
 end

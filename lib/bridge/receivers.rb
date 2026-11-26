@@ -34,10 +34,12 @@ module Bridge
     APP = "transfer".freeze
 
     # call: what sends one list (node, payload) -> the machine's answer;
-    # the tests give a stand-in.
-    def initialize(say:, call: nil)
+    # the tests give a stand-in. net: the bridge's connection (asterism 0.14
+    # has no module-wide one: Asterism[...] is gone with protocol 2).
+    def initialize(say:, net: -> { }, call: nil)
       @say = say
-      @call = call || ->(node, payload) { Asterism["#{node}/#{APP}/inbox", timeout: TIMEOUT].policy_set(payload) }
+      @net = net
+      @call = call || method(:default_call)
       @jobs = Queue.new
       @results = Queue.new
       @last = {}       # node => { digest:, at: (monotonic), ok: }
@@ -91,6 +93,11 @@ module Bridge
     end
 
     private
+
+    def default_call(node, payload)
+      net = @net.call or raise ::Asterism::Disconnected, "the bridge is not connected"
+      net["#{node}/#{APP}/inbox", timeout: TIMEOUT].policy_set(payload)
+    end
 
     def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
