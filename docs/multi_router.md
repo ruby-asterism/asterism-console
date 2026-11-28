@@ -65,46 +65,66 @@ Apply does today, and it stays the only way.
 
 ## A direction that adds little
 
-1. **Decide in one place, apply at each router.** The registry stays the
-   one list of members. A member row gains one field: the router it comes in
-   through (empty for the cloud router, as today). From the one registry the
-   console makes one configuration per router, the way it makes
-   `cloud.json5` now.
-2. **The router fetches its configuration.** A small helper next to each
-   zenohd (the role `run.sh` plays on the VPS) asks the console, with the
-   router's own certificate, for its configuration; when it differs, it
-   writes the file and restarts zenohd. The console never logs in to the
-   router's machine, so a router at home behind NAT works the same. The
-   router watch moves into the same helper and then works for every router.
-3. **Strict at the edges, open between routers.** Only the router a member
-   comes in through needs that member's rules. Links between routers are
-   mutual TLS with the network's CA and carry what the edge already let in,
-   so each router's configuration stays small: its own members, plus "the
-   other routers may pass everything".
-4. **Nothing new on the pages beyond the router field.** Apply applies to
-   every router whose configuration changed (each restarts once); the
-   members' page shows which router each comes through.
+1. **Decide in one place, the same rules at every router.** The registry
+   stays the one list of members, and the console gives every router the
+   same ACL made from it (plus each router's own links). No new field on
+   the members' page: which router a member comes in through does not
+   matter, and a member that moves (a laptop at home and outside) needs
+   nothing. The rules grow only inside the routers' files. A router whose
+   local machines connect over plain TCP (no certificate, so no name to
+   match) trusts what comes in on that interface, as a home router does
+   today.
+2. **Start without a helper.** For two or three routers, the members' page
+   offers each router's configuration file to download; its owner puts it
+   in place and restarts zenohd. Nothing new runs anywhere.
+3. **A helper next to each zenohd, when there are more.** It does what
+   `run.sh` does on the VPS, and fetches its configuration over Zenoh, not
+   HTTP: the console answers at `relay/config/<router name>`, and the ACL
+   lets a router query only the key with its own name (the same pattern as
+   calls under one's own name). No new port, no new credential: the
+   router's certificate is the credential. It asks at start, when the
+   console puts "changed" for it, and every ten minutes or so as a fallback;
+   when the file differs it writes it and restarts zenohd. The router watch
+   moves into the helper and then works for every router.
+4. **Apply one router at a time.** Each router restarts after the one
+   before has come back (checked the way the router watch checks), the
+   cloud router last, since the other routers' helpers reach the console
+   through it. The page shows each router as applied or waiting.
 
-### The other direction, for later
+## Checking permissions in Asterism (for later)
 
-Checking permissions in Asterism instead of in the routers' ACLs: calls and
-puts carry a signed grant that the receiving machine or app checks. Then the
-rules are one set for the whole network, whatever the routers and wherever
-they are, and routers need no per-member rules at all. The cost is that a
-refused message still travels the network before it is refused, and every
-receiver has to check. Family mruby's remote control plan keeps this as its
-long-term route (G3 in fmruby-core's doc/remote_guard). The two can meet:
-routers keep a coarse ACL (who may be in the network at all), Asterism the
-fine one.
+**Today** the receiving side already decides: the transfer inbox's receive
+lists and the remote shell look at who the caller is. The caller's name is
+the last part of the call's key (`asterism/<node>/transfer/inbox/call/<caller>`),
+and the router's ACL makes it trustworthy: a member may call only under its
+own name. So the routers do not decide what a member may do so much as
+guarantee that names cannot be forged.
+
+**In Asterism** that guarantee would travel with the message: a call (and a
+put) carries a signature made with the caller's private key over the target,
+the method, a digest of the arguments, a time and a nonce, and the receiver
+checks it against the network's CA. Every member already has a certificate
+and key from the console's signer, so nothing new is handed out. The name
+then holds whatever routers the message crossed, and routers need only a
+coarse ACL: who may be in the network at all.
+
+What it changes: a new wire protocol version, signing and checking in every
+implementation (the CRuby gem, mruby and PicoRuby on the boards, the browser
+build), an ECDSA check per call on an ESP32 (tens of milliseconds expected,
+not measured), clocks and replay. And it protects calls and writes only:
+who may subscribe and read still needs the routers' ACL (or encryption). It
+complements the ACL rather than replacing it. Family mruby's remote control
+plan keeps the same idea as its long-term route (G3 in fmruby-core's
+doc/remote_guard).
 
 ## Open questions
 
-1. Whether a router-per-member field is enough, or a member may come in
-   through several routers (a laptop at home and outside).
-2. How the helper authenticates to the console and how often it asks
-   (polling is simplest; a Zenoh queryable on the console would avoid HTTP).
-3. Restarts: several routers restarting at one Apply. Staggering them, or
-   applying one router at a time from the page.
-4. Whether to wait for upstream: if zenoh ever wires `update_config` to
-   config changes for `access_control`, the helper could PUT instead of
-   restarting. Nothing points that way in 1.10.2.
+1. Whether giving every router the whole ACL stays small enough as the
+   registry grows (it is text in a file; nothing measured).
+2. When to add the helper (how many routers make downloading by hand a
+   chore).
+3. Upstream: `TablesLock::update_config` already rebuilds every face's
+   interceptors and is only unused. Wiring it to a write of
+   `access_control` could be a small upstream pull request; with it, the
+   helper could change the rules without a restart (no dropped
+   connections). Worth trying once the open one (zenoh #2619) moves.
