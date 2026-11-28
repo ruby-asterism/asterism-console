@@ -91,6 +91,82 @@ Apply does today, and it stays the only way.
    cloud router last, since the other routers' helpers reach the console
    through it. The page shows each router as applied or waiting.
 
+## How the ACL acts across routers
+
+Zenoh builds the access control per connection (face), so a router checks
+only the peer it is directly connected to: its certificate's name, its
+interface, its zid. A call from member M that crosses router A and then
+router B is checked at A against M's rules, and at B against **A's** rules:
+M's rules do not reach B. Replies are checked the same way at each hop.
+
+What follows when routers disagree:
+
+1. **The entry router's rules are the ones that count.** The routers in the
+   middle see only their neighbouring routers. If the router a member comes
+   in through has old rules, the member keeps its old permissions there.
+2. **A refusal is silent.** The ACL drops a message without an error: a call
+   times out, a subscription receives nothing. A declaration (subscriber,
+   queryable, token) refused in the middle makes the other side look absent,
+   which is the hardest case to diagnose.
+3. **During an apply, the entry decides.** While routers restart one by one,
+   a member entering at an updated router has the new permissions and one
+   entering at a router not yet updated has the old ones. A permission taken
+   away holds only once every router has it.
+4. **Removing a member needs every router.** There is no certificate
+   revocation in this setup: a router that trusts the CA lets the
+   certificate in, and only its ACL keeps a removed member out.
+
+With the same ACL at every router, 1 goes away (any entry gives the same
+permissions) and 2 is rare (routers pass everything to each other). What is
+left is the time an apply takes to reach every router (3, 4): the page shows
+whether every router has the current configuration, and members who come
+from outside can be made to enter at the cloud router, so that taking
+something away needs one router.
+
+## Routers in tiers
+
+| Tier | Example | Treatment |
+|---|---|---|
+| Managed | a router whose configuration this console makes | routers pass everything to each other; members are restricted where they enter |
+| Not managed | a router someone else runs, another network | restricted where it connects to ours, like a member |
+
+**Passing everything is only for routers with the same configuration from
+the same console.** Beyond a router this console does not manage, nothing is
+known about what is allowed, so it is treated as a member: the router it
+connects to restricts it. This is what the cloud router does today with a
+home router (a registry row of kind "router" with its keys).
+
+**Partial restrictions on an unmanaged router** use the ACL as it is: by the
+router's certificate name, per key expression, per direction.
+
+- In (from its network to ours): the keys it may write and call, e.g. only
+  a game room's keys (`room/...`).
+- Out (from ours to it): what it may see; subscriptions and replies only on
+  the keys meant for it, and never the admin space.
+
+**Names beyond an unmanaged router are not guaranteed.** However many nodes
+are behind it, our side sees one peer, so the rule that makes a caller's name
+trustworthy (a member may call only under its own name, checked where it
+enters) does not hold there: a node behind it can put any name in
+`call/<caller>`. Give that network a range of names instead (e.g. its nodes
+are `partner-a-*`) and let its connection call only as `call/partner-a-*`.
+It can then forge names only inside its own range, never one of ours.
+
+**Where an unmanaged router connects** need not be a router of its own:
+
+1. **One of ours takes it (start here).** The link to the outside router is a
+   connection to one of our routers (the cloud router), restricted by that
+   router's ACL by the peer's certificate name; a port of its own for outside
+   routers also works (the ACL can match an interface). Nothing new runs, and
+   the registry's "router" row covers it, as for a home router today.
+2. **A border router, when there are more.** One managed router only for
+   links to the outside: every outside router connects there. The outside
+   rules live on that router alone, the routers inside stay "pass
+   everything", load or trouble from outside stays at the border, and
+   changing the outside rules restarts only the border router. The cost is
+   one more router. On the console it would be one mark on a router: "links
+   to the outside".
+
 ## Checking permissions in Asterism (for later)
 
 **Today** the receiving side already decides: the transfer inbox's receive
