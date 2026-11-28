@@ -113,7 +113,16 @@ implementation (the CRuby gem, mruby and PicoRuby on the boards, the browser
 build), an ECDSA check per call on an ESP32 (tens of milliseconds expected,
 not measured), clocks and replay. And it protects calls and writes only:
 who may subscribe and read still needs the routers' ACL (or encryption). It
-complements the ACL rather than replacing it. Family mruby's remote control
+complements the ACL rather than replacing it.
+
+**Not per call on a microcontroller** (the owner, 2026-11-28): a public-key
+check on every call is too heavy for the boards. If names ever have to hold
+without the routers, the heavy check would happen once per peer (both sides
+check each other's certificate and agree on a shared key, as a TLS
+handshake does) and each call would carry a short MAC made with that key (a
+hash's worth of work). Even that brings per-peer keys, redoing it after a
+restart and a protocol change, so as long as the same ACL reaches every
+router, the routers keeping names honest stays the simpler way. Family mruby's remote control
 plan keeps the same idea as its long-term route (G3 in fmruby-core's
 doc/remote_guard).
 
