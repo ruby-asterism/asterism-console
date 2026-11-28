@@ -11,6 +11,7 @@ tests); where they differ from install.md, install.md is current.
 
 | Note | |
 |---|---|
+| [multi_router.md](multi_router.md) | Idea: several routers managed from one console (what zenohd allows at run time, a direction that adds little) |
 | [terminal.md](terminal.md) | VT1, VT2: the Terminal, the asterism command line's commands run by the bridge, under the sign-in, the call permissions and the call log; R3: the remote shell into a Family mruby machine ([remote_shell_r3.md](remote_shell_r3.md)) |
 | [files.md](files.md) | T4: files to and from the machines (Asterism::Transfer), the members' marks for files (T4b), the record |
 | [rooms.md](rooms.md) | G2: rooms (signed keys, room slots, the rooms' door); 0.2.1: the rooms in the graph |
